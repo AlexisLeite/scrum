@@ -1,0 +1,9 @@
+node_modules
+.pnpm-store
+.env
+.env.local
+coverage
+dist
+.turbo
+apps/api/node_modules
+apps/web/node_modules

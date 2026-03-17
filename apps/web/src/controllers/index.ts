@@ -1,0 +1,168 @@
+import { Role } from "@scrum/contracts";
+import { apiClient } from "../api/client";
+import { RootStore } from "../stores/root-store";
+
+export class AuthController {
+  constructor(private readonly store: RootStore) {}
+
+  async signup(payload: { email: string; name: string; password: string; avatarUrl?: string }) {
+    const result = await this.store.wrap(this.store.session, () =>
+      apiClient.post<{ user: any }>("/auth/signup", payload)
+    );
+    this.store.session.setUser(result.user);
+  }
+
+  async login(payload: { email: string; password: string }) {
+    const result = await this.store.wrap(this.store.session, () =>
+      apiClient.post<{ user: any }>("/auth/login", payload)
+    );
+    this.store.session.setUser(result.user);
+  }
+
+  async refreshMe() {
+    try {
+      const me = await apiClient.get<any>("/auth/me");
+      this.store.session.setUser(me);
+    } catch {
+      this.store.session.setUser(null);
+    }
+  }
+
+  async logout() {
+    await apiClient.post("/auth/logout");
+    this.store.session.setUser(null);
+  }
+
+  async updateProfile(payload: { name: string; avatarUrl?: string }) {
+    const user = await this.store.wrap(this.store.session, () =>
+      apiClient.patch<any>("/auth/me", payload)
+    );
+    this.store.session.setUser(user);
+  }
+
+  async getGitLabRedirect() {
+    const result = await apiClient.get<{ redirectUrl: string }>("/auth/gitlab");
+    window.location.href = result.redirectUrl;
+  }
+}
+
+export class AdminController {
+  constructor(private readonly store: RootStore) {}
+
+  async loadUsers() {
+    const users = await this.store.wrap(this.store.users, () => apiClient.get<any[]>("/admin/users"));
+    this.store.users.setItems(users);
+  }
+
+  async setRole(userId: string, role: Role) {
+    const user = await apiClient.patch<any>(`/admin/users/${userId}/role`, { role });
+    this.store.users.upsert(user);
+  }
+}
+
+export class TeamController {
+  constructor(private readonly store: RootStore) {}
+
+  async loadTeams() {
+    const teams = await this.store.wrap(this.store.teams, () => apiClient.get<any[]>("/teams"));
+    this.store.teams.setItems(teams);
+  }
+
+  async createTeam(payload: { name: string; description?: string }) {
+    const team = await apiClient.post<any>("/teams", payload);
+    this.store.teams.upsert(team);
+  }
+
+  async updateTeam(teamId: string, payload: { name?: string; description?: string }) {
+    const team = await apiClient.patch<any>(`/teams/${teamId}`, payload);
+    this.store.teams.upsert(team);
+  }
+
+  async addMember(teamId: string, userId: string) {
+    await apiClient.post(`/teams/${teamId}/members`, { userId });
+    await this.loadTeams();
+  }
+}
+
+export class ProductController {
+  constructor(private readonly store: RootStore) {}
+
+  async loadProducts() {
+    const products = await this.store.wrap(this.store.products, () => apiClient.get<any[]>("/products"));
+    this.store.products.setItems(products);
+  }
+
+  async createProduct(payload: { name: string; key: string; description?: string }) {
+    const product = await apiClient.post<any>("/products", payload);
+    this.store.products.upsert(product);
+  }
+
+  async loadStories(productId: string) {
+    const stories = await this.store.wrap(this.store.stories, () =>
+      apiClient.get<any[]>(`/products/${productId}/stories`)
+    );
+    this.store.stories.setItems(stories);
+  }
+
+  async createStory(productId: string, payload: { title: string; description?: string; storyPoints: number; status: string }) {
+    const story = await apiClient.post<any>(`/products/${productId}/stories`, payload);
+    this.store.stories.upsert(story);
+  }
+
+  async loadTasks(storyId: string) {
+    const tasks = await this.store.wrap(this.store.tasks, () => apiClient.get<any[]>(`/stories/${storyId}/tasks`));
+    this.store.tasks.setItems(tasks);
+  }
+
+  async createTask(storyId: string, payload: any) {
+    const task = await apiClient.post<any>(`/stories/${storyId}/tasks`, payload);
+    this.store.tasks.upsert(task);
+  }
+
+  async updateTaskStatus(taskId: string, status: string) {
+    const task = await apiClient.patch<any>(`/tasks/${taskId}/status`, { status });
+    this.store.tasks.upsert(task);
+  }
+
+  async assignTask(taskId: string, payload: { assigneeId?: string; sprintId?: string }) {
+    const task = await apiClient.patch<any>(`/tasks/${taskId}/assign`, payload);
+    this.store.tasks.upsert(task);
+  }
+
+  async loadSprints(productId: string) {
+    const sprints = await this.store.wrap(this.store.sprints, () =>
+      apiClient.get<any[]>(`/products/${productId}/sprints`)
+    );
+    this.store.sprints.setItems(sprints);
+  }
+
+  async createSprint(productId: string, payload: any) {
+    const sprint = await apiClient.post<any>(`/products/${productId}/sprints`, payload);
+    this.store.sprints.upsert(sprint);
+  }
+
+  async startSprint(sprintId: string) {
+    const sprint = await apiClient.post<any>(`/sprints/${sprintId}/start`);
+    this.store.sprints.upsert(sprint);
+  }
+
+  async loadBoard(sprintId: string) {
+    const board = await apiClient.get<any>(`/sprints/${sprintId}/board`);
+    this.store.setBoard(board);
+  }
+
+  async loadBurnup(productId: string, sprintId: string) {
+    const points = await apiClient.get<any[]>(`/indicators/products/${productId}/burnup?sprintId=${sprintId}`);
+    this.store.setBurnup(points);
+  }
+
+  async loadTeamVelocity(teamId: string) {
+    const points = await apiClient.get<any[]>(`/indicators/teams/${teamId}/velocity`);
+    this.store.setTeamVelocity(points);
+  }
+
+  async loadUserVelocity(userId: string) {
+    const points = await apiClient.get<any[]>(`/indicators/users/${userId}/velocity`);
+    this.store.setUserVelocity(points);
+  }
+}
