@@ -7,7 +7,22 @@ export class TeamsService {
   constructor(private readonly prisma: PrismaService) {}
 
   list() {
-    return this.prisma.team.findMany({ include: { members: true }, orderBy: { name: "asc" } });
+    return this.prisma.team.findMany({
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { name: "asc" }
+    });
   }
 
   create(dto: CreateTeamDto) {

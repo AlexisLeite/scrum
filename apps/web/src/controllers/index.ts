@@ -109,6 +109,16 @@ export class ProductController {
     this.store.stories.upsert(story);
   }
 
+  async updateStory(storyId: string, payload: { title?: string; description?: string; storyPoints?: number; status?: string }) {
+    const story = await apiClient.patch<any>(`/stories/${storyId}`, payload);
+    this.store.stories.upsert(story);
+  }
+
+  async rankStory(storyId: string, backlogRank: number) {
+    const story = await apiClient.post<any>(`/stories/${storyId}/rank`, { backlogRank });
+    this.store.stories.upsert(story);
+  }
+
   async loadTasks(storyId: string) {
     const tasks = await this.store.wrap(this.store.tasks, () => apiClient.get<any[]>(`/stories/${storyId}/tasks`));
     this.store.tasks.setItems(tasks);
@@ -122,6 +132,18 @@ export class ProductController {
   async updateTaskStatus(taskId: string, status: string) {
     const task = await apiClient.patch<any>(`/tasks/${taskId}/status`, { status });
     this.store.tasks.upsert(task);
+
+    if (this.store.board) {
+      const columns = this.store.board.columns.map((column) => ({
+        ...column,
+        tasks: column.tasks.filter((item) => item.id !== task.id)
+      }));
+      const target = columns.find((column) => column.name === task.status);
+      if (target) {
+        target.tasks = [...target.tasks, task];
+      }
+      this.store.setBoard({ ...this.store.board, columns });
+    }
   }
 
   async assignTask(taskId: string, payload: { assigneeId?: string; sprintId?: string }) {
@@ -143,6 +165,11 @@ export class ProductController {
 
   async startSprint(sprintId: string) {
     const sprint = await apiClient.post<any>(`/sprints/${sprintId}/start`);
+    this.store.sprints.upsert(sprint);
+  }
+
+  async completeSprint(sprintId: string) {
+    const sprint = await apiClient.post<any>(`/sprints/${sprintId}/complete`);
     this.store.sprints.upsert(sprint);
   }
 

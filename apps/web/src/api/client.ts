@@ -2,6 +2,29 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3000/api/v1"
 
 type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
+function normalizeApiError(rawText: string, status: number): string {
+  if (!rawText) {
+    return `HTTP ${status}`;
+  }
+
+  try {
+    const parsed = JSON.parse(rawText) as { message?: string | string[]; error?: string };
+    if (Array.isArray(parsed.message) && parsed.message.length > 0) {
+      return parsed.message.join("; ");
+    }
+    if (typeof parsed.message === "string" && parsed.message.trim()) {
+      return parsed.message;
+    }
+    if (typeof parsed.error === "string" && parsed.error.trim()) {
+      return parsed.error;
+    }
+  } catch {
+    return rawText;
+  }
+
+  return rawText;
+}
+
 async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     method,
@@ -14,7 +37,7 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown): Pro
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `HTTP ${response.status}`);
+    throw new Error(normalizeApiError(text, response.status));
   }
 
   if (response.status === 204) {
