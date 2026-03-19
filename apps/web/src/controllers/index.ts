@@ -80,6 +80,11 @@ export class TeamController {
     this.store.teams.upsert(team);
   }
 
+  async deleteTeam(teamId: string) {
+    await apiClient.del(`/teams/${teamId}`);
+    this.store.teams.remove(teamId);
+  }
+
   async addMember(teamId: string, userId: string) {
     await apiClient.post(`/teams/${teamId}/members`, { userId });
     await this.loadTeams();
@@ -121,6 +126,11 @@ export class ProductController {
   async createProduct(payload: { name: string; key: string; description?: string }) {
     const product = await apiClient.post<any>("/products", payload);
     this.store.products.upsert(product);
+  }
+
+  async deleteProduct(productId: string) {
+    await apiClient.del(`/products/${productId}`);
+    this.store.products.remove(productId);
   }
 
   async loadStories(productId: string) {

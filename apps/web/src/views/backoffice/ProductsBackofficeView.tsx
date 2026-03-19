@@ -3,9 +3,7 @@ import { observer } from "mobx-react-lite";
 import { NavLink } from "react-router-dom";
 import { ProductController } from "../../controllers";
 import {
-  productBacklogPath,
   productOverviewPath,
-  productSprintsPath
 } from "../../routes/product-routes";
 import { useRootStore } from "../../stores/root-store";
 import { ProductUpsertionDrawer } from "../../ui/drawers/backoffice/ProductUpsertionDrawer";
@@ -36,6 +34,15 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
     );
   }, [controller, store.drawers]);
 
+  const removeProduct = React.useCallback(async (product: ProductItem) => {
+    const confirmed = window.confirm(
+      `Eliminar "${product.name}" borrara tambien historias, tareas y sprints asociados. Deseas continuar?`
+    );
+    if (!confirmed) return;
+    await controller.deleteProduct(product.id);
+    await controller.loadProducts();
+  }, [controller]);
+
   return (
     <div className="stack-lg">
       <section className="card">
@@ -43,6 +50,7 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
           <h2>Gestion de productos</h2>
           <button className="btn btn-primary" onClick={openCreate}>+ Producto</button>
         </div>
+        <p className="muted">Administra el catalogo y abre el workspace desde una sola entrada clara.</p>
       </section>
       <section className="card">
         <h3>Catalogo</h3>
@@ -64,9 +72,8 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
                 <td>
                   <div className="row-actions compact">
                     <button className="btn btn-secondary" onClick={() => openEdit(product)}>Editar</button>
-                    <NavLink to={productOverviewPath(product.id)} className="btn btn-secondary">Workspace</NavLink>
-                    <NavLink to={productBacklogPath(product.id)} className="btn btn-secondary">Backlog</NavLink>
-                    <NavLink to={productSprintsPath(product.id)} className="btn btn-secondary">Sprints</NavLink>
+                    <NavLink to={productOverviewPath(product.id)} className="btn btn-primary">Abrir workspace</NavLink>
+                    <button className="btn btn-secondary" onClick={() => void removeProduct(product)}>Eliminar</button>
                   </div>
                 </td>
               </tr>

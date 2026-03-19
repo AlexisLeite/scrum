@@ -12,7 +12,8 @@
     "db:migrate": "pnpm --filter @scrum/api prisma:migrate",
     "db:push": "node scripts/run-with-env.mjs pnpm --filter @scrum/api prisma:push",
     "db:seed": "node scripts/run-with-env.mjs pnpm --filter @scrum/api prisma:seed",
-    "test:e2e:critical": "node scripts/e2e-critical-workflows.mjs"
+    "test:e2e:critical": "node scripts/e2e-critical-workflows.mjs",
+    "test:e2e:domain": "node scripts/e2e-domain-coverage.mjs"
   },
   "devDependencies": {
     "turbo": "^2.5.0",

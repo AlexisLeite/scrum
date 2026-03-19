@@ -2,6 +2,7 @@ import React from "react";
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
+  codeMirrorPlugin,
   codeBlockPlugin,
   CreateLink,
   headingsPlugin,
@@ -31,6 +32,22 @@ type RichDescriptionFieldProps = {
   rows?: number;
 };
 
+const CODE_BLOCK_LANGUAGES: Record<string, string> = {
+  txt: "Text",
+  md: "Markdown",
+  js: "JavaScript",
+  ts: "TypeScript",
+  jsx: "JSX",
+  tsx: "TSX",
+  json: "JSON",
+  bash: "Bash",
+  sh: "Shell",
+  sql: "SQL",
+  css: "CSS",
+  html: "HTML",
+  yaml: "YAML"
+};
+
 export function RichDescriptionField(props: RichDescriptionFieldProps) {
   const { label, value, onChange, rows = 6 } = props;
   const minHeight = Math.max(rows, 4) * 24;
@@ -51,7 +68,10 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
           linkDialogPlugin(),
           tablePlugin(),
           imagePlugin(),
-          codeBlockPlugin(),
+          codeBlockPlugin({ defaultCodeBlockLanguage: "txt" }),
+          codeMirrorPlugin({
+            codeBlockLanguages: CODE_BLOCK_LANGUAGES
+          }),
           markdownShortcutPlugin(),
           toolbarPlugin({
             toolbarContents: () => (

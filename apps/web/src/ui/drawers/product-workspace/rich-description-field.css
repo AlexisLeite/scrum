@@ -1,25 +1,70 @@
 .rich-description-field {
   display: grid;
   gap: 0.35rem;
+  min-width: 0;
 }
 
 .rich-description-label {
   font-weight: 600;
-  color: #2f4d6e;
+  color: var(--text-main);
 }
 
 .rich-description-editor {
-  border: 1px solid #c5d3e3;
+  border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
-  background: #fff;
+  background: var(--field-bg);
+  color: var(--text-main);
+  max-width: 100%;
+  min-width: 0;
+  --basePageBg: var(--field-bg);
+  --baseBase: color-mix(in srgb, var(--bg-soft) 74%, transparent);
+  --baseBgSubtle: color-mix(in srgb, var(--bg-soft) 86%, transparent);
+  --baseBg: color-mix(in srgb, var(--bg-soft) 64%, transparent);
+  --baseBgHover: color-mix(in srgb, var(--bg-soft) 88%, transparent);
+  --baseBgActive: color-mix(in srgb, var(--bg-soft) 98%, transparent);
+  --baseLine: var(--border-soft);
+  --baseBorder: var(--border);
+  --baseBorderHover: var(--border-strong);
+  --baseSolid: color-mix(in srgb, var(--text-muted) 82%, transparent);
+  --baseSolidHover: var(--text-muted);
+  --baseText: var(--text-muted);
+  --baseTextContrast: var(--text-main);
+  --accentSolid: var(--accent-a);
+  --accentSolidHover: var(--accent-c);
+  --accentText: color-mix(in srgb, var(--accent-a) 90%, #ffffff);
+  --accentTextContrast: #ffffff;
 }
 
 .rich-description-editor:focus-within {
-  outline: 2px solid #84b8f0;
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
 .rich-description-content {
   padding: 0.65rem 0.72rem;
+  color: var(--text-main);
+  background: transparent;
+}
+
+.rich-description-editor [class*="_toolbarRoot_"] {
+  flex-wrap: wrap;
+  overflow-x: hidden;
+  row-gap: 0.3rem;
+}
+
+.rich-description-editor [class*="_toolbarGroupOfGroups_"] {
+  flex-wrap: wrap;
+}
+
+.rich-description-editor .cm-editor,
+.rich-description-editor .cm-gutters,
+.rich-description-editor pre,
+.rich-description-editor code {
+  background: color-mix(in srgb, var(--bg-soft) 78%, transparent);
+  color: var(--text-main);
+}
+
+.rich-description-editor a {
+  color: var(--accent-a);
 }

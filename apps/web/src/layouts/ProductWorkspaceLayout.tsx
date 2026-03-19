@@ -1,12 +1,14 @@
 import React from "react";
+import { observer } from "mobx-react-lite";
 import { NavLink, Navigate, Outlet, useLocation, useParams } from "react-router-dom";
+import { ProductController } from "../controllers";
 import {
   productBacklogPath,
-  productBoardPath,
   productMetricsPath,
   productOverviewPath,
   productSprintsPath
 } from "../routes/product-routes";
+import { useRootStore } from "../stores/root-store";
 
 function ProductTabs({ productId }: { productId: string }) {
   return (
@@ -19,46 +21,55 @@ function ProductTabs({ productId }: { productId: string }) {
   );
 }
 
-export function ProductWorkspaceLayout() {
+function getWorkspaceSectionLabel(pathname: string): string {
+  if (pathname.includes("/backlog/stories/")) return "Tareas de historia";
+  if (pathname.includes("/backlog")) return "Backlog";
+  if (pathname.includes("/sprints/") && pathname.includes("/board")) return "Ejecucion de sprint";
+  if (pathname.includes("/sprints")) return "Planificacion de sprint";
+  if (pathname.includes("/metrics")) return "Metricas";
+  return "Resumen";
+}
+
+export const ProductWorkspaceLayout = observer(function ProductWorkspaceLayout() {
+  const store = useRootStore();
+  const controller = React.useMemo(() => new ProductController(store), [store]);
   const { productId, storyId, sprintId } = useParams<{ productId: string; storyId?: string; sprintId?: string }>();
   const location = useLocation();
+
+  React.useEffect(() => {
+    if (!productId) return;
+    if ((store.products.items as Array<{ id: string }>).some((product) => product.id === productId)) {
+      return;
+    }
+    void controller.loadProducts();
+  }, [controller, productId, store.products.items]);
+
   if (!productId) return <Navigate to="/products" replace />;
 
-  const isStoryTasks = location.pathname.includes("/backlog/stories/");
-  const isBoard = location.pathname.includes("/sprints/") && location.pathname.includes("/board");
+  const product = (store.products.items as Array<{ id: string; name: string; key: string }>).find((entry) => entry.id === productId);
+  const sectionLabel = getWorkspaceSectionLabel(location.pathname);
+  const detailLabel = storyId
+    ? `Historia ${storyId.slice(0, 8)}`
+    : sprintId
+      ? `Sprint ${sprintId.slice(0, 8)}`
+      : product?.key ?? "Producto";
 
   return (
     <div className="stack-lg">
-      <section className="card">
-        <ProductTabs productId={productId} />
-        <div className="row-actions compact">
-          <NavLink to="/products" className="btn btn-secondary">
-            Productos
-          </NavLink>
-          {isStoryTasks && storyId ? (
-            <>
-              <span className="pill">Historia</span>
-              <span className="muted">{storyId}</span>
-              <NavLink to={productBacklogPath(productId)} className="btn btn-secondary">
-                Volver a backlog
-              </NavLink>
-            </>
-          ) : null}
-          {isBoard && sprintId ? (
-            <>
-              <span className="pill">Sprint</span>
-              <span className="muted">{sprintId}</span>
-              <NavLink to={productSprintsPath(productId)} className="btn btn-secondary">
-                Volver a sprints
-              </NavLink>
-              <NavLink to={productBoardPath(productId, sprintId)} className="btn btn-secondary">
-                Board actual
-              </NavLink>
-            </>
-          ) : null}
+      <section className="card workspace-shell-card">
+        <div className="workspace-header">
+          <div>
+            <p className="workspace-context">Workspace de producto</p>
+            <h2 className="workspace-title">{product?.name ?? "Producto"}</h2>
+          </div>
+          <div className="workspace-meta">
+            <span className="pill">{sectionLabel}</span>
+            <span className="workspace-meta-text">{detailLabel}</span>
+          </div>
         </div>
+        <ProductTabs productId={productId} />
       </section>
       <Outlet />
     </div>
   );
-}
+});

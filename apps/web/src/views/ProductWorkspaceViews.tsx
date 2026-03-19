@@ -4,10 +4,7 @@ import { NavLink, useParams } from "react-router-dom";
 import ReactECharts from "echarts-for-react";
 import { ProductController, TeamController } from "../controllers";
 import {
-  productBacklogPath,
   productBoardPath,
-  productOverviewPath,
-  productSprintsPath,
   productStoryTasksPath
 } from "../routes/product-routes";
 import { useRootStore } from "../stores/root-store";
@@ -98,6 +95,14 @@ function buildAssignableUsers(teams: TeamItem[]) {
   );
 }
 
+function reorderItems<T>(items: T[], fromIndex: number, toIndex: number): T[] {
+  if (fromIndex === toIndex) return items;
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
 export const ProductOverviewView = observer(function ProductOverviewView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
@@ -137,7 +142,10 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const { productId } = useParams<{ productId: string }>();
-  const [rankDraft, setRankDraft] = React.useState<Record<string, string>>({});
+  const [orderedStories, setOrderedStories] = React.useState<StoryItem[]>([]);
+  const [draggedStoryId, setDraggedStoryId] = React.useState("");
+  const [reorderError, setReorderError] = React.useState("");
+  const [reordering, setReordering] = React.useState(false);
 
   React.useEffect(() => {
     if (!productId) return;
@@ -145,15 +153,37 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   }, [controller, productId]);
 
   const stories = store.stories.items as StoryItem[];
+
   React.useEffect(() => {
-    const next: Record<string, string> = {};
-    stories.forEach((story) => {
-      next[story.id] = String(story.backlogRank);
-    });
-    setRankDraft(next);
+    setOrderedStories([...stories].sort((left, right) => left.backlogRank - right.backlogRank));
   }, [stories]);
 
   if (!productId) return null;
+
+  const persistOrder = async (nextStories: StoryItem[]) => {
+    setReorderError("");
+    setReordering(true);
+    setOrderedStories(nextStories);
+    try {
+      for (let index = 0; index < nextStories.length; index += 1) {
+        await controller.rankStory(nextStories[index].id, (index + 1) * 10);
+      }
+      await controller.loadStories(productId);
+    } catch (error) {
+      setReorderError(getErrorMessage(error));
+      await controller.loadStories(productId);
+    } finally {
+      setDraggedStoryId("");
+      setReordering(false);
+    }
+  };
+
+  const moveStory = async (storyId: string, targetIndex: number) => {
+    const currentIndex = orderedStories.findIndex((story) => story.id === storyId);
+    if (currentIndex < 0) return;
+    if (targetIndex < 0 || targetIndex >= orderedStories.length || currentIndex === targetIndex) return;
+    await persistOrder(reorderItems(orderedStories, currentIndex, targetIndex));
+  };
 
   const openStoryDrawer = (story?: StoryItem) => {
     store.drawers.add(
@@ -177,78 +207,84 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
             +
           </button>
         </div>
-        <div className="row-actions compact">
-          <NavLink to={productOverviewPath(productId)} className="btn btn-secondary">
-            Resumen
-          </NavLink>
-          <NavLink to={productSprintsPath(productId)} className="btn btn-secondary">
-            Sprint planning
-          </NavLink>
-        </div>
+        <p className="muted">Arrastra las historias para priorizarlas. El orden se guarda automaticamente al soltar.</p>
+        {reorderError ? <p className="error-text">{reorderError}</p> : null}
       </section>
 
       <section className="card">
         <h3>Historias priorizadas</h3>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>Historia</th>
-              <th>SP</th>
-              <th>Estado</th>
-              <th>Tareas</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stories.map((story) => (
-              <tr key={story.id}>
-                <td>
-                  <input
-                    type="number"
-                    min={1}
-                    value={rankDraft[story.id] ?? String(story.backlogRank)}
-                    onChange={(event) =>
-                      setRankDraft((prev) => ({ ...prev, [story.id]: event.target.value }))
-                    }
-                  />
-                </td>
-                <td>
-                  <strong>{story.title}</strong>
-                  <p className="muted">{story.description ?? "Sin descripcion"}</p>
-                </td>
-                <td>{story.storyPoints}</td>
-                <td>
-                  {story.status === "DRAFT" || story.status === "READY" ? (
-                    <select
-                      value={story.status}
-                      onChange={(event) =>
-                        void controller.updateStory(story.id, {
-                          status: event.target.value as "DRAFT" | "READY"
-                        })
-                      }
-                    >
-                      {manualStoryStatusOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className={statusClass(story.status)}>{story.status}</span>
-                  )}
-                </td>
-                <td>{story.tasks?.length ?? 0}</td>
-                <td>
+        <div className="story-list">
+          {orderedStories.map((story, index) => (
+            <article
+              key={story.id}
+              className={`story-card ${draggedStoryId === story.id ? "is-dragging" : ""}`}
+              draggable={!reordering}
+              onDragStart={() => setDraggedStoryId(story.id)}
+              onDragEnd={() => setDraggedStoryId("")}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (!draggedStoryId || draggedStoryId === story.id) return;
+                void moveStory(draggedStoryId, index);
+              }}
+            >
+              <div className="story-card-order">
+                <span className="story-card-order-label">Prioridad {index + 1}</span>
+                <div className="row-actions compact">
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    aria-label={`Mover ${story.title} hacia arriba`}
+                    disabled={index === 0 || reordering}
+                    onClick={() => void moveStory(story.id, index - 1)}
+                  >
+                    Subir
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    aria-label={`Mover ${story.title} hacia abajo`}
+                    disabled={index === orderedStories.length - 1 || reordering}
+                    onClick={() => void moveStory(story.id, index + 1)}
+                  >
+                    Bajar
+                  </button>
+                </div>
+              </div>
+              <div className="story-card-main">
+                <div className="story-card-heading">
+                  <div>
+                    <h4>{story.title}</h4>
+                    <p className="muted">{story.description ?? "Sin descripcion"}</p>
+                  </div>
+                  <div className="story-card-metrics">
+                    <span className="pill">SP {story.storyPoints}</span>
+                    <span className="pill">{story.tasks?.length ?? 0} tareas</span>
+                  </div>
+                </div>
+                <div className="story-card-footer">
+                  <label className="story-card-status">
+                    Estado
+                    {story.status === "DRAFT" || story.status === "READY" ? (
+                      <select
+                        value={story.status}
+                        onChange={(event) =>
+                          void controller.updateStory(story.id, {
+                            status: event.target.value as "DRAFT" | "READY"
+                          })
+                        }
+                      >
+                        {manualStoryStatusOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className={statusClass(story.status)}>{story.status}</span>
+                    )}
+                  </label>
                   <div className="row-actions compact">
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() =>
-                        void controller.rankStory(story.id, Number(rankDraft[story.id] ?? story.backlogRank))
-                      }
-                    >
-                      Guardar rank
-                    </button>
                     <button className="btn btn-secondary" onClick={() => openStoryDrawer(story)}>
                       Editar
                     </button>
@@ -256,16 +292,12 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
                       Gestionar tareas
                     </NavLink>
                   </div>
-                </td>
-              </tr>
-            ))}
-            {stories.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="muted">No hay historias. Crea la primera historia para iniciar el backlog.</td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+                </div>
+              </div>
+            </article>
+          ))}
+          {orderedStories.length === 0 ? <p className="muted">No hay historias. Crea la primera historia para iniciar el backlog.</p> : null}
+        </div>
       </section>
     </div>
   );
@@ -338,28 +370,17 @@ export const StoryTasksView = observer(function StoryTasksView() {
     <div className="stack-lg">
       <section className="card">
         <div className="section-head">
-          <h2>Tareas de historia</h2>
+          <div>
+            <p className="workspace-context">Historia actual</p>
+            <h2>{currentStory?.title ?? "Tareas de historia"}</h2>
+          </div>
           <button type="button" className="btn btn-primary btn-icon" onClick={() => openTaskDrawer()} aria-label="Crear tarea">
             +
           </button>
         </div>
-        <p className="muted">
-          {currentStory ? (
-            <>
-              Historia actual: <strong>{currentStory.title}</strong> <span className={statusClass(currentStory.status)}>{currentStory.status}</span>
-            </>
-          ) : "Cargando historia..."}
-        </p>
-        <div className="row-actions compact">
-          <NavLink to={productBacklogPath(productId)} className="btn btn-secondary">
-            Volver a backlog
-          </NavLink>
-          <NavLink to={productSprintsPath(productId)} className="btn btn-secondary">
-            Ir a sprint planning
-          </NavLink>
-          <NavLink to={productOverviewPath(productId)} className="btn btn-secondary">
-            Ir a resumen
-          </NavLink>
+        <div className="story-detail-strip">
+          {currentStory ? <span className={statusClass(currentStory.status)}>{currentStory.status}</span> : null}
+          <span className="muted">Gestiona las tareas y sus estados sin salir del workspace del producto.</span>
         </div>
         {formError ? <p className="error-text">{formError}</p> : null}
       </section>
@@ -619,15 +640,6 @@ export const SprintBoardView = observer(function SprintBoardView() {
         </div>
         <div className="row-actions compact">
           {currentSprint ? <span className={statusClass(currentSprint.status)}>{currentSprint.status}</span> : null}
-          <NavLink to={productOverviewPath(productId)} className="btn btn-secondary">
-            Volver al producto
-          </NavLink>
-          <NavLink to={productSprintsPath(productId)} className="btn btn-secondary">
-            Volver a sprints
-          </NavLink>
-          <NavLink to={productBacklogPath(productId)} className="btn btn-secondary">
-            Ir a backlog
-          </NavLink>
         </div>
         <p className="muted">Actualiza estados y propiedades de tareas desde los drawers por columna o tarjeta.</p>
         {boardError ? <p className="error-text">{boardError}</p> : null}

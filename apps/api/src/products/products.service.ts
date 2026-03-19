@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { Role } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -44,11 +44,19 @@ export class ProductsService {
     });
   }
 
-  update(id: string, dto: UpdateProductDto) {
+  async update(id: string, dto: UpdateProductDto) {
+    const existing = await this.prisma.product.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException("Product not found");
+    }
     return this.prisma.product.update({ where: { id }, data: dto });
   }
 
   async remove(id: string) {
+    const existing = await this.prisma.product.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException("Product not found");
+    }
     await this.prisma.product.delete({ where: { id } });
     return { ok: true };
   }

@@ -40,6 +40,15 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
     );
   }, [store.drawers, teamsController, users]);
 
+  const removeTeam = React.useCallback(async (team: TeamItem) => {
+    const confirmed = window.confirm(
+      `Eliminar "${team.name}" quitara su configuracion y membresias. Deseas continuar?`
+    );
+    if (!confirmed) return;
+    await teamsController.deleteTeam(team.id);
+    await teamsController.loadTeams();
+  }, [teamsController]);
+
   return (
     <div className="stack-lg">
       <section className="card">
@@ -47,6 +56,7 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
           <h2>Gestion de equipos</h2>
           <button className="btn btn-primary" onClick={openCreate}>+ Equipo</button>
         </div>
+        <p className="muted">Cada equipo concentra miembros, alcance de productos y actividad operacional.</p>
       </section>
       <section className="card">
         <h3>Listado de equipos</h3>
@@ -55,7 +65,10 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
             <article key={team.id} className="team-tile">
               <div className="section-head">
                 <h4>{team.name}</h4>
-                <button className="btn btn-secondary" onClick={() => openEdit(team)}>Editar</button>
+                <div className="row-actions compact">
+                  <button className="btn btn-secondary" onClick={() => openEdit(team)}>Editar</button>
+                  <button className="btn btn-secondary" onClick={() => void removeTeam(team)}>Eliminar</button>
+                </div>
               </div>
               <p>{team.description ?? "Sin descripcion"}</p>
               <p className="muted">Miembros: {team.members?.length ?? 0}</p>
