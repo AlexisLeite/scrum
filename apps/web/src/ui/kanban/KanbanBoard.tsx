@@ -281,7 +281,8 @@ export function KanbanBoard({
                       onDragEnd={() => {
                         setDrag(null);
                         setDrop(null);
-                      }}
+                      }} 
+                      title={`${task.title} - ${task.description}`}
                       onDragOver={(event) => onCardDragOver(event, column.name, task.id)}
                       onDrop={(event) => onCardDrop(event, column.name, task.id)}
                     >
