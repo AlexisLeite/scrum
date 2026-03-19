@@ -22,6 +22,7 @@ export function ThemeToggle() {
     if (typeof document === "undefined") return "light";
     return getStoredTheme() ?? bootTheme ?? getSystemTheme();
   });
+  const isDark = theme === "dark";
 
   React.useEffect(() => {
     applyTheme(theme);
@@ -32,12 +33,12 @@ export function ThemeToggle() {
     <button
       type="button"
       className="btn btn-ghost theme-toggle"
-      aria-label={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
-      title={theme === "dark" ? "Tema oscuro activo" : "Tema claro activo"}
+      aria-label={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
+      title={isDark ? "Tema oscuro activo" : "Tema claro activo"}
       onClick={() => setTheme((current) => nextTheme(current))}
     >
-      {theme === "dark" ? "Tema: oscuro" : "Tema: claro"}
+      <span className={`theme-dot ${isDark ? "is-dark" : "is-light"}`} aria-hidden="true" />
+      <span>{isDark ? "Oscuro" : "Claro"}</span>
     </button>
   );
 }
-

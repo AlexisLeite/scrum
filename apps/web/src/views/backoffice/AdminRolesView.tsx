@@ -154,7 +154,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
               <th>Email</th>
               <th>Rol</th>
               <th>Equipos</th>
-              <th>Actualizar</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -178,6 +178,15 @@ export const AdminRolesView = observer(function AdminRolesView() {
                     </select>
                     <button className="btn btn-secondary" onClick={() => void openTeamEditor(user)}>
                       Equipos
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setActivityUserId(user.id);
+                        window.location.hash = "actividad-usuario";
+                      }}
+                    >
+                      Actividad
                     </button>
                   </div>
                 </td>
@@ -216,7 +225,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
         <label>Equipos iniciales</label>
         <div className="metrics-grid">
           {teams.map((team) => (
-            <label key={team.id}>
+            <label key={team.id} className="check-option">
               <input
                 type="checkbox"
                 checked={createTeamIds.includes(team.id)}
@@ -237,7 +246,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
           <h3>Equipos de {selectedUserForTeams.name}</h3>
           <div className="metrics-grid">
             {teams.map((team) => (
-              <label key={team.id}>
+              <label key={team.id} className="check-option">
                 <input
                   type="checkbox"
                   checked={teamDraft.includes(team.id)}
@@ -255,7 +264,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
         </section>
       ) : null}
 
-      <section className="card">
+      <section className="card" id="actividad-usuario">
         <h3>Actividad por usuario</h3>
         <div className="form-grid two-columns">
           <label>

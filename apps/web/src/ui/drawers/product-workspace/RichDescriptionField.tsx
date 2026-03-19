@@ -1,4 +1,28 @@
 import React from "react";
+import {
+  BlockTypeSelect,
+  BoldItalicUnderlineToggles,
+  codeBlockPlugin,
+  CreateLink,
+  headingsPlugin,
+  imagePlugin,
+  InsertCodeBlock,
+  InsertImage,
+  InsertTable,
+  linkDialogPlugin,
+  linkPlugin,
+  listsPlugin,
+  ListsToggle,
+  markdownShortcutPlugin,
+  MDXEditor,
+  quotePlugin,
+  Separator,
+  tablePlugin,
+  toolbarPlugin,
+  UndoRedo
+} from "@mdxeditor/editor";
+import "@mdxeditor/editor/style.css";
+import "./rich-description-field.css";
 
 type RichDescriptionFieldProps = {
   label: string;
@@ -7,66 +31,50 @@ type RichDescriptionFieldProps = {
   rows?: number;
 };
 
-type DynamicMdxEditorProps = {
-  markdown: string;
-  onChange: (value: string) => void;
-};
-
 export function RichDescriptionField(props: RichDescriptionFieldProps) {
   const { label, value, onChange, rows = 6 } = props;
-  const [MdxEditor, setMdxEditor] = React.useState<React.ComponentType<DynamicMdxEditorProps> | null>(null);
-  const [editorError, setEditorError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let mounted = true;
-    const moduleName = "@mdxeditor/editor";
-
-    const loadEditor = async () => {
-      try {
-        const loadedModule = await import(/* @vite-ignore */ moduleName);
-        if (!mounted) return;
-        const candidate = (loadedModule as { MDXEditor?: React.ComponentType<DynamicMdxEditorProps> }).MDXEditor;
-        if (candidate) {
-          setMdxEditor(() => candidate);
-          setEditorError(null);
-          try {
-            await import(/* @vite-ignore */ `${moduleName}/style.css`);
-          } catch {
-            // Optional CSS import; editor still works without hard failure.
-          }
-        } else {
-          setMdxEditor(null);
-          setEditorError("No se encontro MDXEditor en el paquete.");
-        }
-      } catch {
-        if (!mounted) return;
-        setMdxEditor(null);
-        setEditorError("Dependencia @mdxeditor/editor no instalada en este entorno.");
-      }
-    };
-
-    void loadEditor();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const minHeight = Math.max(rows, 4) * 24;
 
   return (
-    <label>
-      {label}
-      {MdxEditor ? (
-        <div>
-          <MdxEditor markdown={value} onChange={(nextValue: string) => onChange(nextValue)} />
-        </div>
-      ) : (
-        <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={rows} />
-      )}
-      {MdxEditor ? (
-        <small className="muted">Editor enriquecido MDX activo.</small>
-      ) : (
-        <small className="muted">{editorError ?? "Usando textarea de fallback."}</small>
-      )}
-    </label>
+    <div className="rich-description-field">
+      <span className="rich-description-label">{label}</span>
+      <MDXEditor
+        markdown={value || ""}
+        onChange={(nextValue) => onChange(nextValue)}
+        className="rich-description-editor"
+        contentEditableClassName="rich-description-content"
+        plugins={[
+          headingsPlugin(),
+          quotePlugin(),
+          listsPlugin(),
+          linkPlugin(),
+          linkDialogPlugin(),
+          tablePlugin(),
+          imagePlugin(),
+          codeBlockPlugin(),
+          markdownShortcutPlugin(),
+          toolbarPlugin({
+            toolbarContents: () => (
+              <>
+                <UndoRedo />
+                <Separator />
+                <BlockTypeSelect />
+                <Separator />
+                <BoldItalicUnderlineToggles />
+                <Separator />
+                <ListsToggle />
+                <Separator />
+                <CreateLink />
+                <InsertImage />
+                <InsertTable />
+                <InsertCodeBlock />
+              </>
+            )
+          })
+        ]}
+      />
+      <small className="muted">Soporta encabezados, formato, listas, tablas, enlaces, imagenes y bloques de codigo.</small>
+      <style>{`.rich-description-content { min-height: ${minHeight}px; }`}</style>
+    </div>
   );
 }

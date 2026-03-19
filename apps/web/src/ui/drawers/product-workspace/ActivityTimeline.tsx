@@ -1,9 +1,10 @@
 import React from "react";
+import { ActivityEntityType } from "@scrum/contracts";
 import { ProductController } from "../../../controllers";
 
 type ActivityTimelineProps = {
   controller: ProductController;
-  entityType: "stories" | "tasks" | "sprints";
+  entityType: ActivityEntityType;
   entityId: string;
 };
 
@@ -15,6 +16,13 @@ type ActivityEntry = {
   actorUser?: { id?: string; name?: string; email?: string } | null;
   summary?: string;
   details?: string;
+};
+
+type ActivityListResult = {
+  items: ActivityEntry[];
+  page: number;
+  pageSize: number;
+  total: number;
 };
 
 function formatDateTime(value?: string): string {
@@ -43,7 +51,8 @@ export function ActivityTimeline(props: ActivityTimelineProps) {
       .loadEntityActivity(entityType, entityId)
       .then((result) => {
         if (!mounted) return;
-        setEntries(Array.isArray(result) ? (result as ActivityEntry[]) : []);
+        const listResult = result as ActivityListResult;
+        setEntries(Array.isArray(listResult?.items) ? listResult.items : []);
       })
       .catch((loadError: unknown) => {
         if (!mounted) return;

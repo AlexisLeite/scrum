@@ -107,9 +107,9 @@ export class TasksService {
     }
     await this.assertProductAccess(user, current.productId);
 
-    const hasStatus = this.hasOwn(dto, "status");
-    const hasAssigneeId = this.hasOwn(dto, "assigneeId");
-    const hasSprintId = this.hasOwn(dto, "sprintId");
+    const hasStatus = dto.status !== undefined;
+    const hasAssigneeId = dto.assigneeId !== undefined;
+    const hasSprintId = dto.sprintId !== undefined;
 
     if (hasStatus && typeof dto.status !== "string") {
       throw new BadRequestException("Task status must be a string");
@@ -268,10 +268,6 @@ export class TasksService {
         data: { status: nextStatus }
       });
     }
-  }
-
-  private hasOwn<T extends object>(obj: T, key: keyof UpdateTaskDto): boolean {
-    return Object.prototype.hasOwnProperty.call(obj, key);
   }
 
   private async validateSprintForProduct(sprintId: string, productId: string) {

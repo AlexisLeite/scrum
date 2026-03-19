@@ -67,6 +67,7 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
               </ul>
             </article>
           ))}
+          {teams.length === 0 ? <p className="muted">No hay equipos creados.</p> : null}
         </div>
       </section>
     </div>

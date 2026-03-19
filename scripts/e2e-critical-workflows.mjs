@@ -173,6 +173,12 @@ async function main() {
     }, [200]);
     assert.equal(editedProduct.description, "updated product description", "product edit failed");
 
+    await scrum.request("POST", `/teams/${team.id}/members`, { userId: memberRecord.id }, [201]);
+    const teamProducts = await scrum.request("PATCH", `/teams/${team.id}/products`, {
+      productIds: [product.id]
+    }, [200]);
+    assert.ok(teamProducts.some((entry) => entry.id === product.id), "team should gain access to created product");
+
     const sprint = await scrum.request("POST", `/products/${product.id}/sprints`, {
       teamId: team.id,
       name: `Sprint-${unique}`,

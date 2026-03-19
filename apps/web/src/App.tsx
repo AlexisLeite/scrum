@@ -63,7 +63,9 @@ export const App = observer(function App() {
           )}
         </nav>
         <div className="topbar-right">
-          {isAuthed ? <><span className="pill">{user?.name}</span><ThemeToggle /><button className="btn btn-ghost" onClick={() => void auth.logout()}>Sign out</button></> : null}
+          {isAuthed ? <span className="pill">{user?.name}</span> : null}
+          <ThemeToggle />
+          {isAuthed ? <button className="btn btn-ghost" onClick={() => void auth.logout()}>Sign out</button> : null}
         </div>
       </header>
 

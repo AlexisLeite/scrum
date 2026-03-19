@@ -1,6 +1,8 @@
-import { Role } from "@scrum/contracts";
+import { ActivityEntityType, Role } from "@scrum/contracts";
 import { apiClient } from "../api/client";
 import { RootStore } from "../stores/root-store";
+
+type ActivityListResult<T> = { items: T[]; page: number; pageSize: number; total: number };
 
 export class AuthController {
   constructor(private readonly store: RootStore) {}
@@ -160,6 +162,12 @@ export class ProductController {
     return task;
   }
 
+  async deleteTask(taskId: string) {
+    await apiClient.del(`/tasks/${taskId}`);
+    this.store.tasks.remove(taskId);
+    this.syncTaskInBoard({ id: taskId, status: "__deleted__" });
+  }
+
   async updateTaskStatus(taskId: string, status: string) {
     const task = await apiClient.patch<any>(`/tasks/${taskId}/status`, { status });
     this.store.tasks.upsert(task);
@@ -283,7 +291,7 @@ export class ProductController {
     }
   }
 
-  async loadEntityActivity(entityType: string, entityId: string) {
-    return apiClient.get<any[]>(`/activity/entities/${entityType}/${entityId}`);
+  async loadEntityActivity(entityType: ActivityEntityType, entityId: string) {
+    return apiClient.get<ActivityListResult<any>>(`/activity/entities/${entityType}/${entityId}`);
   }
 }

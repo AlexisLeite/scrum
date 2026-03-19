@@ -245,7 +245,7 @@ function TaskUpsertionForm(props: { options: TaskUpsertionDrawerOptions; close: 
           Cancelar
         </button>
       </div>
-      {task ? <ActivityTimeline controller={controller} entityType="tasks" entityId={task.id} /> : null}
+      {task ? <ActivityTimeline controller={controller} entityType="TASK" entityId={task.id} /> : null}
       {error ? <p className="error-text">{error}</p> : null}
     </div>
   );

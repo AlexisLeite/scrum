@@ -1,7 +1,8 @@
 import React from "react";
-import { NavLink, Navigate, Outlet, useParams } from "react-router-dom";
+import { NavLink, Navigate, Outlet, useLocation, useParams } from "react-router-dom";
 import {
   productBacklogPath,
+  productBoardPath,
   productMetricsPath,
   productOverviewPath,
   productSprintsPath
@@ -19,13 +20,43 @@ function ProductTabs({ productId }: { productId: string }) {
 }
 
 export function ProductWorkspaceLayout() {
-  const { productId } = useParams<{ productId: string }>();
+  const { productId, storyId, sprintId } = useParams<{ productId: string; storyId?: string; sprintId?: string }>();
+  const location = useLocation();
   if (!productId) return <Navigate to="/products" replace />;
+
+  const isStoryTasks = location.pathname.includes("/backlog/stories/");
+  const isBoard = location.pathname.includes("/sprints/") && location.pathname.includes("/board");
 
   return (
     <div className="stack-lg">
       <section className="card">
         <ProductTabs productId={productId} />
+        <div className="row-actions compact">
+          <NavLink to="/products" className="btn btn-secondary">
+            Productos
+          </NavLink>
+          {isStoryTasks && storyId ? (
+            <>
+              <span className="pill">Historia</span>
+              <span className="muted">{storyId}</span>
+              <NavLink to={productBacklogPath(productId)} className="btn btn-secondary">
+                Volver a backlog
+              </NavLink>
+            </>
+          ) : null}
+          {isBoard && sprintId ? (
+            <>
+              <span className="pill">Sprint</span>
+              <span className="muted">{sprintId}</span>
+              <NavLink to={productSprintsPath(productId)} className="btn btn-secondary">
+                Volver a sprints
+              </NavLink>
+              <NavLink to={productBoardPath(productId, sprintId)} className="btn btn-secondary">
+                Board actual
+              </NavLink>
+            </>
+          ) : null}
+        </div>
       </section>
       <Outlet />
     </div>

@@ -237,7 +237,7 @@ function TeamUpsertionForm(props: {
           <h4>Productos del equipo</h4>
           <div className="metrics-grid">
             {products.map((product) => (
-              <label key={product.id}>
+              <label key={product.id} className="check-option">
                 <input
                   type="checkbox"
                   checked={linkedProductIds.includes(product.id)}

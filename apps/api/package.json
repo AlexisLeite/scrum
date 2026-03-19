@@ -11,8 +11,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:push": "prisma db push",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:push": "prisma db push --skip-generate",
+    "prisma:seed": "node prisma/seed.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

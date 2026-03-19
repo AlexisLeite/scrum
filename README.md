@@ -31,10 +31,9 @@ Monorepo implementation of a Scrum sprint management application.
 1. Copy `.env.example` to `.env` and adjust values.
 2. Start Postgres: `docker compose up -d postgres`
 3. Install dependencies: `pnpm install`
-4. Generate Prisma client: `pnpm --filter @scrum/api prisma:generate`
-5. Push schema: `pnpm --filter @scrum/api prisma:push`
-6. Seed default users: `pnpm --filter @scrum/api prisma:seed`
-7. Start apps: `pnpm dev`
+4. Prepare database and Prisma client: `pnpm db:push && pnpm db:generate && pnpm db:seed`
+5. Start apps: `pnpm dev`
+   This command now runs the database sync and default seed before starting the apps, and stops early if the schema/client preparation fails.
 
 ## Default Seed Users
 - `admin@scrum.local` / `admin1234` (`platform_admin`)

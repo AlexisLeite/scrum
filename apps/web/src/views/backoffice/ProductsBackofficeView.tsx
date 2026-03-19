@@ -71,6 +71,11 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
                 </td>
               </tr>
             ))}
+            {products.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="muted">No hay productos creados.</td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </section>

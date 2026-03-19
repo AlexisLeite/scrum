@@ -227,7 +227,7 @@ function SprintUpsertionForm(props: { options: SprintUpsertionDrawerOptions; clo
         </section>
       ) : null}
 
-      {sprint ? <ActivityTimeline controller={controller} entityType="sprints" entityId={sprint.id} /> : null}
+      {sprint ? <ActivityTimeline controller={controller} entityType="SPRINT" entityId={sprint.id} /> : null}
       {error ? <p className="error-text">{error}</p> : null}
     </div>
   );

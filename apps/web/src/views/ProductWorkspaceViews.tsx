@@ -138,7 +138,6 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const { productId } = useParams<{ productId: string }>();
   const [rankDraft, setRankDraft] = React.useState<Record<string, string>>({});
-  const [formError, setFormError] = React.useState("");
 
   React.useEffect(() => {
     if (!productId) return;
@@ -174,11 +173,18 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
       <section className="card">
         <div className="section-head">
           <h2>Backlog del producto</h2>
-          <button type="button" className="btn btn-primary" onClick={() => openStoryDrawer()}>
+          <button type="button" className="btn btn-primary btn-icon" onClick={() => openStoryDrawer()} aria-label="Crear historia">
             +
           </button>
         </div>
-        {formError ? <p className="error-text">{formError}</p> : null}
+        <div className="row-actions compact">
+          <NavLink to={productOverviewPath(productId)} className="btn btn-secondary">
+            Resumen
+          </NavLink>
+          <NavLink to={productSprintsPath(productId)} className="btn btn-secondary">
+            Sprint planning
+          </NavLink>
+        </div>
       </section>
 
       <section className="card">
@@ -253,6 +259,11 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
                 </td>
               </tr>
             ))}
+            {stories.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="muted">No hay historias. Crea la primera historia para iniciar el backlog.</td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </section>
@@ -266,6 +277,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
   const teamController = React.useMemo(() => new TeamController(store), [store]);
   const { productId, storyId } = useParams<{ productId: string; storyId: string }>();
   const [formError, setFormError] = React.useState("");
+  const [updatingTaskId, setUpdatingTaskId] = React.useState("");
 
   React.useEffect(() => {
     if (!storyId || !productId) return;
@@ -293,6 +305,19 @@ export const StoryTasksView = observer(function StoryTasksView() {
     await Promise.all([controller.loadTasks(storyId), controller.loadStories(productId)]);
   };
 
+  const updateTaskStatus = async (taskId: string, nextStatus: string) => {
+    setFormError("");
+    setUpdatingTaskId(taskId);
+    try {
+      await controller.updateTaskStatus(taskId, nextStatus);
+      await reloadStoryTasks();
+    } catch (statusError) {
+      setFormError(getErrorMessage(statusError));
+    } finally {
+      setUpdatingTaskId("");
+    }
+  };
+
   const openTaskDrawer = (task?: TaskItem) => {
     store.drawers.add(
       new TaskUpsertionDrawer({
@@ -313,17 +338,27 @@ export const StoryTasksView = observer(function StoryTasksView() {
     <div className="stack-lg">
       <section className="card">
         <div className="section-head">
-          <h2>Gestion integral de tareas</h2>
-          <button type="button" className="btn btn-primary" onClick={() => openTaskDrawer()}>
+          <h2>Tareas de historia</h2>
+          <button type="button" className="btn btn-primary btn-icon" onClick={() => openTaskDrawer()} aria-label="Crear tarea">
             +
           </button>
         </div>
+        <p className="muted">
+          {currentStory ? (
+            <>
+              Historia actual: <strong>{currentStory.title}</strong> <span className={statusClass(currentStory.status)}>{currentStory.status}</span>
+            </>
+          ) : "Cargando historia..."}
+        </p>
         <div className="row-actions compact">
           <NavLink to={productBacklogPath(productId)} className="btn btn-secondary">
             Volver a backlog
           </NavLink>
           <NavLink to={productSprintsPath(productId)} className="btn btn-secondary">
             Ir a sprint planning
+          </NavLink>
+          <NavLink to={productOverviewPath(productId)} className="btn btn-secondary">
+            Ir a resumen
           </NavLink>
         </div>
         {formError ? <p className="error-text">{formError}</p> : null}
@@ -349,7 +384,19 @@ export const StoryTasksView = observer(function StoryTasksView() {
                   <strong>{task.title}</strong>
                   <p className="muted">{task.description ?? "Sin descripcion"}</p>
                 </td>
-                <td><span className={statusClass(task.status)}>{task.status}</span></td>
+                <td>
+                  <select
+                    value={task.status}
+                    onChange={(event) => void updateTaskStatus(task.id, event.target.value)}
+                    disabled={updatingTaskId === task.id}
+                  >
+                    {statusOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </td>
                 <td>{task.sprintId ? sprintNameById.get(task.sprintId) ?? task.sprintId : "Backlog"}</td>
                 <td>{task.assigneeId ? assigneeNameById.get(task.assigneeId) ?? task.assigneeId : "Sin asignar"}</td>
                 <td>
@@ -364,6 +411,11 @@ export const StoryTasksView = observer(function StoryTasksView() {
                 </td>
               </tr>
             ))}
+            {tasks.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="muted">Esta historia aun no tiene tareas. Crea una tarea para comenzar.</td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </section>
@@ -376,7 +428,6 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
   const teamController = React.useMemo(() => new TeamController(store), [store]);
   const productController = React.useMemo(() => new ProductController(store), [store]);
   const { productId } = useParams<{ productId: string }>();
-  const [formError, setFormError] = React.useState("");
 
   React.useEffect(() => {
     void teamController.loadTeams();
@@ -407,12 +458,11 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
       <section className="card">
         <div className="section-head">
           <h2>Planificacion de sprint</h2>
-          <button type="button" className="btn btn-primary" onClick={() => openSprintDrawer()}>
+          <button type="button" className="btn btn-primary btn-icon" onClick={() => openSprintDrawer()} aria-label="Crear sprint">
             +
           </button>
         </div>
         <p className="muted">La alta y edicion de sprints se realiza desde drawers reutilizables.</p>
-        {formError ? <p className="error-text">{formError}</p> : null}
       </section>
 
       <section className="card">
@@ -434,16 +484,20 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
                 <button
                   className="btn btn-secondary"
                   disabled={sprint.status !== "PLANNED"}
-                  onClick={() => void productController.startSprint(sprint.id)}
+                  onClick={async () => {
+                    await productController.startSprint(sprint.id);
+                    await productController.loadSprints(productId);
+                  }}
                 >
                   Start
                 </button>
                 <button
                   className="btn btn-secondary"
                   disabled={sprint.status !== "ACTIVE"}
-                  onClick={() => {
+                  onClick={async () => {
                     if (window.confirm("Completar este sprint lo cerrara para planificacion y ejecucion. Deseas continuar?")) {
-                      void productController.completeSprint(sprint.id);
+                      await productController.completeSprint(sprint.id);
+                      await productController.loadSprints(productId);
                     }
                   }}
                 >
@@ -455,6 +509,7 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
               </div>
             </article>
           ))}
+          {sprints.length === 0 ? <p className="muted">No hay sprints para este producto.</p> : null}
         </div>
       </section>
     </div>
@@ -466,7 +521,8 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const teamController = React.useMemo(() => new TeamController(store), [store]);
   const { productId, sprintId } = useParams<{ productId: string; sprintId: string }>();
-  const [formError, setFormError] = React.useState("");
+  const [boardError, setBoardError] = React.useState("");
+  const [updatingTaskId, setUpdatingTaskId] = React.useState("");
 
   const reloadBoardData = React.useCallback(async () => {
     if (!productId || !sprintId) return;
@@ -490,6 +546,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const stories = store.stories.items as StoryItem[];
   const sprints = store.sprints.items as SprintItem[];
   const teams = store.teams.items as TeamItem[];
+  const currentSprint = sprints.find((sprint) => sprint.id === sprintId);
   const assignees = buildAssignableUsers(teams);
   const workflowStatuses = (store.board?.columns ?? []).map((column) => column.name);
   const statusOptions = workflowStatuses.length > 0 ? workflowStatuses : ["Todo", "In Progress", "Blocked", "Done"];
@@ -529,16 +586,31 @@ export const SprintBoardView = observer(function SprintBoardView() {
     );
   };
 
+  const updateBoardTaskStatus = async (taskId: string, nextStatus: string) => {
+    setBoardError("");
+    setUpdatingTaskId(taskId);
+    try {
+      await controller.updateTaskStatus(taskId, nextStatus);
+      await reloadBoardData();
+      await controller.loadStories(productId);
+    } catch (statusError) {
+      setBoardError(getErrorMessage(statusError));
+    } finally {
+      setUpdatingTaskId("");
+    }
+  };
+
   return (
     <div className="stack-lg">
       <section className="card">
         <div className="section-head">
-          <h2>Ejecucion del sprint</h2>
+          <h2>Ejecucion del sprint {currentSprint ? `"${currentSprint.name}"` : ""}</h2>
           <button
             className="btn btn-secondary"
-            onClick={() => {
+            onClick={async () => {
               if (window.confirm("Completar este sprint cerrara su ejecucion. Deseas continuar?")) {
-                void controller.completeSprint(sprintId);
+                await controller.completeSprint(sprintId);
+                await controller.loadSprints(productId);
               }
             }}
           >
@@ -546,15 +618,19 @@ export const SprintBoardView = observer(function SprintBoardView() {
           </button>
         </div>
         <div className="row-actions compact">
+          {currentSprint ? <span className={statusClass(currentSprint.status)}>{currentSprint.status}</span> : null}
           <NavLink to={productOverviewPath(productId)} className="btn btn-secondary">
             Volver al producto
           </NavLink>
           <NavLink to={productSprintsPath(productId)} className="btn btn-secondary">
             Volver a sprints
           </NavLink>
+          <NavLink to={productBacklogPath(productId)} className="btn btn-secondary">
+            Ir a backlog
+          </NavLink>
         </div>
         <p className="muted">Actualiza estados y propiedades de tareas desde los drawers por columna o tarjeta.</p>
-        {formError ? <p className="error-text">{formError}</p> : null}
+        {boardError ? <p className="error-text">{boardError}</p> : null}
         <div className="kanban">
           {(store.board?.columns ?? []).map((column) => (
             <section key={column.name} className="kanban-column">
@@ -564,8 +640,9 @@ export const SprintBoardView = observer(function SprintBoardView() {
                   <span className="pill">{column.tasks.length}</span>
                   <button
                     type="button"
-                    className="btn btn-secondary"
+                    className="btn btn-secondary btn-icon"
                     onClick={() => openBoardTaskDrawer({ defaultStatus: column.name })}
+                    aria-label={`Crear tarea en columna ${column.name}`}
                   >
                     +
                   </button>
@@ -576,7 +653,20 @@ export const SprintBoardView = observer(function SprintBoardView() {
                   <h5>{task.title}</h5>
                   <p className="muted">Historia: {task.story?.title ?? "-"}</p>
                   <p className="muted">Assignee: {task.assignee?.name ?? "Sin asignar"}</p>
-                  <p className="muted">Estado: <span className={statusClass(task.status)}>{task.status}</span></p>
+                  <label>
+                    Estado
+                    <select
+                      value={task.status}
+                      onChange={(event) => void updateBoardTaskStatus(task.id, event.target.value)}
+                      disabled={updatingTaskId === task.id}
+                    >
+                      {statusOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <div className="row-actions compact">
                     <button type="button" className="btn btn-secondary" onClick={() => openBoardTaskDrawer({ task })}>
                       Editar
@@ -584,8 +674,10 @@ export const SprintBoardView = observer(function SprintBoardView() {
                   </div>
                 </article>
               ))}
+              {column.tasks.length === 0 ? <p className="muted">Sin tareas en esta columna.</p> : null}
             </section>
           ))}
+          {(store.board?.columns?.length ?? 0) === 0 ? <p className="muted">No hay columnas configuradas para este workflow.</p> : null}
         </div>
       </section>
 
@@ -631,6 +723,7 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
   if (!productId) return null;
   const sprints = store.sprints.items as SprintItem[];
   const teams = store.teams.items as TeamItem[];
+  const assignableUsers = buildAssignableUsers(teams);
 
   return (
     <div className="stack-lg">
@@ -669,8 +762,15 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
             </select>
           </label>
           <label>
-            User ID
-            <input value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="cuid" />
+            Usuario
+            <select value={userId} onChange={(event) => setUserId(event.target.value)}>
+              <option value="">Seleccionar usuario</option>
+              {assignableUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
         <div className="row-actions compact">

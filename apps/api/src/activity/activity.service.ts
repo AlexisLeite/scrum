@@ -211,11 +211,24 @@ export class ActivityService {
     if (!value) {
       throw new BadRequestException("entityType is required");
     }
-    const normalized = value.trim().toUpperCase();
+    const normalized = this.normalizeEntityType(value);
     if (!(normalized in ActivityEntityType)) {
       throw new BadRequestException(`Unsupported entityType: ${value}`);
     }
     return ActivityEntityType[normalized as keyof typeof ActivityEntityType];
+  }
+
+  private normalizeEntityType(value: string): string {
+    const normalized = value.trim().toUpperCase().replace(/[-\s]/g, "_");
+    const aliasMap: Record<string, string> = {
+      STORIES: "STORY",
+      TASKS: "TASK",
+      SPRINTS: "SPRINT",
+      PRODUCTS: "PRODUCT",
+      TEAMS: "TEAM",
+      USERS: "USER"
+    };
+    return aliasMap[normalized] ?? normalized;
   }
 
   private resolvePagination(query: ListActivityQueryDto) {
@@ -270,4 +283,5 @@ export class ActivityService {
     }
     return value as Prisma.InputJsonValue;
   }
+
 }
