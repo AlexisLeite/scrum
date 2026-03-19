@@ -11,6 +11,7 @@ import { useRootStore } from "../stores/root-store";
 import { SprintUpsertionDrawer } from "../ui/drawers/product-workspace/SprintUpsertionDrawer";
 import { StoryUpsertionDrawer } from "../ui/drawers/product-workspace/StoryUpsertionDrawer";
 import { TaskUpsertionDrawer } from "../ui/drawers/product-workspace/TaskUpsertionDrawer";
+import { KanbanBoard } from "../ui/kanban";
 
 type StoryStatus = "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
 type SprintStatus = "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
@@ -53,6 +54,8 @@ type BoardTask = {
   title: string;
   description?: string | null;
   status: string;
+  updatedAt?: string | null;
+  boardOrder?: number | null;
   storyId?: string | null;
   sprintId?: string | null;
   assigneeId?: string | null;
@@ -543,7 +546,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const teamController = React.useMemo(() => new TeamController(store), [store]);
   const { productId, sprintId } = useParams<{ productId: string; sprintId: string }>();
   const [boardError, setBoardError] = React.useState("");
-  const [updatingTaskId, setUpdatingTaskId] = React.useState("");
+  const [pendingTaskIds, setPendingTaskIds] = React.useState<Record<string, boolean>>({});
 
   const reloadBoardData = React.useCallback(async () => {
     if (!productId || !sprintId) return;
@@ -569,6 +572,9 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const teams = store.teams.items as TeamItem[];
   const currentSprint = sprints.find((sprint) => sprint.id === sprintId);
   const assignees = buildAssignableUsers(teams);
+  const boardAssignees = currentSprint
+    ? buildAssignableUsers(teams.filter((team) => team.id === currentSprint.teamId))
+    : assignees;
   const workflowStatuses = (store.board?.columns ?? []).map((column) => column.name);
   const statusOptions = workflowStatuses.length > 0 ? workflowStatuses : ["Todo", "In Progress", "Blocked", "Done"];
 
@@ -580,7 +586,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
         productId,
         stories: stories.map((story) => ({ id: story.id, title: story.title })),
         sprints,
-        assignees,
+        assignees: boardAssignees,
         statusOptions,
         defaultStatus,
         task: task
@@ -609,7 +615,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
 
   const updateBoardTaskStatus = async (taskId: string, nextStatus: string) => {
     setBoardError("");
-    setUpdatingTaskId(taskId);
+    setPendingTaskIds((previous) => ({ ...previous, [taskId]: true }));
     try {
       await controller.updateTaskStatus(taskId, nextStatus);
       await reloadBoardData();
@@ -617,7 +623,47 @@ export const SprintBoardView = observer(function SprintBoardView() {
     } catch (statusError) {
       setBoardError(getErrorMessage(statusError));
     } finally {
-      setUpdatingTaskId("");
+      setPendingTaskIds((previous) => {
+        const next = { ...previous };
+        delete next[taskId];
+        return next;
+      });
+    }
+  };
+
+  const updateBoardTaskAssignee = async (taskId: string, assigneeId: string | null) => {
+    setBoardError("");
+    setPendingTaskIds((previous) => ({ ...previous, [taskId]: true }));
+    try {
+      await controller.updateTask(taskId, { assigneeId });
+      await reloadBoardData();
+      await controller.loadStories(productId);
+    } catch (assignError) {
+      setBoardError(getErrorMessage(assignError));
+    } finally {
+      setPendingTaskIds((previous) => {
+        const next = { ...previous };
+        delete next[taskId];
+        return next;
+      });
+    }
+  };
+
+  const moveBoardTask = async (taskId: string, status: string, position: number) => {
+    setBoardError("");
+    setPendingTaskIds((previous) => ({ ...previous, [taskId]: true }));
+    try {
+      await controller.moveBoardTask(sprintId, taskId, { status, position });
+      await reloadBoardData();
+      await controller.loadStories(productId);
+    } catch (moveError) {
+      setBoardError(getErrorMessage(moveError));
+    } finally {
+      setPendingTaskIds((previous) => {
+        const next = { ...previous };
+        delete next[taskId];
+        return next;
+      });
     }
   };
 
@@ -643,54 +689,21 @@ export const SprintBoardView = observer(function SprintBoardView() {
         </div>
         <p className="muted">Actualiza estados y propiedades de tareas desde los drawers por columna o tarjeta.</p>
         {boardError ? <p className="error-text">{boardError}</p> : null}
-        <div className="kanban">
-          {(store.board?.columns ?? []).map((column) => (
-            <section key={column.name} className="kanban-column">
-              <div className="section-head">
-                <h4>{column.name}</h4>
-                <div className="row-actions compact">
-                  <span className="pill">{column.tasks.length}</span>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-icon"
-                    onClick={() => openBoardTaskDrawer({ defaultStatus: column.name })}
-                    aria-label={`Crear tarea en columna ${column.name}`}
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-              {column.tasks.map((task: BoardTask) => (
-                <article key={task.id} className="kanban-card">
-                  <h5>{task.title}</h5>
-                  <p className="muted">Historia: {task.story?.title ?? "-"}</p>
-                  <p className="muted">Assignee: {task.assignee?.name ?? "Sin asignar"}</p>
-                  <label>
-                    Estado
-                    <select
-                      value={task.status}
-                      onChange={(event) => void updateBoardTaskStatus(task.id, event.target.value)}
-                      disabled={updatingTaskId === task.id}
-                    >
-                      {statusOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="row-actions compact">
-                    <button type="button" className="btn btn-secondary" onClick={() => openBoardTaskDrawer({ task })}>
-                      Editar
-                    </button>
-                  </div>
-                </article>
-              ))}
-              {column.tasks.length === 0 ? <p className="muted">Sin tareas en esta columna.</p> : null}
-            </section>
-          ))}
-          {(store.board?.columns?.length ?? 0) === 0 ? <p className="muted">No hay columnas configuradas para este workflow.</p> : null}
-        </div>
+        <KanbanBoard
+          columns={(store.board?.columns ?? []).map((column) => ({
+            name: column.name,
+            tasks: column.tasks as BoardTask[]
+          }))}
+          assignees={boardAssignees}
+          statusOptions={statusOptions}
+          isTaskPending={(taskId) => Boolean(pendingTaskIds[taskId])}
+          onCreateTask={(defaultStatus) => openBoardTaskDrawer({ defaultStatus })}
+          onEditTask={(task) => openBoardTaskDrawer({ task: task as BoardTask })}
+          onStatusChange={updateBoardTaskStatus}
+          onAssigneeChange={updateBoardTaskAssignee}
+          onMoveTask={moveBoardTask}
+        />
+        {(store.board?.columns?.length ?? 0) === 0 ? <p className="muted">No hay columnas configuradas para este workflow.</p> : null}
       </section>
 
       <section className="card">

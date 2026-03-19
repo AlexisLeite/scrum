@@ -1,0 +1,153 @@
+.kb-board {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.kb-toolbar {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: end;
+}
+
+.kb-count {
+  margin: 0;
+  align-self: center;
+  font-weight: 600;
+}
+
+.kb-columns {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.kb-column {
+  display: grid;
+  gap: 0.65rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-soft) 84%, transparent);
+  padding: 0.65rem;
+  min-height: 460px;
+}
+
+.kb-column.is-drop-column {
+  border-color: color-mix(in srgb, var(--accent-c) 46%, var(--border-soft));
+}
+
+.kb-column-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.kb-column-head h4 {
+  margin: 0;
+}
+
+.kb-task-list {
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+}
+
+.kb-card {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-card) 97%, transparent);
+  padding: 0.55rem;
+}
+
+.kb-card.is-dragging {
+  opacity: 0.55;
+}
+
+.kb-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  align-items: baseline;
+}
+
+.kb-title-row h5 {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-story {
+  max-width: 140px;
+  color: var(--text-muted);
+  font-size: 0.77rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-control-row {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) auto;
+  align-items: end;
+}
+
+.kb-control-row select {
+  min-height: 34px;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.8rem;
+}
+
+.kb-edit-btn {
+  min-height: 34px;
+  padding: 0.3rem 0.55rem;
+}
+
+.kb-description {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.kb-meta-row .muted {
+  margin: 0;
+  font-size: 0.72rem;
+}
+
+.kb-drop-marker {
+  height: 0;
+  border-top: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  transition: border-color 90ms ease;
+}
+
+.kb-drop-marker.is-visible {
+  border-color: color-mix(in srgb, var(--accent-a) 75%, transparent);
+}
+
+@media (max-width: 760px) {
+  .kb-control-row {
+    grid-template-columns: 1fr;
+  }
+
+  .kb-edit-btn {
+    width: 100%;
+  }
+}

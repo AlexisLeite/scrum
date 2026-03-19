@@ -91,3 +91,14 @@ export class CreateSprintTaskDto {
   @Min(0)
   remainingHours?: number;
 }
+
+export class MoveSprintTaskDto {
+  @IsString()
+  @MinLength(2)
+  status!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  position!: number;
+}

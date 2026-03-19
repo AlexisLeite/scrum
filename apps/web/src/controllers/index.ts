@@ -112,7 +112,14 @@ export class ProductController {
 
     const target = columns.find((column) => column.name === task.status);
     if (target) {
-      target.tasks = [...target.tasks, task];
+      target.tasks = [...target.tasks, task].sort((left, right) => {
+        const leftOrder = typeof left.boardOrder === "number" ? left.boardOrder : Number.MAX_SAFE_INTEGER;
+        const rightOrder = typeof right.boardOrder === "number" ? right.boardOrder : Number.MAX_SAFE_INTEGER;
+        if (leftOrder !== rightOrder) {
+          return leftOrder - rightOrder;
+        }
+        return String(left.updatedAt ?? "").localeCompare(String(right.updatedAt ?? ""));
+      });
     }
 
     this.store.setBoard({ ...this.store.board, columns });
@@ -185,7 +192,7 @@ export class ProductController {
     return task;
   }
 
-  async assignTask(taskId: string, payload: { assigneeId?: string; sprintId?: string }) {
+  async assignTask(taskId: string, payload: { assigneeId?: string | null; sprintId?: string | null }) {
     const task = await apiClient.patch<any>(`/tasks/${taskId}/assign`, payload);
     this.store.tasks.upsert(task);
     this.syncTaskInBoard(task);
@@ -224,6 +231,13 @@ export class ProductController {
     const board = await apiClient.get<any>(`/sprints/${sprintId}/board`);
     this.store.setBoard(board);
     return board;
+  }
+
+  async moveBoardTask(sprintId: string, taskId: string, payload: { status: string; position: number }) {
+    const task = await apiClient.patch<any>(`/sprints/${sprintId}/tasks/${taskId}/move`, payload);
+    this.store.tasks.upsert(task);
+    this.syncTaskInBoard(task);
+    return task;
   }
 
   async loadSprintPendingTasks(sprintId: string) {

@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
-import { ActivityEntityType, StoryStatus } from "@prisma/client";
+import { ActivityEntityType, Prisma, StoryStatus } from "@prisma/client";
 import { ActivityService } from "../activity/activity.service";
 import { AuthUser } from "../common/current-user.decorator";
 import { TeamScopeService } from "../common/team-scope.service";
@@ -52,6 +52,7 @@ export class TasksService {
         title: dto.title,
         description: dto.description,
         status: dto.status,
+        boardOrder: dto.sprintId ? await this.getNextBoardOrder(dto.sprintId, dto.status) : 0,
         effortPoints: dto.effortPoints,
         estimatedHours: dto.estimatedHours,
         remainingHours: dto.remainingHours
@@ -94,6 +95,7 @@ export class TasksService {
         productId: true,
         status: true,
         sprintId: true,
+        boardOrder: true,
         assigneeId: true,
         title: true,
         description: true,
@@ -116,6 +118,12 @@ export class TasksService {
     }
 
     let targetTeamId: string | undefined;
+    const nextStatus = hasStatus ? dto.status ?? current.status : current.status;
+    const nextSprintId = hasSprintId ? dto.sprintId ?? null : current.sprintId;
+    const movesBoardColumn = current.sprintId !== nextSprintId || current.status !== nextStatus;
+    const nextBoardOrder =
+      nextSprintId && movesBoardColumn ? await this.getNextBoardOrder(nextSprintId, nextStatus) : current.boardOrder;
+
     if (hasSprintId && dto.sprintId) {
       const sprint = await this.validateSprintForProduct(dto.sprintId, current.productId);
       targetTeamId = sprint.teamId;
@@ -137,7 +145,8 @@ export class TasksService {
         remainingHours: dto.remainingHours,
         status: hasStatus ? dto.status : undefined,
         assigneeId: hasAssigneeId ? dto.assigneeId ?? null : undefined,
-        sprintId: hasSprintId ? dto.sprintId ?? null : undefined
+        sprintId: hasSprintId ? dto.sprintId ?? null : undefined,
+        boardOrder: nextSprintId ? nextBoardOrder : 0
       }
     });
 
@@ -153,6 +162,9 @@ export class TasksService {
 
     if (hasStatus || hasSprintId) {
       await this.recomputeStoryStatus(current.storyId);
+    }
+    if (current.sprintId && movesBoardColumn) {
+      await this.reindexSprintColumn(current.sprintId, current.status);
     }
     const changedFields = this.getTaskChangedFields(current, updated);
     await this.activityService.record({
@@ -308,6 +320,7 @@ export class TasksService {
         title: dto.title,
         description: dto.description,
         status: dto.status,
+        boardOrder: await this.getNextBoardOrder(sprint.id, dto.status),
         effortPoints: dto.effortPoints,
         estimatedHours: dto.estimatedHours,
         remainingHours: dto.remainingHours
@@ -350,6 +363,41 @@ export class TasksService {
     }
   }
 
+  async getNextBoardOrder(
+    sprintId: string,
+    status: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma
+  ) {
+    const lastTask = await client.task.findFirst({
+      where: { sprintId, status },
+      orderBy: [{ boardOrder: "desc" }, { createdAt: "desc" }],
+      select: { boardOrder: true }
+    });
+    return (lastTask?.boardOrder ?? 0) + 1;
+  }
+
+  async reindexSprintColumn(
+    sprintId: string,
+    status: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma
+  ) {
+    const tasks = await client.task.findMany({
+      where: { sprintId, status },
+      orderBy: [{ boardOrder: "asc" }, { createdAt: "asc" }],
+      select: { id: true }
+    });
+    await this.applyBoardOrder(tasks.map((task) => task.id), client);
+  }
+
+  async applyBoardOrder(taskIds: string[], client: Prisma.TransactionClient | PrismaService = this.prisma) {
+    for (let index = 0; index < taskIds.length; index += 1) {
+      await client.task.update({
+        where: { id: taskIds[index] },
+        data: { boardOrder: index + 1 }
+      });
+    }
+  }
+
   private getTaskChangedFields(
     before: {
       title: string;
@@ -360,6 +408,7 @@ export class TasksService {
       status: string;
       assigneeId: string | null;
       sprintId: string | null;
+      boardOrder: number;
     },
     after: {
       title: string;
@@ -370,6 +419,7 @@ export class TasksService {
       status: string;
       assigneeId: string | null;
       sprintId: string | null;
+      boardOrder: number;
     }
   ): string[] {
     const keys: Array<keyof typeof before> = [
@@ -380,7 +430,8 @@ export class TasksService {
       "remainingHours",
       "status",
       "assigneeId",
-      "sprintId"
+      "sprintId",
+      "boardOrder"
     ];
     return keys.filter((key) => before[key] !== after[key]);
   }

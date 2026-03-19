@@ -1,11 +1,11 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
-import { ActivityEntityType, SprintStatus } from "@prisma/client";
+import { ActivityEntityType, Prisma, SprintStatus } from "@prisma/client";
 import { ActivityService } from "../activity/activity.service";
 import { AuthUser } from "../common/current-user.decorator";
 import { TeamScopeService } from "../common/team-scope.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TasksService } from "../tasks/tasks.service";
-import { CreateSprintDto, CreateSprintTaskDto, UpdateSprintDto } from "./sprints.dto";
+import { CreateSprintDto, CreateSprintTaskDto, MoveSprintTaskDto, UpdateSprintDto } from "./sprints.dto";
 
 @Injectable()
 export class SprintsService {
@@ -181,7 +181,8 @@ export class SprintsService {
 
     const tasks = await this.prisma.task.findMany({
       where: { sprintId: id },
-      include: { assignee: true, story: true }
+      include: { assignee: true, story: true },
+      orderBy: [{ boardOrder: "asc" }, { createdAt: "asc" }]
     });
 
     const columns = sprint.product.workflow.map((column) => ({
@@ -249,7 +250,7 @@ export class SprintsService {
 
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
-      select: { id: true, productId: true, storyId: true }
+      select: { id: true, productId: true, storyId: true, sprintId: true, status: true }
     });
     if (!task) {
       throw new BadRequestException("Task not found");
@@ -257,10 +258,16 @@ export class SprintsService {
     if (task.productId !== sprint.productId) {
       throw new BadRequestException("Task does not belong to sprint product");
     }
+    if (task.sprintId) {
+      throw new BadRequestException("Task is already assigned to a sprint");
+    }
 
     const updated = await this.prisma.task.update({
       where: { id: taskId },
-      data: { sprintId: id }
+      data: {
+        sprintId: id,
+        boardOrder: await this.tasksService.getNextBoardOrder(id, task.status)
+      }
     });
 
     await this.tasksService.recomputeStoryStatus(task.storyId);
@@ -294,10 +301,11 @@ export class SprintsService {
 
     const updated = await this.prisma.task.update({
       where: { id: taskId },
-      data: { sprintId: null }
+      data: { sprintId: null, boardOrder: 0 }
     });
 
     await this.tasksService.recomputeStoryStatus(task.storyId);
+    await this.tasksService.reindexSprintColumn(id, updated.status);
     await this.activityService.record({
       actorUserId: user.sub,
       teamId: sprint.teamId,
@@ -309,6 +317,120 @@ export class SprintsService {
       afterJson: updated
     });
     return updated;
+  }
+
+  async moveTask(id: string, taskId: string, dto: MoveSprintTaskDto, user: AuthUser) {
+    const sprint = await this.prisma.sprint.findUnique({
+      where: { id },
+      include: {
+        product: {
+          include: {
+            workflow: {
+              orderBy: { sortOrder: "asc" }
+            }
+          }
+        }
+      }
+    });
+
+    if (!sprint) {
+      throw new BadRequestException("Sprint not found");
+    }
+    await this.assertSprintAccess(user, sprint);
+
+    const allowedStatuses = sprint.product.workflow.map((column) => column.name);
+    if (!allowedStatuses.includes(dto.status)) {
+      throw new BadRequestException("Task status is not part of sprint workflow");
+    }
+
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        assignee: true,
+        story: true
+      }
+    });
+    if (!task) {
+      throw new BadRequestException("Task not found");
+    }
+    if (task.sprintId !== id) {
+      throw new BadRequestException("Task is not assigned to this sprint");
+    }
+
+    const sourceTasks = await this.prisma.task.findMany({
+      where: { sprintId: id, status: task.status },
+      orderBy: [{ boardOrder: "asc" }, { createdAt: "asc" }],
+      select: { id: true }
+    });
+    const targetTasks =
+      dto.status === task.status
+        ? sourceTasks
+        : await this.prisma.task.findMany({
+            where: { sprintId: id, status: dto.status },
+            orderBy: [{ boardOrder: "asc" }, { createdAt: "asc" }],
+            select: { id: true }
+          });
+
+    const sourceIds = sourceTasks.map((entry) => entry.id).filter((entryId) => entryId !== taskId);
+    const targetIds =
+      dto.status === task.status
+        ? sourceIds
+        : targetTasks.map((entry) => entry.id).filter((entryId) => entryId !== taskId);
+    const boundedPosition = Math.max(0, Math.min(dto.position, targetIds.length));
+    targetIds.splice(boundedPosition, 0, taskId);
+
+    const updatedTask = await this.prisma.$transaction(async (tx) => {
+      if (dto.status === task.status) {
+        await this.tasksService.applyBoardOrder(targetIds, tx);
+      } else {
+        await this.tasksService.applyBoardOrder(sourceIds, tx);
+        for (let index = 0; index < targetIds.length; index += 1) {
+          const targetTaskId = targetIds[index];
+          await tx.task.update({
+            where: { id: targetTaskId },
+            data: targetTaskId === taskId ? { status: dto.status, boardOrder: index + 1 } : { boardOrder: index + 1 }
+          });
+        }
+        await tx.taskStatusHistory.create({
+          data: {
+            taskId,
+            fromStatus: task.status,
+            toStatus: dto.status
+          }
+        });
+      }
+
+      return tx.task.findUniqueOrThrow({
+        where: { id: taskId },
+        include: {
+          assignee: true,
+          story: true
+        }
+      });
+    });
+
+    if (dto.status !== task.status) {
+      await this.tasksService.recomputeStoryStatus(task.storyId);
+    }
+
+    await this.activityService.record({
+      actorUserId: user.sub,
+      teamId: sprint.teamId,
+      productId: sprint.productId,
+      entityType: ActivityEntityType.TASK,
+      entityId: taskId,
+      action: "TASK_MOVED_ON_BOARD",
+      metadataJson: {
+        sprintId: id,
+        fromStatus: task.status,
+        toStatus: dto.status,
+        toPosition: boundedPosition
+      },
+      beforeJson: task,
+      afterJson: updatedTask
+    });
+
+    return updatedTask;
   }
 
   private async getSprintOrThrow(id: string) {

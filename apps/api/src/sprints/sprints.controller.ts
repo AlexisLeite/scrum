@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@n
 import { AuthUser, CurrentUser } from "../common/current-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { Roles } from "../common/roles.decorator";
-import { CreateSprintDto, CreateSprintTaskDto, UpdateSprintDto } from "./sprints.dto";
+import { CreateSprintDto, CreateSprintTaskDto, MoveSprintTaskDto, UpdateSprintDto } from "./sprints.dto";
 import { SprintsService } from "./sprints.service";
 
 @Controller()
@@ -65,5 +65,16 @@ export class SprintsController {
   @Roles("platform_admin", "product_owner", "scrum_master")
   removeTask(@CurrentUser() user: AuthUser, @Param("id") id: string, @Param("taskId") taskId: string) {
     return this.sprintsService.removeTask(id, taskId, user);
+  }
+
+  @Patch("sprints/:id/tasks/:taskId/move")
+  @Roles("platform_admin", "product_owner", "scrum_master", "team_member")
+  moveTask(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Param("taskId") taskId: string,
+    @Body() dto: MoveSprintTaskDto
+  ) {
+    return this.sprintsService.moveTask(id, taskId, dto, user);
   }
 }

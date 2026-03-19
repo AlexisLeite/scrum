@@ -68,3 +68,7 @@
 .rich-description-editor a {
   color: var(--accent-a);
 }
+
+.mdxeditor-popup-container {
+  z-index: 1105 !important;
+}

@@ -405,6 +405,7 @@ async function main() {
 
     const addTaskCompat = await scrum.request("POST", `/sprints/${sprintA1.id}/tasks/${taskA1.id}`, undefined, [200, 201]);
     assert.equal(addTaskCompat.sprintId, sprintA1.id);
+    assert.ok(addTaskCompat.boardOrder > 0, "task added to sprint should receive board order");
 
     const createSprintTask = await member.request("POST", `/sprints/${sprintA1.id}/tasks`, {
       storyId: storyA.id,
@@ -427,9 +428,33 @@ async function main() {
     }, [200]);
     assert.equal(assignedCompat.sprintId, sprintA1.id);
     assert.equal(assignedCompat.assigneeId, memberRecord.id);
+    assert.ok(assignedCompat.boardOrder > 0, "assigned task should receive board order when entering sprint");
 
-    const statusCompat = await member.request("PATCH", `/tasks/${taskA1.id}/status`, { status: "In Progress" }, [200]);
-    assert.equal(statusCompat.status, "In Progress");
+    const reorderedTodo = await scrum.request("PATCH", `/sprints/${sprintA1.id}/tasks/${taskA2.id}/move`, {
+      status: "Todo",
+      position: 0
+    }, [200]);
+    assert.equal(reorderedTodo.status, "Todo");
+
+    const boardAfterReorder = await member.request("GET", `/sprints/${sprintA1.id}/board`, undefined, [200]);
+    const todoColumnAfterReorder = boardAfterReorder.columns.find((column) => column.name === "Todo");
+    assert.ok(todoColumnAfterReorder, "todo column should exist after reorder");
+    assert.deepEqual(
+      todoColumnAfterReorder.tasks.slice(0, 3).map((task) => task.id),
+      [taskA2.id, taskA1.id, createSprintTask.id],
+      "reorder in same column should persist"
+    );
+
+    const movedAcrossColumns = await member.request("PATCH", `/sprints/${sprintA1.id}/tasks/${taskA1.id}/move`, {
+      status: "In Progress",
+      position: 0
+    }, [200]);
+    assert.equal(movedAcrossColumns.status, "In Progress");
+
+    const boardAfterColumnMove = await member.request("GET", `/sprints/${sprintA1.id}/board`, undefined, [200]);
+    const inProgressColumn = boardAfterColumnMove.columns.find((column) => column.name === "In Progress");
+    assert.ok(inProgressColumn, "in progress column should exist after move");
+    assert.equal(inProgressColumn.tasks[0]?.id, taskA1.id, "move across columns should persist task position");
 
     const patchTask = await member.request("PATCH", `/tasks/${taskA1.id}`, {
       remainingHours: 5,

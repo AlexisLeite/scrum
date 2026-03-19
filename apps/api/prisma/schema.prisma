@@ -178,6 +178,7 @@ model Task {
   title            String
   description      String?
   status           String
+  boardOrder       Int         @default(0)
   effortPoints     Int?
   estimatedHours   Float?
   remainingHours   Float?
@@ -192,6 +193,7 @@ model Task {
   @@index([storyId])
   @@index([sprintId])
   @@index([assigneeId])
+  @@index([sprintId, status, boardOrder])
 }
 
 model TaskStatusHistory {
