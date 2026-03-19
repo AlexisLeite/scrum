@@ -1,6 +1,7 @@
 import { UserProfileDto } from "@scrum/contracts";
 import { makeAutoObservable, runInAction } from "mobx";
 import React, { createContext, useContext } from "react";
+import { DrawerController } from "../ui/drawers/DrawerController";
 
 export interface NamedEntity {
   id: string;
@@ -73,6 +74,7 @@ export class RootStore {
   tasks = new CollectionStore<any>();
   sprints = new CollectionStore<any>();
   users = new CollectionStore<any>();
+  drawers = new DrawerController();
   board: { sprint: any; columns: Array<{ name: string; tasks: any[] }> } | null = null;
   burnup: Array<{ date: string; completedPoints: number; scopePoints: number; remainingPoints: number }> = [];
   teamVelocity: Array<{ sprintName: string; completedPoints: number }> = [];

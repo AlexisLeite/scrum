@@ -1,5 +1,6 @@
 import { SprintStatus } from "@prisma/client";
-import { IsDateString, IsEnum, IsOptional, IsString, MinLength } from "class-validator";
+import { Type } from "class-transformer";
+import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, Min, MinLength } from "class-validator";
 
 export class CreateSprintDto {
   @IsString()
@@ -49,4 +50,44 @@ export class UpdateSprintDto {
   @IsOptional()
   @IsEnum(SprintStatus)
   status?: SprintStatus;
+}
+
+export class CreateSprintTaskDto {
+  @IsString()
+  @MinLength(3)
+  storyId!: string;
+
+  @IsString()
+  @MinLength(3)
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  assigneeId?: string;
+
+  @IsOptional()
+  @IsString()
+  status: string = "Todo";
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  effortPoints?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  estimatedHours?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  remainingHours?: number;
 }

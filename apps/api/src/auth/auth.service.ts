@@ -1,9 +1,10 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { Role, User } from "@prisma/client";
+import { ActivityEntityType, Role, User } from "@prisma/client";
 import * as argon2 from "argon2";
 import { randomUUID } from "crypto";
 import { Response } from "express";
+import { ActivityService } from "../activity/activity.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { LoginDto, SignupDto, UpdateProfileDto } from "./dto";
 
@@ -26,7 +27,8 @@ interface GitLabUserResponse {
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly activityService: ActivityService
   ) {}
 
   async signup(dto: SignupDto) {
@@ -47,8 +49,20 @@ export class AuthService {
       }
     });
     const user = await this.ensureAtLeastOneAdmin(created);
+    const teamIds = await this.listUserTeamIds(user.id);
 
-    return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl);
+    await this.activityService.record({
+      actorUserId: user.id,
+      entityType: ActivityEntityType.USER,
+      entityId: user.id,
+      action: "auth.signup",
+      afterJson: {
+        email: user.email,
+        role: user.role
+      }
+    });
+
+    return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl, teamIds);
   }
 
   async login(dto: LoginDto) {
@@ -63,7 +77,8 @@ export class AuthService {
     }
 
     const user = await this.ensureAtLeastOneAdmin(found);
-    return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl);
+    const teamIds = await this.listUserTeamIds(user.id);
+    return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl, teamIds);
   }
 
   async refresh(refreshToken: string) {
@@ -75,7 +90,8 @@ export class AuthService {
       throw new UnauthorizedException("Invalid refresh token");
     }
 
-    return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl);
+    const teamIds = await this.listUserTeamIds(user.id);
+    return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl, teamIds);
   }
 
   async loginWithGitLabCode(code: string, callbackUrl: string) {
@@ -95,7 +111,8 @@ export class AuthService {
     const byGitlab = await this.prisma.user.findUnique({ where: { gitlabId } });
     if (byGitlab) {
       const user = await this.ensureAtLeastOneAdmin(byGitlab);
-      return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl);
+      const teamIds = await this.listUserTeamIds(user.id);
+      return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl, teamIds);
     }
 
     const byEmail = await this.prisma.user.findUnique({ where: { email } });
@@ -109,7 +126,8 @@ export class AuthService {
         }
       });
       const user = await this.ensureAtLeastOneAdmin(linked);
-      return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl);
+      const teamIds = await this.listUserTeamIds(user.id);
+      return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl, teamIds);
     }
 
     const defaultRole = await this.getDefaultRoleForNewUser();
@@ -123,8 +141,8 @@ export class AuthService {
       }
     });
     const user = await this.ensureAtLeastOneAdmin(created);
-
-    return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl);
+    const teamIds = await this.listUserTeamIds(user.id);
+    return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl, teamIds);
   }
 
   generateOAuthState(): string {
@@ -154,16 +172,47 @@ export class AuthService {
   }
 
   async getMe(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        teamMembers: {
+          select: { teamId: true }
+        }
+      }
+    });
     return user ? this.toUserDto(user) : null;
   }
 
   async updateMe(userId: string, dto: UpdateProfileDto) {
+    const before = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        name: true,
+        avatarUrl: true
+      }
+    });
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: {
         name: dto.name,
         avatarUrl: dto.avatarUrl
+      },
+      include: {
+        teamMembers: {
+          select: { teamId: true }
+        }
+      }
+    });
+
+    await this.activityService.record({
+      actorUserId: userId,
+      entityType: ActivityEntityType.USER,
+      entityId: userId,
+      action: "auth.profile.update",
+      beforeJson: before ?? undefined,
+      afterJson: {
+        name: user.name,
+        avatarUrl: user.avatarUrl
       }
     });
 
@@ -255,7 +304,14 @@ export class AuthService {
     });
   }
 
-  private buildTokenResult(id: string, email: string, role: Role, name: string, avatarUrl: string | null) {
+  private buildTokenResult(
+    id: string,
+    email: string,
+    role: Role,
+    name: string,
+    avatarUrl: string | null,
+    teamIds: string[]
+  ) {
     const accessToken = this.jwtService.sign(
       { sub: id, email, role },
       {
@@ -279,9 +335,18 @@ export class AuthService {
         email,
         role,
         name,
-        avatarUrl
+        avatarUrl,
+        teamIds
       }
     };
+  }
+
+  private async listUserTeamIds(userId: string): Promise<string[]> {
+    const memberships = await this.prisma.teamMember.findMany({
+      where: { userId },
+      select: { teamId: true }
+    });
+    return memberships.map((entry) => entry.teamId);
   }
 
   private toUserDto(user: {
@@ -290,13 +355,15 @@ export class AuthService {
     name: string;
     avatarUrl: string | null;
     role: Role;
+    teamMembers?: Array<{ teamId: string }>;
   }) {
     return {
       id: user.id,
       email: user.email,
       name: user.name,
       avatarUrl: user.avatarUrl,
-      role: user.role
+      role: user.role,
+      teamIds: user.teamMembers?.map((item) => item.teamId) ?? []
     };
   }
 }

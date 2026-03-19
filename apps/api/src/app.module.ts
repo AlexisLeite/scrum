@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AdminModule } from "./admin/admin.module";
+import { ActivityModule } from "./activity/activity.module";
 import { AuthModule } from "./auth/auth.module";
 import { IndicatorsModule } from "./indicators/indicators.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -17,6 +18,7 @@ import { TeamsModule } from "./teams/teams.module";
       envFilePath: [".env", "../../.env"]
     }),
     PrismaModule,
+    ActivityModule,
     AdminModule,
     AuthModule,
     TeamsModule,

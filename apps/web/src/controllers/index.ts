@@ -87,6 +87,30 @@ export class TeamController {
 export class ProductController {
   constructor(private readonly store: RootStore) {}
 
+  private async tryGetWithFallback<T>(primaryPath: string, fallbackPath: string): Promise<T> {
+    try {
+      return await apiClient.get<T>(primaryPath);
+    } catch {
+      return apiClient.get<T>(fallbackPath);
+    }
+  }
+
+  private syncTaskInBoard(task: any) {
+    if (!this.store.board) return;
+
+    const columns = this.store.board.columns.map((column) => ({
+      ...column,
+      tasks: column.tasks.filter((item) => item.id !== task.id)
+    }));
+
+    const target = columns.find((column) => column.name === task.status);
+    if (target) {
+      target.tasks = [...target.tasks, task];
+    }
+
+    this.store.setBoard({ ...this.store.board, columns });
+  }
+
   async loadProducts() {
     const products = await this.store.wrap(this.store.products, () => apiClient.get<any[]>("/products"));
     this.store.products.setItems(products);
@@ -129,26 +153,25 @@ export class ProductController {
     this.store.tasks.upsert(task);
   }
 
+  async updateTask(taskId: string, payload: any) {
+    const task = await apiClient.patch<any>(`/tasks/${taskId}`, payload);
+    this.store.tasks.upsert(task);
+    this.syncTaskInBoard(task);
+    return task;
+  }
+
   async updateTaskStatus(taskId: string, status: string) {
     const task = await apiClient.patch<any>(`/tasks/${taskId}/status`, { status });
     this.store.tasks.upsert(task);
-
-    if (this.store.board) {
-      const columns = this.store.board.columns.map((column) => ({
-        ...column,
-        tasks: column.tasks.filter((item) => item.id !== task.id)
-      }));
-      const target = columns.find((column) => column.name === task.status);
-      if (target) {
-        target.tasks = [...target.tasks, task];
-      }
-      this.store.setBoard({ ...this.store.board, columns });
-    }
+    this.syncTaskInBoard(task);
+    return task;
   }
 
   async assignTask(taskId: string, payload: { assigneeId?: string; sprintId?: string }) {
     const task = await apiClient.patch<any>(`/tasks/${taskId}/assign`, payload);
     this.store.tasks.upsert(task);
+    this.syncTaskInBoard(task);
+    return task;
   }
 
   async loadSprints(productId: string) {
@@ -161,6 +184,12 @@ export class ProductController {
   async createSprint(productId: string, payload: any) {
     const sprint = await apiClient.post<any>(`/products/${productId}/sprints`, payload);
     this.store.sprints.upsert(sprint);
+  }
+
+  async updateSprint(sprintId: string, payload: any) {
+    const sprint = await apiClient.patch<any>(`/sprints/${sprintId}`, payload);
+    this.store.sprints.upsert(sprint);
+    return sprint;
   }
 
   async startSprint(sprintId: string) {
@@ -176,6 +205,32 @@ export class ProductController {
   async loadBoard(sprintId: string) {
     const board = await apiClient.get<any>(`/sprints/${sprintId}/board`);
     this.store.setBoard(board);
+    return board;
+  }
+
+  async loadSprintPendingTasks(sprintId: string) {
+    return apiClient.get<any[]>(`/sprints/${sprintId}/pending-tasks`);
+  }
+
+  async createTaskInSprint(sprintId: string, payload: any) {
+    const task = await apiClient.post<any>(`/sprints/${sprintId}/tasks`, payload);
+    this.store.tasks.upsert(task);
+    this.syncTaskInBoard(task);
+    return task;
+  }
+
+  async addTaskToSprint(sprintId: string, taskId: string) {
+    const task = await apiClient.post<any>(`/sprints/${sprintId}/tasks/${taskId}`);
+    this.store.tasks.upsert(task);
+    this.syncTaskInBoard(task);
+    return task;
+  }
+
+  async removeTaskFromSprint(sprintId: string, taskId: string) {
+    const task = await apiClient.del<any>(`/sprints/${sprintId}/tasks/${taskId}`);
+    this.store.tasks.upsert(task);
+    this.syncTaskInBoard(task);
+    return task;
   }
 
   async loadBurnup(productId: string, sprintId: string) {
@@ -183,13 +238,52 @@ export class ProductController {
     this.store.setBurnup(points);
   }
 
+  async loadBurnupByWindow(productId: string, sprintId: string, window: "week" | "month" | "semester" | "year") {
+    const points = await this.tryGetWithFallback<any[]>(
+      `/indicators/products/${productId}/burnup?sprintId=${sprintId}&window=${window}`,
+      `/indicators/products/${productId}/burnup?sprintId=${sprintId}`
+    );
+    this.store.setBurnup(points);
+    return points;
+  }
+
   async loadTeamVelocity(teamId: string) {
     const points = await apiClient.get<any[]>(`/indicators/teams/${teamId}/velocity`);
     this.store.setTeamVelocity(points);
   }
 
+  async loadTeamVelocityByWindow(teamId: string, window: "week" | "month" | "semester" | "year") {
+    const points = await this.tryGetWithFallback<any[]>(
+      `/indicators/teams/${teamId}/velocity?window=${window}`,
+      `/indicators/teams/${teamId}/velocity`
+    );
+    this.store.setTeamVelocity(points);
+    return points;
+  }
+
   async loadUserVelocity(userId: string) {
     const points = await apiClient.get<any[]>(`/indicators/users/${userId}/velocity`);
     this.store.setUserVelocity(points);
+  }
+
+  async loadUserVelocityByWindow(userId: string, window: "week" | "month" | "semester" | "year") {
+    const points = await this.tryGetWithFallback<any[]>(
+      `/indicators/users/${userId}/velocity?window=${window}`,
+      `/indicators/users/${userId}/velocity`
+    );
+    this.store.setUserVelocity(points);
+    return points;
+  }
+
+  async loadProductStatsByWindow(productId: string, window: "week" | "month" | "semester" | "year") {
+    try {
+      return await apiClient.get<any>(`/indicators/products/${productId}/stats?window=${window}`);
+    } catch {
+      return null;
+    }
+  }
+
+  async loadEntityActivity(entityType: string, entityId: string) {
+    return apiClient.get<any[]>(`/activity/entities/${entityType}/${entityId}`);
   }
 }

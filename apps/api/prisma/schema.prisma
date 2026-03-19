@@ -29,6 +29,16 @@ enum SprintStatus {
   CANCELLED
 }
 
+enum ActivityEntityType {
+  AUTH
+  USER
+  TEAM
+  PRODUCT
+  STORY
+  TASK
+  SPRINT
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
@@ -43,6 +53,7 @@ model User {
   productMember ProductMember[]
   tasks         Task[]         @relation("TaskAssignee")
   productsOwned Product[]      @relation("ProductOwner")
+  activityLogsAsActor ActivityLog[] @relation("ActivityActor")
 }
 
 model Team {
@@ -53,6 +64,8 @@ model Team {
   updatedAt   DateTime     @updatedAt
   members     TeamMember[]
   sprints     Sprint[]
+  productLinks ProductTeam[]
+  activityLogs ActivityLog[]
 }
 
 model TeamMember {
@@ -79,6 +92,8 @@ model Product {
   sprints     Sprint[]
   workflow    WorkflowColumn[]
   tasks       Task[]
+  teamLinks   ProductTeam[]
+  activityLogs ActivityLog[]
 
   @@index([ownerId])
 }
@@ -92,6 +107,17 @@ model ProductMember {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([productId, userId])
+}
+
+model ProductTeam {
+  productId  String
+  teamId     String
+  createdAt  DateTime @default(now())
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([productId, teamId])
+  @@index([teamId])
 }
 
 model WorkflowColumn {
@@ -177,6 +203,28 @@ model TaskStatusHistory {
   task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId, changedAt])
+}
+
+model ActivityLog {
+  id          String             @id @default(cuid())
+  actorUserId String?
+  teamId      String?
+  productId   String?
+  entityType  ActivityEntityType
+  entityId    String
+  action      String
+  beforeJson  Json?
+  afterJson   Json?
+  metadataJson Json?
+  createdAt   DateTime           @default(now())
+  actorUser   User?              @relation("ActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  team        Team?              @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  product     Product?           @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([teamId, createdAt])
+  @@index([productId, createdAt])
 }
 
 model SprintMetricDaily {

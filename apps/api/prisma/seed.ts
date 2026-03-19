@@ -59,9 +59,10 @@ const defaultUsers: Array<{ email: string; name: string; role: Role; password: s
 ];
 
 async function main() {
+  const userIdsByEmail = new Map<string, string>();
   for (const user of defaultUsers) {
     const passwordHash = await argon2.hash(user.password);
-    await prisma.user.upsert({
+    const upserted = await prisma.user.upsert({
       where: { email: user.email },
       update: {
         name: user.name,
@@ -73,6 +74,39 @@ async function main() {
         name: user.name,
         role: user.role,
         passwordHash
+      }
+    });
+    userIdsByEmail.set(user.email, upserted.id);
+  }
+
+  const defaultTeam = await prisma.team.upsert({
+    where: { name: "Core Team" },
+    update: {
+      description: "Default operational team"
+    },
+    create: {
+      name: "Core Team",
+      description: "Default operational team"
+    }
+  });
+
+  const defaultMembers = ["scrum@scrum.local", "member@scrum.local"];
+  for (const email of defaultMembers) {
+    const userId = userIdsByEmail.get(email);
+    if (!userId) {
+      continue;
+    }
+    await prisma.teamMember.upsert({
+      where: {
+        teamId_userId: {
+          teamId: defaultTeam.id,
+          userId
+        }
+      },
+      update: {},
+      create: {
+        teamId: defaultTeam.id,
+        userId
       }
     });
   }

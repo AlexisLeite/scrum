@@ -4,8 +4,7 @@ import {
   IsOptional,
   IsString,
   Min,
-  MinLength,
-  ValidateIf
+  MinLength
 } from "class-validator";
 
 export class CreateTaskDto {
@@ -74,6 +73,19 @@ export class UpdateTaskDto {
   @IsNumber()
   @Min(0)
   remainingHours?: number;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  assigneeId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  sprintId?: string | null;
 }
 
 export class UpdateTaskStatusDto {
@@ -84,12 +96,10 @@ export class UpdateTaskStatusDto {
 
 export class AssignTaskDto {
   @IsOptional()
-  @ValidateIf((obj) => obj.assigneeId !== undefined)
   @IsString()
-  assigneeId?: string;
+  assigneeId?: string | null;
 
   @IsOptional()
-  @ValidateIf((obj) => obj.sprintId !== undefined)
   @IsString()
-  sprintId?: string;
+  sprintId?: string | null;
 }

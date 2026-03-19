@@ -1,13 +1,25 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
-import { StoryStatus } from "@prisma/client";
+import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { ActivityEntityType, StoryStatus } from "@prisma/client";
+import { ActivityService } from "../activity/activity.service";
+import { AuthUser } from "../common/current-user.decorator";
+import { TeamScopeService } from "../common/team-scope.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateStoryDto, UpdateStoryDto } from "./stories.dto";
 
 @Injectable()
 export class StoriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly teamScopeService: TeamScopeService,
+    private readonly activityService: ActivityService
+  ) {}
 
-  listByProduct(productId: string, status?: string) {
+  async listByProduct(productId: string, user: AuthUser, status?: string) {
+    const accessibleProducts = await this.teamScopeService.getAccessibleProductIds(user);
+    if (accessibleProducts !== null && !accessibleProducts.includes(productId)) {
+      return [];
+    }
+
     return this.prisma.userStory.findMany({
       where: {
         productId,
@@ -18,14 +30,20 @@ export class StoriesService {
     });
   }
 
-  async create(productId: string, dto: CreateStoryDto) {
+  async create(productId: string, dto: CreateStoryDto, user: AuthUser) {
+    await this.assertProductAccess(user, productId);
+
+    if (dto.status === StoryStatus.IN_SPRINT || dto.status === StoryStatus.DONE) {
+      throw new BadRequestException("Story status IN_SPRINT/DONE is derived from tasks");
+    }
+
     const maxRank = await this.prisma.userStory.aggregate({
       where: { productId },
       _max: { backlogRank: true }
     });
     const nextRank = (maxRank._max.backlogRank ?? 0) + 10;
 
-    return this.prisma.userStory.create({
+    const story = await this.prisma.userStory.create({
       data: {
         productId,
         title: dto.title,
@@ -35,22 +53,33 @@ export class StoriesService {
         backlogRank: nextRank
       }
     });
+    await this.activityService.record({
+      actorUserId: user.sub,
+      productId: story.productId,
+      entityType: ActivityEntityType.STORY,
+      entityId: story.id,
+      action: "STORY_CREATED",
+      metadataJson: {
+        status: story.status,
+        storyPoints: story.storyPoints
+      },
+      afterJson: story
+    });
+    return story;
   }
 
-  async update(id: string, dto: UpdateStoryDto) {
-    if (dto.status === StoryStatus.DONE) {
-      const pendingTasks = await this.prisma.task.count({
-        where: {
-          storyId: id,
-          status: { not: "Done" }
-        }
-      });
-      if (pendingTasks > 0) {
-        throw new BadRequestException("All tasks must be Done before moving story to DONE");
-      }
+  async update(id: string, dto: UpdateStoryDto, user: AuthUser) {
+    const existing = await this.prisma.userStory.findUnique({ where: { id } });
+    if (!existing) {
+      throw new BadRequestException("Story not found");
+    }
+    await this.assertProductAccess(user, existing.productId);
+
+    if (dto.status === StoryStatus.IN_SPRINT || dto.status === StoryStatus.DONE) {
+      throw new BadRequestException("Story status IN_SPRINT/DONE is derived from tasks");
     }
 
-    return this.prisma.userStory.update({
+    const updated = await this.prisma.userStory.update({
       where: { id },
       data: {
         title: dto.title,
@@ -59,14 +88,93 @@ export class StoriesService {
         status: dto.status
       }
     });
+    await this.activityService.record({
+      actorUserId: user.sub,
+      productId: existing.productId,
+      entityType: ActivityEntityType.STORY,
+      entityId: updated.id,
+      action: "STORY_UPDATED",
+      metadataJson: {
+        changedFields: this.getStoryChangedFields(existing, updated)
+      },
+      beforeJson: existing,
+      afterJson: updated
+    });
+    return updated;
   }
 
-  async remove(id: string) {
+  async remove(id: string, user: AuthUser) {
+    const existing = await this.prisma.userStory.findUnique({ where: { id } });
+    if (!existing) {
+      throw new BadRequestException("Story not found");
+    }
+    await this.assertProductAccess(user, existing.productId);
+
     await this.prisma.userStory.delete({ where: { id } });
+    await this.activityService.record({
+      actorUserId: user.sub,
+      productId: existing.productId,
+      entityType: ActivityEntityType.STORY,
+      entityId: existing.id,
+      action: "STORY_DELETED",
+      metadataJson: {
+        status: existing.status,
+        storyPoints: existing.storyPoints
+      },
+      beforeJson: existing
+    });
     return { ok: true };
   }
 
-  rank(id: string, backlogRank: number) {
-    return this.prisma.userStory.update({ where: { id }, data: { backlogRank } });
+  async rank(id: string, backlogRank: number, user: AuthUser) {
+    const existing = await this.prisma.userStory.findUnique({ where: { id } });
+    if (!existing) {
+      throw new BadRequestException("Story not found");
+    }
+    await this.assertProductAccess(user, existing.productId);
+
+    const updated = await this.prisma.userStory.update({ where: { id }, data: { backlogRank } });
+    await this.activityService.record({
+      actorUserId: user.sub,
+      productId: existing.productId,
+      entityType: ActivityEntityType.STORY,
+      entityId: updated.id,
+      action: "STORY_RANKED",
+      metadataJson: {
+        fromRank: existing.backlogRank,
+        toRank: updated.backlogRank
+      },
+      beforeJson: existing,
+      afterJson: updated
+    });
+    return updated;
+  }
+
+  private async assertProductAccess(user: AuthUser, productId: string) {
+    const accessibleProducts = await this.teamScopeService.getAccessibleProductIds(user);
+    if (accessibleProducts === null) {
+      return;
+    }
+    if (!accessibleProducts.includes(productId)) {
+      throw new ForbiddenException("Insufficient team scope");
+    }
+  }
+
+  private getStoryChangedFields(
+    before: {
+      title: string;
+      description: string | null;
+      storyPoints: number;
+      status: StoryStatus;
+    },
+    after: {
+      title: string;
+      description: string | null;
+      storyPoints: number;
+      status: StoryStatus;
+    }
+  ): string[] {
+    const keys: Array<keyof typeof before> = ["title", "description", "storyPoints", "status"];
+    return keys.filter((key) => before[key] !== after[key]);
   }
 }

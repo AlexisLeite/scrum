@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
+import { AuthUser, CurrentUser } from "../common/current-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { IndicatorsService } from "./indicators.service";
 
@@ -8,22 +9,41 @@ export class IndicatorsController {
   constructor(private readonly indicatorsService: IndicatorsService) {}
 
   @Get("products/:productId/burnup")
-  burnup(@Param("productId") productId: string, @Query("sprintId") sprintId: string) {
-    return this.indicatorsService.burnup(productId, sprintId);
+  burnup(@CurrentUser() user: AuthUser, @Param("productId") productId: string, @Query("sprintId") sprintId: string) {
+    return this.indicatorsService.burnup(productId, sprintId, user);
   }
 
   @Get("products/:productId/burndown")
-  burndown(@Param("productId") productId: string, @Query("sprintId") sprintId: string) {
-    return this.indicatorsService.burndown(productId, sprintId);
+  burndown(@CurrentUser() user: AuthUser, @Param("productId") productId: string, @Query("sprintId") sprintId: string) {
+    return this.indicatorsService.burndown(productId, sprintId, user);
   }
 
   @Get("teams/:teamId/velocity")
-  teamVelocity(@Param("teamId") teamId: string) {
-    return this.indicatorsService.teamVelocity(teamId);
+  teamVelocity(@CurrentUser() user: AuthUser, @Param("teamId") teamId: string) {
+    return this.indicatorsService.teamVelocity(teamId, user);
+  }
+
+  @Get("products/:productId/stats")
+  productStats(
+    @CurrentUser() user: AuthUser,
+    @Param("productId") productId: string,
+    @Query("window") window?: string
+  ) {
+    return this.indicatorsService.productStats(productId, window, user);
+  }
+
+  @Get("teams/:teamId/stats")
+  teamStats(@CurrentUser() user: AuthUser, @Param("teamId") teamId: string, @Query("window") window?: string) {
+    return this.indicatorsService.teamStats(teamId, window, user);
   }
 
   @Get("users/:userId/velocity")
-  userVelocity(@Param("userId") userId: string) {
-    return this.indicatorsService.userVelocity(userId);
+  userVelocity(@CurrentUser() user: AuthUser, @Param("userId") userId: string) {
+    return this.indicatorsService.userVelocity(userId, user);
+  }
+
+  @Get("users/:userId/stats")
+  userStats(@CurrentUser() user: AuthUser, @Param("userId") userId: string, @Query("window") window?: string) {
+    return this.indicatorsService.userStats(userId, window, user);
   }
 }

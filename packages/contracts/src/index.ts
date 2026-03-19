@@ -13,6 +13,7 @@ export interface UserProfileDto {
   name: string;
   avatarUrl: string | null;
   role: Role;
+  teamIds: string[];
 }
 
 export interface TeamDto {
@@ -85,4 +86,75 @@ export interface VelocityPointDto {
   sprintId: string;
   sprintName: string;
   completedPoints: number;
+}
+
+export interface TeamSummaryDto {
+  id: string;
+  name: string;
+}
+
+export interface AdminUserDto {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl: string | null;
+  role: Role;
+  createdAt: string;
+  updatedAt: string;
+  teams: TeamSummaryDto[];
+}
+
+export interface AdminCreateUserDto {
+  email: string;
+  name: string;
+  password: string;
+  role: Role;
+  avatarUrl?: string;
+  teamIds?: string[];
+}
+
+export interface AdminSetUserTeamsDto {
+  teamIds: string[];
+}
+
+export type ActivityEntityType =
+  | "AUTH"
+  | "USER"
+  | "TEAM"
+  | "PRODUCT"
+  | "STORY"
+  | "TASK"
+  | "SPRINT";
+
+export interface ActivityLogDto {
+  id: string;
+  actorUserId: string | null;
+  teamId: string | null;
+  productId: string | null;
+  entityType: ActivityEntityType;
+  entityId: string;
+  action: string;
+  beforeJson: unknown;
+  afterJson: unknown;
+  metadataJson: unknown;
+  createdAt: string;
+}
+
+export interface UserActivityVelocityPointDto {
+  sprintId: string;
+  sprintName: string;
+  completedPoints: number;
+}
+
+export interface UserActivityStatsDto {
+  userId: string;
+  window: "week" | "month" | "semester" | "year";
+  from: string;
+  to: string;
+  activityCount: number;
+  activeDays: number;
+  tasksWorked: number;
+  sprintActions: number;
+  averageVelocity: number;
+  velocityBySprint: UserActivityVelocityPointDto[];
 }

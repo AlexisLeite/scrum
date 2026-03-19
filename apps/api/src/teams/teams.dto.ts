@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MinLength } from "class-validator";
+import { IsArray, IsOptional, IsString, MinLength } from "class-validator";
 
 export class CreateTeamDto {
   @IsString()
@@ -24,4 +24,10 @@ export class UpdateTeamDto {
 export class AddTeamMemberDto {
   @IsString()
   userId!: string;
+}
+
+export class SetTeamProductsDto {
+  @IsArray()
+  @IsString({ each: true })
+  productIds!: string[];
 }

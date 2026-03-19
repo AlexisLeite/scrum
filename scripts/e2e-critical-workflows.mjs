@@ -197,6 +197,10 @@ async function main() {
     }, [200]);
     assert.equal(editedStory.storyPoints, 8, "story edit failed");
 
+    const storiesAfterCreate = await member.request("GET", `/products/${product.id}/stories`, undefined, [200]);
+    const createdStory = storiesAfterCreate.find((entry) => entry.id === story.id);
+    assert.equal(createdStory.status, "DRAFT", "story should start in DRAFT");
+
     const task = await member.request("POST", `/stories/${story.id}/tasks`, {
       title: `Task-${unique}`,
       description: "initial task",
@@ -206,25 +210,78 @@ async function main() {
 
     const editedTask = await member.request("PATCH", `/tasks/${task.id}`, {
       title: `Task-${unique}-edited`,
-      remainingHours: 5
+      remainingHours: 5,
+      assigneeId: memberRecord.id,
+      sprintId: sprint.id,
+      status: "In Progress",
+      effortPoints: 3
     }, [200]);
     assert.equal(editedTask.remainingHours, 5, "task edit failed");
+    assert.equal(editedTask.assigneeId, memberRecord.id, "task patch assign failed");
+    assert.equal(editedTask.sprintId, sprint.id, "task patch sprint assignment failed");
+    assert.equal(editedTask.status, "In Progress", "task patch status failed");
 
-    const assignedTask = await scrum.request("PATCH", `/tasks/${task.id}/assign`, {
+    const storiesInSprint = await member.request("GET", `/products/${product.id}/stories`, undefined, [200]);
+    const storyInSprint = storiesInSprint.find((entry) => entry.id === story.id);
+    assert.equal(storyInSprint.status, "IN_SPRINT", "story should become IN_SPRINT when task enters sprint");
+
+    const createdFromSprint = await scrum.request("POST", `/sprints/${sprint.id}/tasks`, {
+      storyId: story.id,
+      title: `SprintTask-${unique}`,
+      status: "Todo",
+      estimatedHours: 2
+    }, [201]);
+    assert.equal(createdFromSprint.sprintId, sprint.id, "task created from sprint should be linked to sprint");
+    assert.equal(createdFromSprint.storyId, story.id, "task created from sprint should be linked to story");
+
+    const pendingBeforeRemove = await scrum.request("GET", `/sprints/${sprint.id}/pending-tasks`, undefined, [200]);
+    assert.ok(!pendingBeforeRemove.some((entry) => entry.id === task.id), "task in sprint cannot be pending");
+
+    const removedTask = await scrum.request("DELETE", `/sprints/${sprint.id}/tasks/${task.id}`, undefined, [200]);
+    assert.equal(removedTask.sprintId, null, "remove sprint task should clear sprintId");
+
+    const pendingAfterRemove = await scrum.request("GET", `/sprints/${sprint.id}/pending-tasks`, undefined, [200]);
+    assert.ok(pendingAfterRemove.some((entry) => entry.id === task.id), "removed task should appear as pending");
+
+    const reAddedTask = await scrum.request("POST", `/sprints/${sprint.id}/tasks/${task.id}`, undefined, [200, 201]);
+    assert.equal(reAddedTask.sprintId, sprint.id, "add sprint task should set sprintId");
+
+    const compatAssigned = await scrum.request("PATCH", `/tasks/${task.id}/assign`, {
       sprintId: sprint.id,
       assigneeId: memberRecord.id
     }, [200]);
-    assert.equal(assignedTask.sprintId, sprint.id, "task sprint assignment failed");
-    assert.equal(assignedTask.assigneeId, memberRecord.id, "task user assignment failed");
+    assert.equal(compatAssigned.sprintId, sprint.id, "compat assign sprint failed");
+    assert.equal(compatAssigned.assigneeId, memberRecord.id, "compat assign user failed");
 
-    const statusChanged = await member.request("PATCH", `/tasks/${task.id}/status`, { status: "In Progress" }, [200]);
-    assert.equal(statusChanged.status, "In Progress", "task status update failed");
+    const firstDone = await member.request("PATCH", `/tasks/${task.id}/status`, { status: "Done" }, [200]);
+    assert.equal(firstDone.status, "Done", "first task status update failed");
+
+    const secondDone = await member.request("PATCH", `/tasks/${createdFromSprint.id}/status`, { status: "Done" }, [200]);
+    assert.equal(secondDone.status, "Done", "second task status update failed");
+
+    const storiesDone = await member.request("GET", `/products/${product.id}/stories`, undefined, [200]);
+    const doneStory = storiesDone.find((entry) => entry.id === story.id);
+    assert.equal(doneStory.status, "DONE", "story should become DONE when all tasks are Done");
+
+    const reopenedTask = await member.request("PATCH", `/tasks/${task.id}`, {
+      status: "In Progress",
+      sprintId: null
+    }, [200]);
+    assert.equal(reopenedTask.status, "In Progress", "task should reopen from Done");
+    assert.equal(reopenedTask.sprintId, null, "task should move to backlog");
+
+    const movedSecondOut = await member.request("PATCH", `/tasks/${createdFromSprint.id}`, { sprintId: null }, [200]);
+    assert.equal(movedSecondOut.sprintId, null, "second task should move out of sprint");
+
+    const storiesAfterReopen = await member.request("GET", `/products/${product.id}/stories`, undefined, [200]);
+    const reopenedStory = storiesAfterReopen.find((entry) => entry.id === story.id);
+    assert.equal(reopenedStory.status, "READY", "story should fallback to READY when not DONE and not in sprint");
 
     const tasks = await member.request("GET", `/stories/${story.id}/tasks`, undefined, [200]);
     const taskInList = tasks.find((entry) => entry.id === task.id);
     assert.ok(taskInList, "task not listed under story");
     assert.equal(taskInList.assigneeId, memberRecord.id, "task assignee not persisted");
-    assert.equal(taskInList.sprintId, sprint.id, "task sprint not persisted");
+    assert.equal(taskInList.sprintId, null, "task sprint should be cleared");
 
     console.log("\nAll critical workflow e2e tests passed.\n");
   } finally {
