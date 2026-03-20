@@ -153,6 +153,23 @@ export function TaskUpsertionForm(props: {
   const sourceReference =
     defaultSourceMessagePreview ?? (defaultSourceMessageId ? `Mensaje ${defaultSourceMessageId.slice(0, 8)}` : "");
 
+  React.useEffect(() => {
+    const nextEstimatedHours = toInitialHoursState(task?.estimatedHours);
+    setTitle(task?.title ?? "");
+    setDescription(task?.description ?? "");
+    setStoryId(task?.storyId ?? defaultStoryId ?? "");
+    setStatus(task?.status ?? defaultStatus ?? statusOptions[0] ?? "Todo");
+    setSprintId(task?.sprintId ?? fixedSprintId ?? "");
+    setAssigneeId(task?.assigneeId ?? "");
+    setEffortPoints(task?.effortPoints != null ? String(task.effortPoints) : "");
+    setSelectedEstimatedPreset(nextEstimatedHours.preset);
+    setCustomEstimatedHours(nextEstimatedHours.custom);
+    setRemainingHours(task?.remainingHours != null ? String(task.remainingHours) : "");
+    setActualHours(task?.actualHours != null ? String(task.actualHours) : "");
+    setError("");
+    setCompletionDialogOpen(false);
+  }, [task, defaultStoryId, fixedSprintId, defaultStatus, statusOptions]);
+
   const persistTask = async (actualHoursOverride?: number) => {
     setError("");
 

@@ -257,6 +257,54 @@ export function StoryUpsertionForm(props: {
     }
   };
 
+  const renderTaskGroup = (groupTitle: string, groupTasks: StoryTask[]) => (
+    <div key={groupTitle} className="story-task-group">
+      <div className="story-task-group-head">
+        <h5>{groupTitle}</h5>
+        <span className="pill">{groupTasks.length} tareas</span>
+      </div>
+      <div className="story-task-stack">
+        {groupTasks.map((task, index) => (
+          <article key={task.id} className="story-task-card">
+            <div className="story-task-card-head">
+              <div className="story-task-title-block">
+                <span className="story-task-sequence">#{index + 1}</span>
+                <strong>{task.title}</strong>
+              </div>
+              <div className="story-task-card-badges">
+                {task.effortPoints != null ? <span className="pill">SP {task.effortPoints}</span> : null}
+                <span className={statusClass(task.status)}>{task.status}</span>
+              </div>
+            </div>
+            <p className="story-task-summary">{task.description ?? "Sin descripcion"}</p>
+            <div className="story-task-meta-grid">
+              <div className="story-task-meta-item">
+                <span className="story-task-meta-label">Asignado</span>
+                <strong>{task.assigneeId ? assigneeNameById.get(task.assigneeId) ?? task.assigneeId : "Sin asignar"}</strong>
+              </div>
+              <div className="story-task-meta-item">
+                <span className="story-task-meta-label">Estimadas</span>
+                <strong>{task.estimatedHours != null ? `${task.estimatedHours}h` : "-"}</strong>
+              </div>
+              <div className="story-task-meta-item">
+                <span className="story-task-meta-label">Restantes</span>
+                <strong>{task.remainingHours != null ? `${task.remainingHours}h` : "-"}</strong>
+              </div>
+            </div>
+            <div className="story-task-card-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => openTaskDrawer(task)}>
+                Editar tarea
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => void removeTask(task.id)}>
+                Quitar
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div className="form-grid">
       <div className="form-grid two-columns">
@@ -335,79 +383,11 @@ export function StoryUpsertionForm(props: {
           {!tasksLoading && tasks.length === 0 ? <p className="muted">La historia aun no tiene tareas.</p> : null}
 
           {backlogTasks.length > 0 ? (
-            <div className="story-task-group">
-              <div className="story-task-group-head">
-                <h5>Backlog</h5>
-                <span className="pill">{backlogTasks.length} tareas</span>
-              </div>
-              <div className="story-task-stack">
-                {backlogTasks.map((task, index) => (
-                  <article key={task.id} className="story-task-card">
-                    <div className="story-task-card-head">
-                      <div>
-                        <p className="story-task-order">Secuencia {index + 1}</p>
-                        <strong>{task.title}</strong>
-                      </div>
-                      <span className={statusClass(task.status)}>{task.status}</span>
-                    </div>
-                    <p className="story-task-summary">{task.description ?? "Sin descripcion"}</p>
-                    <div className="story-task-meta">
-                      <span>Backlog</span>
-                      <span>
-                        Asignado: {task.assigneeId ? assigneeNameById.get(task.assigneeId) ?? task.assigneeId : "Sin asignar"}
-                      </span>
-                      <span>Horas: {task.estimatedHours ?? "-"} / Restante: {task.remainingHours ?? "-"}</span>
-                    </div>
-                    <div className="row-actions compact">
-                      <button type="button" className="btn btn-secondary" onClick={() => openTaskDrawer(task)}>
-                        Editar tarea
-                      </button>
-                      <button type="button" className="btn btn-secondary" onClick={() => void removeTask(task.id)}>
-                        Quitar
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
+            renderTaskGroup("Backlog", backlogTasks)
           ) : null}
 
           {sprintTaskGroups.map((group) => (
-            <div key={group.sprintId} className="story-task-group">
-              <div className="story-task-group-head">
-                <h5>{group.sprintName}</h5>
-                <span className="pill">{group.tasks.length} tareas</span>
-              </div>
-              <div className="story-task-stack">
-                {group.tasks.map((task, index) => (
-                  <article key={task.id} className="story-task-card">
-                    <div className="story-task-card-head">
-                      <div>
-                        <p className="story-task-order">Secuencia {index + 1}</p>
-                        <strong>{task.title}</strong>
-                      </div>
-                      <span className={statusClass(task.status)}>{task.status}</span>
-                    </div>
-                    <p className="story-task-summary">{task.description ?? "Sin descripcion"}</p>
-                    <div className="story-task-meta">
-                      <span>Sprint: {group.sprintName}</span>
-                      <span>
-                        Asignado: {task.assigneeId ? assigneeNameById.get(task.assigneeId) ?? task.assigneeId : "Sin asignar"}
-                      </span>
-                      <span>Horas: {task.estimatedHours ?? "-"} / Restante: {task.remainingHours ?? "-"}</span>
-                    </div>
-                    <div className="row-actions compact">
-                      <button type="button" className="btn btn-secondary" onClick={() => openTaskDrawer(task)}>
-                        Editar tarea
-                      </button>
-                      <button type="button" className="btn btn-secondary" onClick={() => void removeTask(task.id)}>
-                        Quitar
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
+            renderTaskGroup(group.sprintName, group.tasks)
           ))}
           {taskError ? <p className="error-text">{taskError}</p> : null}
         </section>
