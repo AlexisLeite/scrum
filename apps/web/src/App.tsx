@@ -16,6 +16,7 @@ import {
 } from "./routes/product-routes";
 import { useRootStore } from "./stores/root-store";
 import { DrawerHost } from "./ui/drawers/DrawerHost";
+import { MarkdownPreview } from "./ui/drawers/product-workspace/MarkdownPreview";
 import {
   ProductBacklogView,
   ProductMetricsView,
@@ -163,7 +164,7 @@ const Home = observer(function Home() {
             <article key={product.id} className="product-tile">
               <p className="product-key">{product.key}</p>
               <h4>{product.name}</h4>
-              <p>{product.description ?? "Sin descripcion"}</p>
+              <MarkdownPreview markdown={product.description} compact emptyLabel="Sin descripcion" />
               <div className="tile-actions"><NavLink to={productOverviewPath(product.id)} className="btn btn-primary">Workspace</NavLink><NavLink to={productSprintsPath(product.id)} className="btn btn-secondary">Sprints</NavLink></div>
             </article>
           ))}

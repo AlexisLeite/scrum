@@ -10,6 +10,7 @@ import {
 import { useRootStore } from "../stores/root-store";
 import { SprintUpsertionDrawer } from "../ui/drawers/product-workspace/SprintUpsertionDrawer";
 import { StoryUpsertionDrawer } from "../ui/drawers/product-workspace/StoryUpsertionDrawer";
+import { MarkdownPreview } from "../ui/drawers/product-workspace/MarkdownPreview";
 import { TaskCompletionDialog } from "../ui/drawers/product-workspace/TaskCompletionDialog";
 import { TaskUpsertionDrawer } from "../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { KanbanBoard } from "../ui/kanban";
@@ -47,7 +48,6 @@ type TaskItem = {
   assigneeId: string | null;
   effortPoints: number | null;
   estimatedHours: number | null;
-  remainingHours: number | null;
   actualHours?: number | null;
 };
 type TeamMember = { userId: string; user?: { id: string; name: string; email: string } };
@@ -64,7 +64,6 @@ type BoardTask = {
   assigneeId?: string | null;
   effortPoints?: number | null;
   estimatedHours?: number | null;
-  remainingHours?: number | null;
   actualHours?: number | null;
   assignee?: { id: string; name: string } | null;
   story?: { id: string; title: string } | null;
@@ -133,7 +132,7 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
     <div className="stack-lg">
       <section className="card">
         <h2>{product?.name ?? "Producto"}</h2>
-        <p className="muted">{product?.description ?? "Sin descripcion"}</p>
+        <MarkdownPreview markdown={product?.description} compact className="muted" emptyLabel="Sin descripcion" />
       </section>
       <section className="metrics-grid">
         <article className="metric card"><h3>{stories.length}</h3><p>Historias de usuario</p></article>
@@ -262,7 +261,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
                 <div className="story-card-heading">
                   <div>
                     <h4>{story.title}</h4>
-                    <p className="muted">{story.description ?? "Sin descripcion"}</p>
+                    <MarkdownPreview markdown={story.description} compact className="muted" emptyLabel="Sin descripcion" />
                   </div>
                   <div className="story-card-metrics">
                     <span className="pill">SP {story.storyPoints}</span>
@@ -352,8 +351,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
       if (nextStatus === "Done") {
         await controller.updateTask(task.id, {
           status: nextStatus,
-          actualHours,
-          remainingHours: 0
+          actualHours
         });
       } else {
         await controller.updateTaskStatus(task.id, nextStatus);
@@ -419,7 +417,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
               <tr key={task.id}>
                 <td>
                   <strong>{task.title}</strong>
-                  <p className="muted">{task.description ?? "Sin descripcion"}</p>
+                  <MarkdownPreview markdown={task.description} compact className="muted" emptyLabel="Sin descripcion" />
                 </td>
                 <td>
                   <select
@@ -445,8 +443,6 @@ export const StoryTasksView = observer(function StoryTasksView() {
                 <td>{task.assigneeId ? assigneeNameById.get(task.assigneeId) ?? task.assigneeId : "Sin asignar"}</td>
                 <td>
                   <small>Est.: {task.estimatedHours ?? "-"}</small>
-                  <br />
-                  <small>Rest.: {task.remainingHours ?? "-"}</small>
                   <br />
                   <small>Real: {task.actualHours ?? "-"}</small>
                 </td>
@@ -532,7 +528,7 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
                 <h4>{sprint.name}</h4>
                 <span className={statusClass(sprint.status)}>{sprint.status}</span>
               </div>
-              <p>{sprint.goal ?? "Sin objetivo definido"}</p>
+              <MarkdownPreview markdown={sprint.goal} compact emptyLabel="Sin objetivo definido" />
               <p className="muted">Inicio: {fmtDate(sprint.startDate)} | Fin: {fmtDate(sprint.endDate)}</p>
               <p className="muted">Completar sprint: cierra el ciclo y evita nuevos cambios de planificacion.</p>
               <div className="row-actions compact">
@@ -605,6 +601,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const sprints = store.sprints.items as SprintItem[];
   const teams = store.teams.items as TeamItem[];
   const currentSprint = sprints.find((sprint) => sprint.id === sprintId);
+  const boardReadOnly = currentSprint?.status !== "ACTIVE";
   const assignees = buildAssignableUsers(teams);
   const boardAssignees = currentSprint
     ? buildAssignableUsers(teams.filter((team) => team.id === currentSprint.teamId))
@@ -634,7 +631,6 @@ export const SprintBoardView = observer(function SprintBoardView() {
               assigneeId: task.assignee?.id ?? task.assigneeId ?? null,
               effortPoints: task.effortPoints ?? null,
               estimatedHours: task.estimatedHours ?? null,
-              remainingHours: task.remainingHours ?? null,
               actualHours: task.actualHours ?? null
             }
           : undefined,
@@ -722,7 +718,11 @@ export const SprintBoardView = observer(function SprintBoardView() {
         <div className="row-actions compact">
           {currentSprint ? <span className={statusClass(currentSprint.status)}>{currentSprint.status}</span> : null}
         </div>
-        <p className="muted">Actualiza estados y propiedades de tareas desde los drawers por columna o tarjeta.</p>
+        <p className="muted">
+          {boardReadOnly
+            ? "El sprint esta cerrado. El tablero queda en modo solo lectura y las tareas pendientes ya fueron devueltas al pool."
+            : "Actualiza estados y propiedades de tareas desde los drawers por columna o tarjeta."}
+        </p>
         {boardError ? <p className="error-text">{boardError}</p> : null}
         <KanbanBoard
           columns={(store.board?.columns ?? []).map((column) => ({
@@ -731,6 +731,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
           }))}
           assignees={boardAssignees}
           statusOptions={statusOptions}
+          readOnly={boardReadOnly}
           isTaskPending={(taskId) => Boolean(pendingTaskIds[taskId])}
           onCreateTask={(defaultStatus) => openBoardTaskDrawer({ defaultStatus })}
           onEditTask={(task) => openBoardTaskDrawer({ task: task as BoardTask })}

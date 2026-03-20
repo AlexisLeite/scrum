@@ -36,7 +36,6 @@ type TaskDetail = {
   status: string;
   effortPoints: number | null;
   estimatedHours: number | null;
-  remainingHours: number | null;
   actualHours?: number | null;
   assigneeId: string | null;
   assignee?: { id: string; name: string; email: string } | null;
@@ -234,7 +233,6 @@ export function TaskCollaborationPanel(props: {
             assigneeId: childDetail.assignee?.id ?? childDetail.assigneeId,
             effortPoints: childDetail.effortPoints,
             estimatedHours: childDetail.estimatedHours,
-            remainingHours: childDetail.remainingHours,
             actualHours: childDetail.actualHours ?? null
           },
           onDone: refresh

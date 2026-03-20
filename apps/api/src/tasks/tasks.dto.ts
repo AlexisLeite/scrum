@@ -51,12 +51,6 @@ export class CreateTaskDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  remainingHours?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
   actualHours?: number;
 }
 
@@ -81,12 +75,6 @@ export class UpdateTaskDto {
   @IsNumber()
   @Min(0)
   estimatedHours?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  remainingHours?: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -150,12 +138,6 @@ export class CreateTaskFromMessageDto {
   @IsNumber()
   @Min(0)
   estimatedHours?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  remainingHours?: number;
 
   @IsOptional()
   @Type(() => Number)

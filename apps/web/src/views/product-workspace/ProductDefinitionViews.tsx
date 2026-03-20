@@ -56,7 +56,6 @@ type DetailTask = {
   assigneeId: string | null;
   effortPoints: number | null;
   estimatedHours: number | null;
-  remainingHours: number | null;
   actualHours: number | null;
   updatedAt: string;
   assignee?: { id: string; name: string; email: string } | null;
@@ -483,7 +482,6 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
             assigneeId: detail.assignee?.id ?? detail.assigneeId,
             effortPoints: detail.effortPoints,
             estimatedHours: detail.estimatedHours,
-            remainingHours: detail.remainingHours,
             actualHours: detail.actualHours
           },
           onDone: loadTaskDetail
@@ -591,7 +589,6 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
                 assigneeId: taskDetail.assignee?.id ?? taskDetail.assigneeId,
                 effortPoints: taskDetail.effortPoints,
                 estimatedHours: taskDetail.estimatedHours,
-                remainingHours: taskDetail.remainingHours,
                 actualHours: taskDetail.actualHours
               },
               onDone: loadTaskDetail

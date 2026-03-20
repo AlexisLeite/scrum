@@ -53,6 +53,34 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
   const { label, value, onChange, rows = 6 } = props;
   const minHeight = Math.max(rows, 4) * 24;
   const editorRef = React.useRef<MDXEditorMethods | null>(null);
+  const fieldRef = React.useRef<HTMLDivElement | null>(null);
+  const resizeFrameRef = React.useRef<number | null>(null);
+
+  const syncEditorHeight = React.useCallback(() => {
+    const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
+    if (!content) {
+      return;
+    }
+
+    const maxHeight = Math.round(window.innerHeight * 0.75);
+    content.style.height = "auto";
+    const nextHeight = Math.min(Math.max(content.scrollHeight, minHeight), maxHeight);
+    content.style.height = `${nextHeight}px`;
+    content.style.overflowY = content.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [minHeight]);
+
+  const scheduleHeightSync = React.useCallback(() => {
+    if (resizeFrameRef.current !== null) {
+      window.cancelAnimationFrame(resizeFrameRef.current);
+    }
+
+    resizeFrameRef.current = window.requestAnimationFrame(() => {
+      resizeFrameRef.current = window.requestAnimationFrame(() => {
+        syncEditorHeight();
+        resizeFrameRef.current = null;
+      });
+    });
+  }, [syncEditorHeight]);
 
   React.useEffect(() => {
     if (!editorRef.current) {
@@ -65,13 +93,70 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
     }
   }, [value]);
 
+  React.useEffect(() => {
+    scheduleHeightSync();
+  }, [scheduleHeightSync, value]);
+
+  React.useEffect(() => {
+    const handleResize = () => scheduleHeightSync();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [scheduleHeightSync]);
+
+  React.useEffect(() => {
+    const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
+    if (!content) {
+      return;
+    }
+
+    const mutationObserver = new MutationObserver(() => {
+      scheduleHeightSync();
+    });
+
+    const resizeObserver = new ResizeObserver(() => {
+      scheduleHeightSync();
+    });
+
+    const handleInput = () => scheduleHeightSync();
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Enter" || event.key === "Backspace" || event.key === "Delete") {
+        scheduleHeightSync();
+      }
+    };
+
+    mutationObserver.observe(content, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+    resizeObserver.observe(content);
+    content.addEventListener("input", handleInput);
+    content.addEventListener("keyup", handleKeyUp);
+
+    scheduleHeightSync();
+
+    return () => {
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+      content.removeEventListener("input", handleInput);
+      content.removeEventListener("keyup", handleKeyUp);
+      if (resizeFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = null;
+      }
+    };
+  }, [scheduleHeightSync]);
+
   return (
-    <div className="rich-description-field">
+    <div className="rich-description-field" ref={fieldRef}>
       <span className="rich-description-label">{label}</span>
       <MDXEditor
         ref={editorRef}
         markdown={value || ""}
-        onChange={(nextValue) => onChange(nextValue)}
+        onChange={(nextValue) => {
+          onChange(nextValue);
+          scheduleHeightSync();
+        }}
         className="rich-description-editor"
         contentEditableClassName="rich-description-content"
         plugins={[
@@ -107,8 +192,7 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
           })
         ]}
       />
-      <small className="muted">Soporta encabezados, formato, listas, tablas, enlaces, imagenes y bloques de codigo.</small>
-      <style>{`.rich-description-content { min-height: ${minHeight}px; }`}</style>
+      <style>{`.rich-description-content { min-height: ${minHeight}px; max-height: 75vh; }`}</style>
     </div>
   );
 }

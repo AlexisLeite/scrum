@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
-import { ActivityEntityType, Prisma, StoryStatus } from "@prisma/client";
+import { ActivityEntityType, Prisma, SprintStatus, StoryStatus } from "@prisma/client";
 import { ActivityService } from "../activity/activity.service";
 import { AuthUser } from "../common/current-user.decorator";
 import { TeamScopeService } from "../common/team-scope.service";
@@ -22,7 +22,6 @@ type TaskCreationInput = {
   status: string;
   effortPoints?: number | null;
   estimatedHours?: number | null;
-  remainingHours?: number | null;
   actualHours?: number | null;
   parentTaskId?: string | null;
   sourceMessageId?: string | null;
@@ -99,7 +98,6 @@ export class TasksService {
       status: dto.status,
       effortPoints: dto.effortPoints,
       estimatedHours: dto.estimatedHours,
-      remainingHours: dto.remainingHours,
       actualHours: dto.actualHours,
       parentTaskId: lineage.parentTaskId,
       sourceMessageId: lineage.sourceMessageId,
@@ -123,7 +121,6 @@ export class TasksService {
         description: true,
         effortPoints: true,
         estimatedHours: true,
-        remainingHours: true,
         actualHours: true
       }
     });
@@ -131,13 +128,11 @@ export class TasksService {
       throw new BadRequestException("Task not found");
     }
     await this.assertProductAccess(user, current.productId);
+    await this.assertSprintIsMutable(current.sprintId);
 
     const hasStatus = dto.status !== undefined;
     const hasAssigneeId = dto.assigneeId !== undefined;
     const hasSprintId = dto.sprintId !== undefined;
-    const closesTask = hasStatus && dto.status === "Done" && current.status !== "Done";
-    const nextRemainingHours =
-      dto.remainingHours !== undefined ? dto.remainingHours : closesTask ? 0 : undefined;
 
     if (hasStatus && typeof dto.status !== "string") {
       throw new BadRequestException("Task status must be a string");
@@ -152,12 +147,14 @@ export class TasksService {
 
     if (hasSprintId && dto.sprintId) {
       const sprint = await this.validateSprintForProduct(dto.sprintId, current.productId);
+      this.assertSprintStatusAllowsChanges(sprint.status);
       targetTeamId = sprint.teamId;
     } else if (current.sprintId) {
       const currentSprint = await this.prisma.sprint.findUnique({
         where: { id: current.sprintId },
-        select: { teamId: true }
+        select: { teamId: true, status: true }
       });
+      this.assertSprintStatusAllowsChanges(currentSprint?.status);
       targetTeamId = currentSprint?.teamId;
     }
 
@@ -168,7 +165,6 @@ export class TasksService {
         description: dto.description,
         effortPoints: dto.effortPoints,
         estimatedHours: dto.estimatedHours,
-        remainingHours: nextRemainingHours,
         actualHours: dto.actualHours,
         status: hasStatus ? dto.status : undefined,
         assigneeId: hasAssigneeId ? dto.assigneeId ?? null : undefined,
@@ -227,7 +223,6 @@ export class TasksService {
         status: true,
         effortPoints: true,
         estimatedHours: true,
-        remainingHours: true,
         actualHours: true
       }
     });
@@ -235,6 +230,7 @@ export class TasksService {
       throw new BadRequestException("Task not found");
     }
     await this.assertProductAccess(user, task.productId);
+    await this.assertSprintIsMutable(task.sprintId);
 
     let teamId: string | undefined;
     if (task.sprintId) {
@@ -280,6 +276,7 @@ export class TasksService {
 
   async addMessage(taskId: string, dto: CreateTaskMessageDto, user: AuthUser) {
     const task = await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
+    await this.assertSprintIsMutable(task.sprintId);
     if (dto.parentMessageId) {
       const parentMessage = await this.prisma.taskMessage.findUnique({
         where: { id: dto.parentMessageId },
@@ -336,6 +333,7 @@ export class TasksService {
 
   async createFromMessage(taskId: string, messageId: string, dto: CreateTaskFromMessageDto, user: AuthUser) {
     const task = await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
+    await this.assertSprintIsMutable(task.sprintId);
     const sourceMessage = await this.prisma.taskMessage.findUnique({
       where: { id: messageId },
       select: {
@@ -365,7 +363,6 @@ export class TasksService {
       status: dto.status ?? "Todo",
       effortPoints: dto.effortPoints,
       estimatedHours: dto.estimatedHours,
-      remainingHours: dto.remainingHours,
       actualHours: dto.actualHours,
       parentTaskId: taskId,
       sourceMessageId: messageId,
@@ -415,7 +412,7 @@ export class TasksService {
   private async validateSprintForProduct(sprintId: string, productId: string) {
     const sprint = await this.prisma.sprint.findUnique({
       where: { id: sprintId },
-      select: { id: true, productId: true, teamId: true }
+      select: { id: true, productId: true, teamId: true, status: true }
     });
     if (!sprint || sprint.productId !== productId) {
       throw new BadRequestException("Sprint does not belong to task product");
@@ -426,11 +423,12 @@ export class TasksService {
   async createForSprint(sprintId: string, dto: CreateTaskDto & { storyId: string }, user: AuthUser) {
     const sprint = await this.prisma.sprint.findUnique({
       where: { id: sprintId },
-      select: { id: true, productId: true, teamId: true }
+      select: { id: true, productId: true, teamId: true, status: true }
     });
     if (!sprint) {
       throw new BadRequestException("Sprint not found");
     }
+    this.assertSprintStatusAllowsChanges(sprint.status);
     await this.assertProductAccess(user, sprint.productId);
 
     const story = await this.prisma.userStory.findUnique({ where: { id: dto.storyId } });
@@ -453,7 +451,6 @@ export class TasksService {
       status: dto.status,
       effortPoints: dto.effortPoints,
       estimatedHours: dto.estimatedHours,
-      remainingHours: dto.remainingHours,
       actualHours: dto.actualHours,
       parentTaskId: lineage.parentTaskId,
       sourceMessageId: lineage.sourceMessageId,
@@ -477,7 +474,7 @@ export class TasksService {
         boardOrder: input.sprintId ? await this.getNextBoardOrder(input.sprintId, input.status) : 0,
         effortPoints: input.effortPoints ?? null,
         estimatedHours: input.estimatedHours ?? null,
-        remainingHours: input.status === "Done" ? 0 : input.remainingHours ?? null,
+        remainingHours: null,
         actualHours: input.actualHours ?? null
       }
     });
@@ -800,7 +797,6 @@ export class TasksService {
         description: string | null;
         effortPoints: number | null;
         estimatedHours: number | null;
-        remainingHours: number | null;
         actualHours: number | null;
         status: string;
         assigneeId: string | null;
@@ -812,7 +808,6 @@ export class TasksService {
         description: string | null;
         effortPoints: number | null;
         estimatedHours: number | null;
-        remainingHours: number | null;
         actualHours: number | null;
         status: string;
         assigneeId: string | null;
@@ -825,7 +820,6 @@ export class TasksService {
       "description",
       "effortPoints",
       "estimatedHours",
-      "remainingHours",
       "actualHours",
       "status",
       "assigneeId",
@@ -833,5 +827,23 @@ export class TasksService {
       "boardOrder"
     ];
     return keys.filter((key) => before[key] !== after[key]);
+  }
+
+  private async assertSprintIsMutable(sprintId: string | null | undefined) {
+    if (!sprintId) {
+      return;
+    }
+
+    const sprint = await this.prisma.sprint.findUnique({
+      where: { id: sprintId },
+      select: { status: true }
+    });
+    this.assertSprintStatusAllowsChanges(sprint?.status);
+  }
+
+  private assertSprintStatusAllowsChanges(status: SprintStatus | null | undefined) {
+    if (status === SprintStatus.COMPLETED || status === SprintStatus.CANCELLED) {
+      throw new BadRequestException("This sprint is closed and its tasks can no longer be modified");
+    }
   }
 }

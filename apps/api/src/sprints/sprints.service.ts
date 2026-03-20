@@ -69,6 +69,7 @@ export class SprintsService {
   async update(id: string, dto: UpdateSprintDto, user: AuthUser) {
     const current = await this.getSprintOrThrow(id);
     await this.assertSprintAccess(user, current);
+    this.assertSprintIsMutable(current.status);
 
     if (dto.teamId) {
       const scopedTeamIds = await this.getScopedTeamIds(user);
@@ -107,6 +108,7 @@ export class SprintsService {
   async start(id: string, user: AuthUser) {
     const sprint = await this.getSprintOrThrow(id);
     await this.assertSprintAccess(user, sprint);
+    this.assertSprintIsMutable(sprint.status);
 
     const active = await this.prisma.sprint.findFirst({
       where: {
@@ -141,8 +143,65 @@ export class SprintsService {
   async complete(id: string, user: AuthUser) {
     const sprint = await this.getSprintOrThrow(id);
     await this.assertSprintAccess(user, sprint);
+    this.assertSprintIsMutable(sprint.status);
 
-    const updated = await this.prisma.sprint.update({ where: { id }, data: { status: SprintStatus.COMPLETED } });
+    const unfinishedTasks = await this.prisma.task.findMany({
+      where: {
+        sprintId: id,
+        status: { not: "Done" }
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        storyId: true
+      }
+    });
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const completedSprint = await tx.sprint.update({
+        where: { id },
+        data: { status: SprintStatus.COMPLETED }
+      });
+
+      if (unfinishedTasks.length > 0) {
+        await tx.task.updateMany({
+          where: {
+            id: { in: unfinishedTasks.map((task) => task.id) }
+          },
+          data: {
+            sprintId: null,
+            boardOrder: 0
+          }
+        });
+      }
+
+      return completedSprint;
+    });
+
+    for (const task of unfinishedTasks) {
+      await this.tasksService.recomputeStoryStatus(task.storyId);
+      await this.activityService.record({
+        actorUserId: user.sub,
+        teamId: sprint.teamId,
+        productId: sprint.productId,
+        entityType: ActivityEntityType.SPRINT,
+        entityId: sprint.id,
+        action: "SPRINT_TASK_REMOVED",
+        metadataJson: {
+          taskId: task.id,
+          reason: "SPRINT_COMPLETED",
+          taskStatus: task.status
+        },
+        afterJson: {
+          id: task.id,
+          title: task.title,
+          sprintId: null,
+          status: task.status
+        }
+      });
+    }
+
     await this.activityService.record({
       actorUserId: user.sub,
       teamId: updated.teamId,
@@ -152,7 +211,9 @@ export class SprintsService {
       action: "SPRINT_COMPLETED",
       metadataJson: {
         fromStatus: sprint.status,
-        toStatus: updated.status
+        toStatus: updated.status,
+        removedPendingTaskCount: unfinishedTasks.length,
+        removedPendingTaskIds: unfinishedTasks.map((task) => task.id)
       },
       beforeJson: sprint,
       afterJson: updated
@@ -229,6 +290,7 @@ export class SprintsService {
   async createTask(id: string, dto: CreateSprintTaskDto, user: AuthUser) {
     const sprint = await this.getSprintOrThrow(id);
     await this.assertSprintAccess(user, sprint);
+    this.assertSprintIsMutable(sprint.status);
 
     const createdTask = await this.tasksService.createForSprint(id, dto, user);
     await this.activityService.record({
@@ -247,6 +309,7 @@ export class SprintsService {
   async addTask(id: string, taskId: string, user: AuthUser) {
     const sprint = await this.getSprintOrThrow(id);
     await this.assertSprintAccess(user, sprint);
+    this.assertSprintIsMutable(sprint.status);
 
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
@@ -287,6 +350,7 @@ export class SprintsService {
   async removeTask(id: string, taskId: string, user: AuthUser) {
     const sprint = await this.getSprintOrThrow(id);
     await this.assertSprintAccess(user, sprint);
+    this.assertSprintIsMutable(sprint.status);
 
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
@@ -337,6 +401,7 @@ export class SprintsService {
       throw new BadRequestException("Sprint not found");
     }
     await this.assertSprintAccess(user, sprint);
+    this.assertSprintIsMutable(sprint.status);
 
     const allowedStatuses = sprint.product.workflow.map((column) => column.name);
     if (!allowedStatuses.includes(dto.status)) {
@@ -393,7 +458,6 @@ export class SprintsService {
                 ? {
                     status: dto.status,
                     boardOrder: index + 1,
-                    remainingHours: dto.status === "Done" ? 0 : undefined,
                     actualHours: dto.status === "Done" ? dto.actualHours ?? undefined : undefined
                   }
                 : { boardOrder: index + 1 }
@@ -505,5 +569,11 @@ export class SprintsService {
       }
       return beforeValue !== afterValue;
     });
+  }
+
+  private assertSprintIsMutable(status: SprintStatus) {
+    if (status === SprintStatus.COMPLETED || status === SprintStatus.CANCELLED) {
+      throw new BadRequestException("This sprint is closed and can no longer be modified");
+    }
   }
 }

@@ -1,6 +1,7 @@
 import React from "react";
 import { apiClient } from "../../../api/client";
 import { TeamController } from "../../../controllers";
+import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { RichDescriptionField } from "../product-workspace/RichDescriptionField";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 
@@ -11,9 +12,10 @@ type TeamItem = { id: string; name: string; description: string | null; members?
 type SaveHook = () => void | Promise<void>;
 type ActivityItem = {
   id: string;
-  action: string;
-  createdAt: string;
-  actorUser?: { id: string; name: string; email: string; role: string };
+  action?: string;
+  createdAt?: string;
+  actorUser?: { id: string; name: string; email: string; role: string } | null;
+  detail?: { summary?: string; details?: string };
 };
 type ActivityListResult = { items: ActivityItem[]; page: number; pageSize: number; total: number };
 
@@ -259,19 +261,7 @@ function TeamUpsertionForm(props: {
       {isEditing && team ? (
         <section className="card">
           <h4>Historial de actividad</h4>
-          <ul className="plain-list">
-            {activity.map((entry) => (
-              <li key={entry.id}>
-                <strong>{entry.action}</strong>
-                {" "}
-                <span className="muted">
-                  {new Date(entry.createdAt).toLocaleString()}
-                  {entry.actorUser ? ` - ${entry.actorUser.name}` : ""}
-                </span>
-              </li>
-            ))}
-            {activity.length === 0 && !activityError ? <li className="muted">Sin actividad registrada.</li> : null}
-          </ul>
+          <ActivityFeed entries={activity} />
           {activityError ? <p className="error-text">{activityError}</p> : null}
         </section>
       ) : null}
