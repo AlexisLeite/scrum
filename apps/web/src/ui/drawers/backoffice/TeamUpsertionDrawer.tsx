@@ -1,6 +1,8 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../../api/client";
 import { TeamController } from "../../../controllers";
+import { teamDefinitionPath } from "../../../routes/backoffice-routes";
 import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { RichDescriptionField } from "../product-workspace/RichDescriptionField";
 import { Drawer, DrawerRenderContext } from "../Drawer";
@@ -40,19 +42,33 @@ export class TeamUpsertionDrawer extends Drawer {
         users={this.options.users}
         onSaved={this.options.onSaved}
         close={context.close}
+        definitionHref={this.options.team ? teamDefinitionPath(this.options.team.id) : undefined}
       />
     );
   }
 }
 
-function TeamUpsertionForm(props: {
+export function TeamUpsertionForm(props: {
   controller: TeamController;
   team?: TeamItem;
   users: UserOption[];
   onSaved?: SaveHook;
   close: () => void;
+  closeLabel?: string;
+  definitionHref?: string;
+  closeOnSubmit?: boolean;
 }) {
-  const { controller, team, users, onSaved, close } = props;
+  const {
+    controller,
+    team,
+    users,
+    onSaved,
+    close,
+    closeLabel = "Cancelar",
+    definitionHref,
+    closeOnSubmit = true
+  } = props;
+  const navigate = useNavigate();
   const isEditing = Boolean(team);
   const [name, setName] = React.useState(team?.name ?? "");
   const [description, setDescription] = React.useState(team?.description ?? "");
@@ -82,7 +98,9 @@ function TeamUpsertionForm(props: {
         await controller.createTeam({ name, description });
       }
       await refresh();
-      close();
+      if (closeOnSubmit) {
+        close();
+      }
     } catch (submitError) {
       setError(errorMessage(submitError));
     } finally {
@@ -269,8 +287,20 @@ function TeamUpsertionForm(props: {
         <button className="btn btn-primary" disabled={saving} onClick={() => void submit()}>
           {isEditing ? "Guardar cambios" : "Crear equipo"}
         </button>
+        {isEditing && definitionHref ? (
+          <button
+            className="btn btn-secondary"
+            disabled={saving}
+            onClick={() => {
+              close();
+              navigate(definitionHref);
+            }}
+          >
+            Ver definicion
+          </button>
+        ) : null}
         <button className="btn btn-secondary" disabled={saving} onClick={close}>
-          Cancelar
+          {closeLabel}
         </button>
       </div>
       {error ? <p className="error-text">{error}</p> : null}

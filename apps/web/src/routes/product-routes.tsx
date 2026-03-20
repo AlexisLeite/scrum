@@ -2,6 +2,7 @@ import React from "react";
 import { Navigate, useParams } from "react-router-dom";
 
 export const productRoutes = {
+  rootDefinition: "definition",
   overview: "overview",
   backlog: "backlog",
   storyTasks: "backlog/stories/:storyId/tasks",
@@ -20,6 +21,10 @@ export type ProductDefinitionTarget =
 
 export function productOverviewPath(productId: string): string {
   return `/products/${productId}/overview`;
+}
+
+export function productRootDefinitionPath(productId: string): string {
+  return `/products/${productId}/definition`;
 }
 
 export function productBacklogPath(productId: string): string {

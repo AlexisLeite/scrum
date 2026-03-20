@@ -216,7 +216,12 @@ function TaskCardContent(props: {
             </option>
           ))}
         </select>
-        <button type="button" className="btn btn-secondary kb-edit-btn" onClick={() => onEditTask(task)}>
+        <button
+          type="button"
+          className="btn btn-secondary kb-edit-btn"
+          onClick={() => onEditTask(task)}
+          disabled={pending || dragDisabled}
+        >
           Editar
         </button>
       </div>
@@ -227,7 +232,11 @@ function TaskCardContent(props: {
 
       <div className="kb-meta-row">
         <span className="muted">Actualizado: {formatUpdatedAt(task.updatedAt)}</span>
-        <span className="pill">SP {task.effortPoints ?? "-"}</span>
+        <div className="kb-meta-pills">
+          {task.isHistoricalUnfinished ? <span className="pill">Pendiente al cierre</span> : null}
+          {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
+          <span className="pill">SP {task.effortPoints ?? "-"}</span>
+        </div>
       </div>
     </>
   );

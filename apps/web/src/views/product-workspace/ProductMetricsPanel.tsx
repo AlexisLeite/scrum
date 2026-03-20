@@ -1,5 +1,6 @@
 import React from "react";
 import ReactECharts from "echarts-for-react";
+import { buildAxisTheme, buildLegendTheme, buildTooltipTheme, useEChartsTheme } from "../../ui/charts/echarts-theme";
 
 type BurnupPoint = {
   date: string;
@@ -58,16 +59,17 @@ function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
-function buildVelocityOption(title: string, points: VelocityPoint[]) {
+function buildVelocityOption(title: string, points: VelocityPoint[], theme: ReturnType<typeof useEChartsTheme>) {
   return {
     animationDuration: 280,
-    tooltip: { trigger: "axis" },
+    tooltip: { trigger: "axis", ...buildTooltipTheme(theme) },
     grid: { left: 28, right: 16, top: 44, bottom: 28, containLabel: true },
     title: {
       text: title,
       left: 0,
       top: 0,
       textStyle: {
+        color: theme.text,
         fontSize: 14,
         fontWeight: 700
       }
@@ -75,12 +77,14 @@ function buildVelocityOption(title: string, points: VelocityPoint[]) {
     xAxis: {
       type: "category",
       data: points.map((point) => point.sprintName),
+      ...buildAxisTheme(theme),
       axisLabel: {
+        color: theme.muted,
         interval: 0,
         rotate: points.length > 4 ? 18 : 0
       }
     },
-    yAxis: { type: "value", name: "pts" },
+    yAxis: { type: "value", name: "pts", ...buildAxisTheme(theme) },
     series: [
       {
         type: "bar",
@@ -104,6 +108,7 @@ export function ProductMetricsPanel({
   teamVelocity,
   userVelocity
 }: ProductMetricsPanelProps) {
+  const chartTheme = useEChartsTheme();
   const completedPoints = productStats?.velocity.completedPoints ?? 0;
   const completionRate = productStats?.tasks.completionRate ?? 0;
   const totalVelocityPoints = teamVelocity.reduce((acc, point) => acc + point.completedPoints, 0);
@@ -167,11 +172,11 @@ export function ProductMetricsPanel({
           <ReactECharts
             option={{
               animationDuration: 280,
-              tooltip: { trigger: "axis" },
-              legend: { top: 0 },
+              tooltip: { trigger: "axis", ...buildTooltipTheme(chartTheme) },
+              legend: { top: 0, ...buildLegendTheme(chartTheme) },
               grid: { left: 30, right: 24, bottom: 32, top: 42, containLabel: true },
-              xAxis: { type: "category", data: burnup.map((item) => item.date) },
-              yAxis: { type: "value", name: "pts" },
+              xAxis: { type: "category", data: burnup.map((item) => item.date), ...buildAxisTheme(chartTheme) },
+              yAxis: { type: "value", name: "pts", ...buildAxisTheme(chartTheme) },
               series: [
                 { name: "Completado", type: "line", smooth: true, data: burnup.map((item) => item.completedPoints) },
                 { name: "Scope", type: "line", smooth: true, data: burnup.map((item) => item.scopePoints) },
@@ -196,7 +201,7 @@ export function ProductMetricsPanel({
           </div>
           {teamVelocity.length > 0 ? (
             <>
-              <ReactECharts option={buildVelocityOption("Equipo", teamVelocity)} style={{ height: 260 }} />
+              <ReactECharts option={buildVelocityOption("Equipo", teamVelocity, chartTheme)} style={{ height: 260 }} />
               <p className="muted metrics-footnote">
                 Ultimo sprint: {teamVelocity[teamVelocity.length - 1]?.sprintName ?? "-"} con {teamVelocity[teamVelocity.length - 1]?.completedPoints ?? 0} pts
               </p>
@@ -216,7 +221,7 @@ export function ProductMetricsPanel({
           </div>
           {userVelocity.length > 0 ? (
             <>
-              <ReactECharts option={buildVelocityOption("Usuario", userVelocity)} style={{ height: 260 }} />
+              <ReactECharts option={buildVelocityOption("Usuario", userVelocity, chartTheme)} style={{ height: 260 }} />
               <p className="muted metrics-footnote">
                 Ultimo sprint: {userVelocity[userVelocity.length - 1]?.sprintName ?? "-"} con {userVelocity[userVelocity.length - 1]?.completedPoints ?? 0} pts
               </p>

@@ -470,6 +470,9 @@ export class ActivityService {
       return `Se agrego la tarea "${detail.task?.title ?? detail.entityLabel}" al sprint.`;
     }
     if (action === "SPRINT_TASK_REMOVED") {
+      if (metadata.reason === "SPRINT_COMPLETED") {
+        return `La tarea "${detail.task?.title ?? detail.entityLabel}" quedo no terminada al cerrar el sprint.`;
+      }
       return `Se quito la tarea "${detail.task?.title ?? detail.entityLabel}" del sprint.`;
     }
     if (action === "SPRINT_TASK_CREATED") {
@@ -567,8 +570,14 @@ export class ActivityService {
     } else if (detail.message?.body?.trim()) {
       lines.push(`Mensaje: ${detail.message.body.trim().slice(0, 160)}`);
     }
-    if (typeof metadata.removedPendingTaskCount === "number" && metadata.removedPendingTaskCount > 0) {
-      lines.push(`Tareas no terminadas devueltas al backlog: ${metadata.removedPendingTaskCount}`);
+    const unfinishedTaskCount =
+      typeof metadata.unfinishedTaskCount === "number"
+        ? metadata.unfinishedTaskCount
+        : typeof metadata.removedPendingTaskCount === "number"
+          ? metadata.removedPendingTaskCount
+          : 0;
+    if (unfinishedTaskCount > 0) {
+      lines.push(`Tareas no terminadas registradas al cierre: ${unfinishedTaskCount}`);
     }
     if (typeof metadata.taskStatus === "string") {
       lines.push(`Estado de la tarea al salir del sprint: ${metadata.taskStatus}`);

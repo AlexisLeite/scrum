@@ -26,12 +26,14 @@ import {
   StoryTasksView
 } from "./views/ProductWorkspaceViews";
 import {
+  ProductDefinitionView,
   SprintDefinitionView,
   StoryDefinitionView,
   TaskDefinitionView
 } from "./views/product-workspace/ProductDefinitionViews";
 import { AdminRolesView } from "./views/backoffice/AdminRolesView";
 import { ProductsBackofficeView } from "./views/backoffice/ProductsBackofficeView";
+import { TeamDefinitionView } from "./views/backoffice/TeamDefinitionView";
 import { TeamsBackofficeView } from "./views/backoffice/TeamsBackofficeView";
 
 type ProductItem = { id: string; name: string; key: string; description: string | null; };
@@ -97,11 +99,13 @@ export const App = observer(function App() {
           <Route path="/auth/gitlab/callback" element={<GitlabCallbackView />} />
           <Route path="/profile" element={<Protected><ProfileView /></Protected>} />
           <Route path="/admin" element={<Protected><AdminRolesView /></Protected>} />
+          <Route path="/teams/:teamId/definition" element={<Protected><TeamDefinitionView /></Protected>} />
           <Route path="/teams" element={<Protected><TeamsBackofficeView /></Protected>} />
           <Route path="/products" element={<Protected><ProductsBackofficeView /></Protected>} />
 
           <Route path="/products/:productId" element={<Protected><ProductWorkspaceLayout /></Protected>}>
             <Route index element={<Navigate to={productRoutes.overview} replace />} />
+            <Route path={productRoutes.rootDefinition} element={<ProductDefinitionView />} />
             <Route path={productRoutes.overview} element={<ProductOverviewView />} />
             <Route path={productRoutes.backlog} element={<ProductBacklogView />} />
             <Route path={productRoutes.storyTasks} element={<StoryTasksView />} />

@@ -5,6 +5,7 @@ type TaskSearchOption = {
   id: string;
   title: string;
   status: string;
+  unfinishedSprintCount?: number;
   story?: { id: string; title: string } | null;
   assignee?: { id: string; name: string } | null;
 };
@@ -117,7 +118,10 @@ export function TaskSearchPicker({
                 >
                   <div className="task-search-picker-option-top">
                     <strong>{task.title}</strong>
-                    <span className="status status-todo">{task.status}</span>
+                    <div className="row-actions compact">
+                      {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
+                      <span className="status status-todo">{task.status}</span>
+                    </div>
                   </div>
                   <p className="muted">Historia: {task.story?.title ?? "Sin historia"}</p>
                   <p className="muted">Responsable: {task.assignee?.name ?? "Sin asignar"}</p>

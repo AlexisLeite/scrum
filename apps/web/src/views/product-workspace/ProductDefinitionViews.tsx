@@ -6,15 +6,22 @@ import {
   productBacklogPath,
   productBoardPath,
   productOverviewPath,
-  productSprintsPath,
-  productTaskDefinitionPath
+  productSprintsPath
 } from "../../routes/product-routes";
 import { useRootStore } from "../../stores/root-store";
+import { ProductUpsertionForm } from "../../ui/drawers/backoffice/ProductUpsertionDrawer";
 import { StoryUpsertionForm } from "../../ui/drawers/product-workspace/StoryUpsertionDrawer";
 import { SprintUpsertionForm } from "../../ui/drawers/product-workspace/SprintUpsertionDrawer";
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
 import { TaskUpsertionDrawer, TaskUpsertionForm } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { RichDescriptionField } from "../../ui/drawers/product-workspace/RichDescriptionField";
+
+type ProductItem = {
+  id: string;
+  name: string;
+  key: string;
+  description: string | null;
+};
 
 type StoryItem = {
   id: string;
@@ -57,6 +64,7 @@ type DetailTask = {
   effortPoints: number | null;
   estimatedHours: number | null;
   actualHours: number | null;
+  unfinishedSprintCount?: number;
   updatedAt: string;
   assignee?: { id: string; name: string; email: string } | null;
   story?: { id: string; title: string; storyPoints: number; status: string } | null;
@@ -157,6 +165,71 @@ function DefinitionHeader(props: {
     </section>
   );
 }
+
+export const ProductDefinitionView = observer(function ProductDefinitionView() {
+  const store = useRootStore();
+  const controller = React.useMemo(() => new ProductController(store), [store]);
+  const { productId } = useParams<{ productId: string }>();
+  const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (!productId) return;
+    void controller.loadProducts();
+  }, [controller, productId]);
+
+  if (!productId) {
+    return <Navigate to="/products" replace />;
+  }
+
+  const products = store.products.items as ProductItem[];
+  const product = products.find((entry) => entry.id === productId);
+
+  if (!product && store.products.loading) {
+    return (
+      <section className="card page-state">
+        <h2>Cargando producto</h2>
+        <p>Resolviendo la definicion completa del producto.</p>
+      </section>
+    );
+  }
+
+  if (!product) {
+    return (
+      <section className="card page-state">
+        <h2>Producto no encontrado</h2>
+        <p>No existe un producto con la referencia solicitada.</p>
+        <NavLink className="btn btn-secondary" to="/products">
+          Volver a productos
+        </NavLink>
+      </section>
+    );
+  }
+
+  return (
+    <div className="stack-lg">
+      <DefinitionHeader
+        eyebrow="Definicion de producto"
+        title={product.name}
+        description="Edicion completa del producto, descripcion funcional e historial sin depender del drawer."
+        backLabel="Volver a productos"
+        backHref="/products"
+        context={<span className="pill">{product.key}</span>}
+      />
+      <section className="card definition-page-card">
+        <ProductUpsertionForm
+          controller={controller}
+          product={product}
+          onSaved={async () => {
+            await controller.loadProducts();
+          }}
+          close={() => navigate("/products")}
+          closeLabel="Volver a productos"
+          closeOnSubmit={false}
+        />
+      </section>
+    </div>
+  );
+});
 
 export const StoryDefinitionView = observer(function StoryDefinitionView() {
   const store = useRootStore();
@@ -440,6 +513,48 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
     ? productBoardPath(productId, taskDetail.sprint.id)
     : productBacklogPath(productId);
 
+  const openTaskDrawerFromDetail = React.useCallback(
+    (detail: DetailTask) => {
+      store.drawers.add(
+        new TaskUpsertionDrawer({
+          controller,
+          productId,
+          stories: stories.map((story) => ({ id: story.id, title: story.title })),
+          sprints,
+          assignees,
+          statusOptions,
+          task: {
+            id: detail.id,
+            title: detail.title,
+            description: detail.description,
+            status: detail.status,
+            storyId: detail.story?.id ?? detail.storyId,
+            sprintId: detail.sprint?.id ?? detail.sprintId,
+            assigneeId: detail.assignee?.id ?? detail.assigneeId,
+            effortPoints: detail.effortPoints,
+            estimatedHours: detail.estimatedHours,
+            actualHours: detail.actualHours,
+            unfinishedSprintCount: detail.unfinishedSprintCount ?? 0
+          },
+          onDone: loadTaskDetail
+        })
+      );
+    },
+    [assignees, controller, loadTaskDetail, productId, sprints, statusOptions, stories, store.drawers]
+  );
+
+  const openRelatedTaskDrawer = React.useCallback(
+    async (relatedTaskId: string) => {
+      try {
+        const detail = (await controller.loadTaskDetail(relatedTaskId)) as DetailTask;
+        openTaskDrawerFromDetail(detail);
+      } catch (openError) {
+        setError(openError instanceof Error ? openError.message : "No se pudo abrir la tarea relacionada.");
+      }
+    },
+    [controller, openTaskDrawerFromDetail]
+  );
+
   const openDerivedTaskDrawer = (message: TaskMessageNode) => {
     if (!taskDetail?.story?.id) return;
     store.drawers.add(
@@ -462,34 +577,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
   };
 
   const openChildTaskDrawer = async (childTaskId: string) => {
-    try {
-      const detail = (await controller.loadTaskDetail(childTaskId)) as DetailTask;
-      store.drawers.add(
-        new TaskUpsertionDrawer({
-          controller,
-          productId,
-          stories: stories.map((story) => ({ id: story.id, title: story.title })),
-          sprints,
-          assignees,
-          statusOptions,
-          task: {
-            id: detail.id,
-            title: detail.title,
-            description: detail.description,
-            status: detail.status,
-            storyId: detail.story?.id ?? detail.storyId,
-            sprintId: detail.sprint?.id ?? detail.sprintId,
-            assigneeId: detail.assignee?.id ?? detail.assigneeId,
-            effortPoints: detail.effortPoints,
-            estimatedHours: detail.estimatedHours,
-            actualHours: detail.actualHours
-          },
-          onDone: loadTaskDetail
-        })
-      );
-    } catch (openError) {
-      setError(openError instanceof Error ? openError.message : "No se pudo abrir la tarea hija.");
-    }
+    await openRelatedTaskDrawer(childTaskId);
   };
 
   const openNewChildDrawer = () => {
@@ -589,7 +677,8 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
                 assigneeId: taskDetail.assignee?.id ?? taskDetail.assigneeId,
                 effortPoints: taskDetail.effortPoints,
                 estimatedHours: taskDetail.estimatedHours,
-                actualHours: taskDetail.actualHours
+                actualHours: taskDetail.actualHours,
+                unfinishedSprintCount: taskDetail.unfinishedSprintCount ?? 0
               },
               onDone: loadTaskDetail
             }}
@@ -608,7 +697,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => navigate(productTaskDefinitionPath(productId, taskDetail.parentTask!.id))}
+                  onClick={() => void openRelatedTaskDrawer(taskDetail.parentTask!.id)}
                 >
                   Ver tarea padre
                 </button>
@@ -630,6 +719,10 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
               <div>
                 <span className="muted">Actualizado</span>
                 <strong>{formatDateTime(taskDetail.updatedAt)}</strong>
+              </div>
+              <div>
+                <span className="muted">No terminada</span>
+                <strong>{taskDetail.unfinishedSprintCount ? `${taskDetail.unfinishedSprintCount} sprint${taskDetail.unfinishedSprintCount === 1 ? "" : "s"}` : "Nunca"}</strong>
               </div>
             </div>
             {taskDetail.sourceMessage ? (
@@ -734,7 +827,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
                 nodes={taskDetail.conversation}
                 onReply={(message) => setReplyTarget(message)}
                 onCreateTask={openDerivedTaskDrawer}
-                onOpenDerivedTask={(derivedTaskId) => navigate(productTaskDefinitionPath(productId, derivedTaskId))}
+                onOpenDerivedTask={(derivedTaskId) => void openRelatedTaskDrawer(derivedTaskId)}
               />
             )}
           </section>

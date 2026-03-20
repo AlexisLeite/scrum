@@ -14,6 +14,7 @@ import { MarkdownPreview } from "../ui/drawers/product-workspace/MarkdownPreview
 import { TaskCompletionDialog } from "../ui/drawers/product-workspace/TaskCompletionDialog";
 import { TaskUpsertionDrawer } from "../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { KanbanBoard } from "../ui/kanban";
+import { buildAxisTheme, buildLegendTheme, buildTooltipTheme, useEChartsTheme } from "../ui/charts/echarts-theme";
 import { ProductMetricsPanel } from "./product-workspace/ProductMetricsPanel";
 
 type StoryStatus = "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
@@ -49,6 +50,7 @@ type TaskItem = {
   effortPoints: number | null;
   estimatedHours: number | null;
   actualHours?: number | null;
+  unfinishedSprintCount?: number;
 };
 type TeamMember = { userId: string; user?: { id: string; name: string; email: string } };
 type TeamItem = { id: string; name: string; description: string | null; members?: TeamMember[] };
@@ -65,6 +67,8 @@ type BoardTask = {
   effortPoints?: number | null;
   estimatedHours?: number | null;
   actualHours?: number | null;
+  unfinishedSprintCount?: number;
+  isHistoricalUnfinished?: boolean;
   assignee?: { id: string; name: string } | null;
   story?: { id: string; title: string } | null;
 };
@@ -418,6 +422,9 @@ export const StoryTasksView = observer(function StoryTasksView() {
                 <td>
                   <strong>{task.title}</strong>
                   <MarkdownPreview markdown={task.description} compact className="muted" emptyLabel="Sin descripcion" />
+                  {task.unfinishedSprintCount ? (
+                    <small className="muted">No terminada en {task.unfinishedSprintCount} sprint{task.unfinishedSprintCount === 1 ? "" : "s"}</small>
+                  ) : null}
                 </td>
                 <td>
                   <select
@@ -574,6 +581,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const teamController = React.useMemo(() => new TeamController(store), [store]);
+  const chartTheme = useEChartsTheme();
   const { productId, sprintId } = useParams<{ productId: string; sprintId: string }>();
   const [boardError, setBoardError] = React.useState("");
   const [pendingTaskIds, setPendingTaskIds] = React.useState<Record<string, boolean>>({});
@@ -631,7 +639,8 @@ export const SprintBoardView = observer(function SprintBoardView() {
               assigneeId: task.assignee?.id ?? task.assigneeId ?? null,
               effortPoints: task.effortPoints ?? null,
               estimatedHours: task.estimatedHours ?? null,
-              actualHours: task.actualHours ?? null
+              actualHours: task.actualHours ?? null,
+              unfinishedSprintCount: task.unfinishedSprintCount ?? 0
             }
           : undefined,
         fixedSprintId: task ? undefined : sprintId,
@@ -720,7 +729,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
         </div>
         <p className="muted">
           {boardReadOnly
-            ? "El sprint esta cerrado. El tablero queda en modo solo lectura y las tareas pendientes ya fueron devueltas al pool."
+            ? "El sprint esta cerrado. El tablero queda en modo solo lectura y conserva las tareas no terminadas registradas al cierre, aunque hoy puedan estar trabajandose en otro sprint."
             : "Actualiza estados y propiedades de tareas desde los drawers por columna o tarjeta."}
         </p>
         {boardError ? <p className="error-text">{boardError}</p> : null}
@@ -746,11 +755,11 @@ export const SprintBoardView = observer(function SprintBoardView() {
         <h3>Burnup / Burndown</h3>
         <ReactECharts
           option={{
-            tooltip: { trigger: "axis" },
-            legend: { top: 8 },
+            tooltip: { trigger: "axis", ...buildTooltipTheme(chartTheme) },
+            legend: { top: 8, ...buildLegendTheme(chartTheme) },
             grid: { left: 30, right: 30, bottom: 30, containLabel: true },
-            xAxis: { type: "category", data: store.burnup.map((item) => item.date) },
-            yAxis: { type: "value" },
+            xAxis: { type: "category", data: store.burnup.map((item) => item.date), ...buildAxisTheme(chartTheme) },
+            yAxis: { type: "value", ...buildAxisTheme(chartTheme) },
             series: [
               { name: "Completado", type: "line", smooth: true, data: store.burnup.map((item) => item.completedPoints) },
               { name: "Scope", type: "line", smooth: true, data: store.burnup.map((item) => item.scopePoints) },

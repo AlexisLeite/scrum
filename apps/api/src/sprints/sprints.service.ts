@@ -150,13 +150,23 @@ export class SprintsService {
         sprintId: id,
         status: { not: "Done" }
       },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        storyId: true
+      include: {
+        story: {
+          select: {
+            id: true,
+            title: true
+          }
+        },
+        assignee: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
       }
     });
+
+    const unfinishedStoryIds = Array.from(new Set(unfinishedTasks.map((task) => task.storyId)));
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const completedSprint = await tx.sprint.update({
@@ -165,6 +175,24 @@ export class SprintsService {
       });
 
       if (unfinishedTasks.length > 0) {
+        await tx.taskUnfinishedSprint.createMany({
+          data: unfinishedTasks.map((task) => ({
+            taskId: task.id,
+            sprintId: id,
+            title: task.title,
+            description: task.description,
+            status: task.status,
+            boardOrder: task.boardOrder,
+            storyId: task.storyId,
+            storyTitle: task.story?.title ?? null,
+            assigneeId: task.assigneeId,
+            assigneeName: task.assignee?.name ?? null,
+            effortPoints: task.effortPoints,
+            estimatedHours: task.estimatedHours,
+            actualHours: task.actualHours
+          }))
+        });
+
         await tx.task.updateMany({
           where: {
             id: { in: unfinishedTasks.map((task) => task.id) }
@@ -179,8 +207,11 @@ export class SprintsService {
       return completedSprint;
     });
 
+    for (const storyId of unfinishedStoryIds) {
+      await this.tasksService.recomputeStoryStatus(storyId);
+    }
+
     for (const task of unfinishedTasks) {
-      await this.tasksService.recomputeStoryStatus(task.storyId);
       await this.activityService.record({
         actorUserId: user.sub,
         teamId: sprint.teamId,
@@ -191,7 +222,8 @@ export class SprintsService {
         metadataJson: {
           taskId: task.id,
           reason: "SPRINT_COMPLETED",
-          taskStatus: task.status
+          taskStatus: task.status,
+          unfinishedSnapshotRecorded: true
         },
         afterJson: {
           id: task.id,
@@ -212,8 +244,8 @@ export class SprintsService {
       metadataJson: {
         fromStatus: sprint.status,
         toStatus: updated.status,
-        removedPendingTaskCount: unfinishedTasks.length,
-        removedPendingTaskIds: unfinishedTasks.map((task) => task.id)
+        unfinishedTaskCount: unfinishedTasks.length,
+        unfinishedTaskIds: unfinishedTasks.map((task) => task.id)
       },
       beforeJson: sprint,
       afterJson: updated
@@ -242,14 +274,57 @@ export class SprintsService {
 
     const tasks = await this.prisma.task.findMany({
       where: { sprintId: id },
-      include: { assignee: true, story: true },
+      include: {
+        assignee: true,
+        story: true,
+        _count: {
+          select: {
+            unfinishedSprintSnapshots: true
+          }
+        }
+      },
       orderBy: [{ boardOrder: "asc" }, { createdAt: "asc" }]
     });
 
-    const columns = sprint.product.workflow.map((column) => ({
-      ...column,
-      tasks: tasks.filter((task) => task.status === column.name)
-    }));
+    const unfinishedTasks =
+      sprint.status === SprintStatus.COMPLETED
+        ? await this.prisma.taskUnfinishedSprint.findMany({
+            where: { sprintId: id },
+            include: {
+              task: {
+                select: {
+                  _count: {
+                    select: {
+                      unfinishedSprintSnapshots: true
+                    }
+                  }
+                }
+              }
+            },
+            orderBy: [{ boardOrder: "asc" }, { recordedAt: "asc" }]
+          })
+        : [];
+
+    const columns = sprint.product.workflow.map((column) => {
+      const activeTasks = tasks
+        .filter((task) => task.status === column.name)
+        .map((task) => this.serializeSprintBoardTask(task));
+      const historicalTasks = unfinishedTasks
+        .filter((task) => task.status === column.name)
+        .map((task) => this.serializeUnfinishedSprintTask(task));
+
+      return {
+        ...column,
+        tasks: [...activeTasks, ...historicalTasks].sort((left, right) => {
+          const leftOrder = typeof left.boardOrder === "number" ? left.boardOrder : Number.MAX_SAFE_INTEGER;
+          const rightOrder = typeof right.boardOrder === "number" ? right.boardOrder : Number.MAX_SAFE_INTEGER;
+          if (leftOrder !== rightOrder) {
+            return leftOrder - rightOrder;
+          }
+          return String(left.updatedAt ?? "").localeCompare(String(right.updatedAt ?? ""));
+        })
+      };
+    });
 
     return {
       sprint,
@@ -261,7 +336,7 @@ export class SprintsService {
     const sprint = await this.getSprintOrThrow(id);
     await this.assertSprintAccess(user, sprint);
 
-    return this.prisma.task.findMany({
+    const tasks = await this.prisma.task.findMany({
       where: {
         productId: sprint.productId,
         sprintId: null,
@@ -281,10 +356,16 @@ export class SprintsService {
             name: true,
             email: true
           }
+        },
+        _count: {
+          select: {
+            unfinishedSprintSnapshots: true
+          }
         }
       },
       orderBy: { createdAt: "asc" }
     });
+    return tasks.map((task) => this.serializeSprintBoardTask(task));
   }
 
   async createTask(id: string, dto: CreateSprintTaskDto, user: AuthUser) {
@@ -504,6 +585,71 @@ export class SprintsService {
     });
 
     return updatedTask;
+  }
+
+  private serializeSprintBoardTask<
+    T extends {
+      _count?: {
+        unfinishedSprintSnapshots?: number;
+      };
+    }
+  >(task: T) {
+    const { _count, ...rest } = task;
+    return {
+      ...rest,
+      unfinishedSprintCount: _count?.unfinishedSprintSnapshots ?? 0,
+      isHistoricalUnfinished: false
+    };
+  }
+
+  private serializeUnfinishedSprintTask(snapshot: {
+    id: string;
+    taskId: string | null;
+    title: string;
+    description: string | null;
+    status: string;
+    boardOrder: number;
+    storyId: string | null;
+    storyTitle: string | null;
+    assigneeId: string | null;
+    assigneeName: string | null;
+    effortPoints: number | null;
+    estimatedHours: number | null;
+    actualHours: number | null;
+    recordedAt: Date;
+    task?: {
+      _count?: {
+        unfinishedSprintSnapshots: number;
+      };
+    } | null;
+  }) {
+    return {
+      id: snapshot.taskId ?? `unfinished-${snapshot.id}`,
+      title: snapshot.title,
+      description: snapshot.description,
+      status: snapshot.status,
+      updatedAt: snapshot.recordedAt,
+      boardOrder: snapshot.boardOrder,
+      storyId: snapshot.storyId,
+      assigneeId: snapshot.assigneeId,
+      effortPoints: snapshot.effortPoints,
+      estimatedHours: snapshot.estimatedHours,
+      actualHours: snapshot.actualHours,
+      assignee: snapshot.assigneeName
+        ? {
+            id: snapshot.assigneeId ?? `unfinished-assignee-${snapshot.id}`,
+            name: snapshot.assigneeName
+          }
+        : null,
+      story: snapshot.storyTitle
+        ? {
+            id: snapshot.storyId ?? `unfinished-story-${snapshot.id}`,
+            title: snapshot.storyTitle
+          }
+        : null,
+      unfinishedSprintCount: snapshot.task?._count?.unfinishedSprintSnapshots ?? 0,
+      isHistoricalUnfinished: true
+    };
   }
 
   private async getSprintOrThrow(id: string) {

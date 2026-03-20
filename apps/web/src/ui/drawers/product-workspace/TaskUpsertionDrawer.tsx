@@ -20,6 +20,7 @@ type EditableTask = {
   effortPoints?: number | null;
   estimatedHours?: number | null;
   actualHours?: number | null;
+  unfinishedSprintCount?: number;
 };
 
 type TaskStoryOption = { id: string; title: string };
@@ -254,6 +255,13 @@ export function TaskUpsertionForm(props: {
             ) : null}
           </section>
         ) : null}
+        {task?.unfinishedSprintCount ? (
+          <section className="task-history-note">
+            <span className="task-origin-label">Historial scrum</span>
+            <strong>No se pudo terminar en {task.unfinishedSprintCount} sprint{task.unfinishedSprintCount === 1 ? "" : "s"}.</strong>
+            <p className="muted">La tarea puede volver a planificarse, pero este contador preserva cuantas veces quedo pendiente al cerrar un sprint.</p>
+          </section>
+        ) : null}
 
         <div className="form-grid two-columns">
           <label>
@@ -429,7 +437,7 @@ export function TaskUpsertionForm(props: {
               }}
               disabled={saving}
             >
-              Ir a la definicion
+              Ver definicion
             </button>
           ) : null}
           <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>

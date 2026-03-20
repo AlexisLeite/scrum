@@ -48,10 +48,18 @@ export class TasksService {
     }
     await this.assertProductAccess(user, story.productId);
 
-    return this.prisma.task.findMany({
+    const tasks = await this.prisma.task.findMany({
       where: { storyId },
+      include: {
+        _count: {
+          select: {
+            unfinishedSprintSnapshots: true
+          }
+        }
+      },
       orderBy: { createdAt: "asc" }
     });
+    return tasks.map((task) => this.withUnfinishedSprintCount(task));
   }
 
   async getDetail(id: string, user: AuthUser) {
@@ -59,7 +67,7 @@ export class TasksService {
     const conversation = await this.loadTaskConversation(id);
 
     return {
-      ...task,
+      ...this.withUnfinishedSprintCount(task),
       childSummary: {
         total: task.childTasks.length,
         completed: task.childTasks.filter((child) => child.status === "Done").length
@@ -571,6 +579,11 @@ export class TasksService {
     const task = await this.prisma.task.findUnique({
       where: { id },
       include: {
+        _count: {
+          select: {
+            unfinishedSprintSnapshots: true
+          }
+        },
         assignee: {
           select: {
             id: true,
@@ -673,6 +686,20 @@ export class TasksService {
 
     await this.assertProductAccess(user, task.productId);
     return task;
+  }
+
+  private withUnfinishedSprintCount<
+    T extends {
+      _count?: {
+        unfinishedSprintSnapshots?: number;
+      };
+    }
+  >(task: T) {
+    const { _count, ...rest } = task;
+    return {
+      ...rest,
+      unfinishedSprintCount: _count?.unfinishedSprintSnapshots ?? 0
+    };
   }
 
   private async loadTaskConversation(taskId: string) {

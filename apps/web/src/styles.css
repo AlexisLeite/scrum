@@ -1068,6 +1068,7 @@ html .drawer-backdrop {
 }
 
 html .drawer-panel {
+  width: min(75vw, 1500px);
   background: var(--bg-card);
   border-left-color: var(--border);
   border-top-left-radius: var(--radius-xl);
@@ -1075,8 +1076,10 @@ html .drawer-panel {
   box-shadow: -16px 0 38px color-mix(in srgb, #06101e 40%, transparent);
 }
 
+html .drawer-panel-sm,
+html .drawer-panel-md,
 html .drawer-panel-lg {
-  width: min(96vw, 980px);
+  width: min(75vw, 1500px);
 }
 
 html .drawer-header {

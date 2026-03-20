@@ -1,6 +1,8 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../../api/client";
 import { ProductController } from "../../../controllers";
+import { productRootDefinitionPath } from "../../../routes/product-routes";
 import { RichDescriptionField } from "../product-workspace/RichDescriptionField";
 import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { Drawer, DrawerRenderContext } from "../Drawer";
@@ -42,18 +44,31 @@ export class ProductUpsertionDrawer extends Drawer {
         product={this.options.product}
         onSaved={this.options.onSaved}
         close={context.close}
+        definitionHref={this.options.product ? productRootDefinitionPath(this.options.product.id) : undefined}
       />
     );
   }
 }
 
-function ProductUpsertionForm(props: {
+export function ProductUpsertionForm(props: {
   controller: ProductController;
   product?: ProductItem;
   onSaved?: SaveHook;
   close: () => void;
+  closeLabel?: string;
+  definitionHref?: string;
+  closeOnSubmit?: boolean;
 }) {
-  const { controller, product, onSaved, close } = props;
+  const {
+    controller,
+    product,
+    onSaved,
+    close,
+    closeLabel = "Cancelar",
+    definitionHref,
+    closeOnSubmit = true
+  } = props;
+  const navigate = useNavigate();
   const isEditing = Boolean(product);
   const [name, setName] = React.useState(product?.name ?? "");
   const [key, setKey] = React.useState(product?.key ?? "");
@@ -102,7 +117,9 @@ function ProductUpsertionForm(props: {
       }
 
       if (onSaved) await onSaved();
-      close();
+      if (closeOnSubmit) {
+        close();
+      }
     } catch (submitError) {
       setError(errorMessage(submitError));
     } finally {
@@ -136,8 +153,20 @@ function ProductUpsertionForm(props: {
         <button className="btn btn-primary" disabled={saving} onClick={() => void submit()}>
           {isEditing ? "Guardar cambios" : "Crear producto"}
         </button>
+        {isEditing && definitionHref ? (
+          <button
+            className="btn btn-secondary"
+            disabled={saving}
+            onClick={() => {
+              close();
+              navigate(definitionHref);
+            }}
+          >
+            Ver definicion
+          </button>
+        ) : null}
         <button className="btn btn-secondary" disabled={saving} onClick={close}>
-          Cancelar
+          {closeLabel}
         </button>
       </div>
       {error ? <p className="error-text">{error}</p> : null}

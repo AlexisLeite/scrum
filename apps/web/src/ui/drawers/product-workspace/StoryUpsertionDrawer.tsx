@@ -36,6 +36,7 @@ type StoryTask = {
   effortPoints: number | null;
   estimatedHours: number | null;
   actualHours?: number | null;
+  unfinishedSprintCount?: number;
 };
 
 type SprintOption = {
@@ -223,7 +224,8 @@ export function StoryUpsertionForm(props: {
               assigneeId: task.assigneeId,
               effortPoints: task.effortPoints,
               estimatedHours: task.estimatedHours,
-              actualHours: task.actualHours ?? null
+              actualHours: task.actualHours ?? null,
+              unfinishedSprintCount: task.unfinishedSprintCount ?? 0
             }
           : undefined,
         defaultStoryId: story.id,
@@ -278,6 +280,9 @@ export function StoryUpsertionForm(props: {
               </div>
             </div>
             <MarkdownPreview markdown={task.description} compact className="story-task-summary" emptyLabel="Sin descripcion" />
+            {task.unfinishedSprintCount ? (
+              <p className="muted">No se pudo terminar en {task.unfinishedSprintCount} sprint{task.unfinishedSprintCount === 1 ? "" : "s"}.</p>
+            ) : null}
             <div className="story-task-meta-grid">
               <div className="story-task-meta-item">
                 <span className="story-task-meta-label">Asignado</span>
@@ -356,7 +361,7 @@ export function StoryUpsertionForm(props: {
             }}
             disabled={saving}
           >
-            Ir a la definicion
+            Ver definicion
           </button>
         ) : null}
         <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>
