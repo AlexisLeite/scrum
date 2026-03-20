@@ -2,6 +2,8 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3000/api/v1"
 
 type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
+let refreshRequest: Promise<void> | null = null;
+
 function normalizeApiError(rawText: string, status: number): string {
   if (!rawText) {
     return `HTTP ${status}`;
@@ -25,8 +27,8 @@ function normalizeApiError(rawText: string, status: number): string {
   return rawText;
 }
 
-async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+async function rawRequest(method: HttpMethod, path: string, body?: unknown): Promise<Response> {
+  return fetch(`${API_BASE}${path}`, {
     method,
     credentials: "include",
     headers: {
@@ -34,6 +36,32 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown): Pro
     },
     body: body ? JSON.stringify(body) : undefined
   });
+}
+
+async function refreshSession(): Promise<void> {
+  if (!refreshRequest) {
+    refreshRequest = rawRequest("POST", "/auth/refresh")
+      .then(async (response) => {
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(normalizeApiError(text, response.status));
+        }
+      })
+      .finally(() => {
+        refreshRequest = null;
+      });
+  }
+
+  return refreshRequest;
+}
+
+async function request<T>(method: HttpMethod, path: string, body?: unknown, allowRefresh: boolean = true): Promise<T> {
+  const response = await rawRequest(method, path, body);
+
+  if (response.status === 401 && allowRefresh && path !== "/auth/refresh" && path !== "/auth/login" && path !== "/auth/signup") {
+    await refreshSession();
+    return request<T>(method, path, body, false);
+  }
 
   if (!response.ok) {
     const text = await response.text();

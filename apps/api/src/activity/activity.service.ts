@@ -157,6 +157,7 @@ export class ActivityService {
       select: {
         createdAt: true,
         entityType: true,
+        entityId: true,
         action: true
       }
     });
@@ -194,7 +195,9 @@ export class ActivityService {
     const averageVelocity = velocityBySprint.length === 0 ? 0 : totalVelocity / velocityBySprint.length;
 
     const activeDays = new Set(logs.map((log) => log.createdAt.toISOString().slice(0, 10))).size;
-    const tasksWorked = logs.filter((log) => log.entityType === ActivityEntityType.TASK).length;
+    const tasksWorked = new Set(
+      logs.filter((log) => log.entityType === ActivityEntityType.TASK).map((log) => log.entityId)
+    ).size;
     const sprintActions = logs.filter((log) => log.entityType === ActivityEntityType.SPRINT).length;
 
     return {
@@ -409,9 +412,10 @@ export class ActivityService {
 
       return {
         ...item,
-        detail: {
+      detail: {
           ...detail,
-          summary: this.buildSummary(item.action, metadata, detail)
+          summary: this.buildSummary(item.action, metadata, detail),
+          details: this.buildDetails(item.action, metadata, detail)
         }
       };
     });
@@ -466,6 +470,9 @@ export class ActivityService {
       return `Se agrego la tarea "${detail.task?.title ?? detail.entityLabel}" al sprint.`;
     }
     if (action === "SPRINT_TASK_REMOVED") {
+      if (metadata.reason === "SPRINT_COMPLETED") {
+        return `La tarea "${detail.task?.title ?? detail.entityLabel}" quedo no terminada al cerrar el sprint.`;
+      }
       return `Se quito la tarea "${detail.task?.title ?? detail.entityLabel}" del sprint.`;
     }
     if (action === "SPRINT_TASK_CREATED") {
@@ -509,6 +516,84 @@ export class ActivityService {
       return `Se completo el sprint "${detail.entityLabel}".`;
     }
     return action;
+  }
+
+  private buildDetails(
+    action: string,
+    metadata: Record<string, unknown>,
+    detail: {
+      entityLabel: string;
+      task: { title: string; status?: string } | null;
+      parentTask: { title: string } | null;
+      sourceTask: { title: string } | null;
+      story: { title: string; status?: string } | null;
+      sprint: { name: string; status?: string } | null;
+      product: { name: string; key: string } | null;
+      team: { name: string } | null;
+      message: { body: string } | null;
+    }
+  ) {
+    const lines: string[] = [];
+    const changedFields = Array.isArray(metadata.changedFields)
+      ? metadata.changedFields.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : [];
+
+    if (detail.product) {
+      lines.push(`Producto: ${detail.product.key} ${detail.product.name}`);
+    }
+    if (detail.team) {
+      lines.push(`Equipo: ${detail.team.name}`);
+    }
+    if (detail.story) {
+      lines.push(`Historia: ${detail.story.title}`);
+    }
+    if (detail.sprint) {
+      lines.push(`Sprint: ${detail.sprint.name}`);
+    }
+    if (detail.task) {
+      lines.push(`Tarea: ${detail.task.title}`);
+    }
+    if (changedFields.length > 0) {
+      lines.push(`Campos afectados: ${changedFields.join(", ")}`);
+    }
+    if (typeof metadata.fromStatus === "string" || typeof metadata.toStatus === "string") {
+      lines.push(`Estado: ${typeof metadata.fromStatus === "string" ? metadata.fromStatus : "-"} -> ${typeof metadata.toStatus === "string" ? metadata.toStatus : "-"}`);
+    }
+    if (typeof metadata.toPosition === "number") {
+      lines.push(`Posicion destino: ${metadata.toPosition + 1}`);
+    }
+    if (typeof metadata.reason === "string") {
+      lines.push(`Motivo: ${metadata.reason}`);
+    }
+    if (typeof metadata.bodyPreview === "string" && metadata.bodyPreview.trim()) {
+      lines.push(`Mensaje: ${metadata.bodyPreview.trim()}`);
+    } else if (detail.message?.body?.trim()) {
+      lines.push(`Mensaje: ${detail.message.body.trim().slice(0, 160)}`);
+    }
+    const unfinishedTaskCount =
+      typeof metadata.unfinishedTaskCount === "number"
+        ? metadata.unfinishedTaskCount
+        : typeof metadata.removedPendingTaskCount === "number"
+          ? metadata.removedPendingTaskCount
+          : 0;
+    if (unfinishedTaskCount > 0) {
+      lines.push(`Tareas no terminadas registradas al cierre: ${unfinishedTaskCount}`);
+    }
+    if (typeof metadata.taskStatus === "string") {
+      lines.push(`Estado de la tarea al salir del sprint: ${metadata.taskStatus}`);
+    }
+    if (detail.parentTask) {
+      lines.push(`Tarea padre: ${detail.parentTask.title}`);
+    }
+    if (detail.sourceTask) {
+      lines.push(`Tarea origen: ${detail.sourceTask.title}`);
+    }
+
+    if (action === "SPRINT_COMPLETED" && lines.length === 0) {
+      lines.push(`Sprint finalizado: ${detail.entityLabel}`);
+    }
+
+    return lines.join(" | ");
   }
 
   private asRecord(value: unknown): Record<string, unknown> {

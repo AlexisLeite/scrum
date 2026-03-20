@@ -4,10 +4,17 @@ import { Role } from "@scrum/contracts";
 import { apiClient } from "../../api/client";
 import { AdminController, TeamController } from "../../controllers";
 import { useRootStore } from "../../stores/root-store";
+import { ActivityFeed } from "../../ui/drawers/product-workspace/ActivityFeed";
 
 type TeamLite = { id: string; name: string };
 type UserItem = { id: string; name: string; email: string; role: Role; teams?: TeamLite[] };
-type ActivityEntry = { id: string; action: string; createdAt: string; metadataJson?: unknown; };
+type ActivityEntry = {
+  id: string;
+  action: string;
+  createdAt: string;
+  actorUser?: { id?: string; name?: string; email?: string } | null;
+  detail?: { summary?: string; details?: string };
+};
 type ActivityListResult = { items: ActivityEntry[]; page: number; pageSize: number; total: number };
 type ActivityStats = {
   activityCount: number;
@@ -309,14 +316,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
             </article>
           </div>
         ) : null}
-        <ul className="plain-list">
-          {activity.map((entry) => (
-            <li key={entry.id}>
-              <strong>{entry.action}</strong> <span className="muted">{new Date(entry.createdAt).toLocaleString()}</span>
-            </li>
-          ))}
-          {activityUserId && activity.length === 0 && !activityError ? <li className="muted">Sin actividad reciente.</li> : null}
-        </ul>
+        <ActivityFeed entries={activity} emptyLabel="Sin actividad reciente." />
         {activityError ? <p className="error-text">{activityError}</p> : null}
       </section>
     </div>

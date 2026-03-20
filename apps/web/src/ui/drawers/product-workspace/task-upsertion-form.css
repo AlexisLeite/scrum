@@ -7,6 +7,19 @@
   background: color-mix(in srgb, var(--bg-soft) 78%, transparent);
 }
 
+.task-history-note {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--warning, #d08a00) 30%, var(--border-soft));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
+}
+
+.task-history-note p {
+  margin: 0;
+}
+
 .task-origin-label,
 .task-estimator-label {
   display: inline-block;

@@ -19,8 +19,8 @@ type EditableTask = {
   assigneeId?: string | null;
   effortPoints?: number | null;
   estimatedHours?: number | null;
-  remainingHours?: number | null;
   actualHours?: number | null;
+  unfinishedSprintCount?: number;
 };
 
 type TaskStoryOption = { id: string; title: string };
@@ -137,7 +137,6 @@ export function TaskUpsertionForm(props: {
   const [effortPoints, setEffortPoints] = React.useState(task?.effortPoints ? String(task.effortPoints) : "");
   const [selectedEstimatedPreset, setSelectedEstimatedPreset] = React.useState<number | null>(initialEstimatedHours.preset);
   const [customEstimatedHours, setCustomEstimatedHours] = React.useState(initialEstimatedHours.custom);
-  const [remainingHours, setRemainingHours] = React.useState(task?.remainingHours != null ? String(task.remainingHours) : "");
   const [actualHours, setActualHours] = React.useState(task?.actualHours != null ? String(task.actualHours) : "");
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
@@ -164,7 +163,6 @@ export function TaskUpsertionForm(props: {
     setEffortPoints(task?.effortPoints != null ? String(task.effortPoints) : "");
     setSelectedEstimatedPreset(nextEstimatedHours.preset);
     setCustomEstimatedHours(nextEstimatedHours.custom);
-    setRemainingHours(task?.remainingHours != null ? String(task.remainingHours) : "");
     setActualHours(task?.actualHours != null ? String(task.actualHours) : "");
     setError("");
     setCompletionDialogOpen(false);
@@ -183,7 +181,6 @@ export function TaskUpsertionForm(props: {
       sourceMessageId: !task ? defaultSourceMessageId || undefined : undefined,
       effortPoints: toOptionalNumber(effortPoints),
       estimatedHours,
-      remainingHours: status === "Done" ? 0 : toOptionalNumber(remainingHours),
       actualHours: actualHoursOverride ?? toOptionalNumber(actualHours)
     };
 
@@ -222,9 +219,6 @@ export function TaskUpsertionForm(props: {
       if (payload.actualHours !== undefined) {
         setActualHours(String(payload.actualHours));
       }
-      if (status === "Done") {
-        setRemainingHours("0");
-      }
       if (onDone) {
         await onDone();
       }
@@ -240,9 +234,6 @@ export function TaskUpsertionForm(props: {
 
   const handleStatusChange = (nextStatus: string) => {
     setStatus(nextStatus);
-    if (nextStatus === "Done") {
-      setRemainingHours("0");
-    }
   };
 
   const showActualHoursField = status === "Done" || task?.actualHours != null;
@@ -262,6 +253,13 @@ export function TaskUpsertionForm(props: {
                 <p className="muted">{compactPreview(sourceReference)}</p>
               </div>
             ) : null}
+          </section>
+        ) : null}
+        {task?.unfinishedSprintCount ? (
+          <section className="task-history-note">
+            <span className="task-origin-label">Historial scrum</span>
+            <strong>No se pudo terminar en {task.unfinishedSprintCount} sprint{task.unfinishedSprintCount === 1 ? "" : "s"}.</strong>
+            <p className="muted">La tarea puede volver a planificarse, pero este contador preserva cuantas veces quedo pendiente al cerrar un sprint.</p>
           </section>
         ) : null}
 
@@ -401,17 +399,10 @@ export function TaskUpsertionForm(props: {
           </div>
 
           <div className="form-grid two-columns">
-            <label>
-              Horas restantes
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                value={status === "Done" ? "0" : remainingHours}
-                onChange={(event) => setRemainingHours(event.target.value)}
-                disabled={status === "Done"}
-              />
-            </label>
+            <div className="task-hours-hint muted">
+              La tarea conserva horas estimadas para planificacion y horas reales para cierre. El campo de horas
+              restantes se elimino para evitar una metrica ambigua que no impactaba reglas ni reportes.
+            </div>
             {showActualHoursField ? (
               <label>
                 Horas reales
@@ -446,7 +437,7 @@ export function TaskUpsertionForm(props: {
               }}
               disabled={saving}
             >
-              Ir a la definicion
+              Ver definicion
             </button>
           ) : null}
           <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>

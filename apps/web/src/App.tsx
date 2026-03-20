@@ -16,6 +16,7 @@ import {
 } from "./routes/product-routes";
 import { useRootStore } from "./stores/root-store";
 import { DrawerHost } from "./ui/drawers/DrawerHost";
+import { MarkdownPreview } from "./ui/drawers/product-workspace/MarkdownPreview";
 import {
   ProductBacklogView,
   ProductMetricsView,
@@ -25,12 +26,14 @@ import {
   StoryTasksView
 } from "./views/ProductWorkspaceViews";
 import {
+  ProductDefinitionView,
   SprintDefinitionView,
   StoryDefinitionView,
   TaskDefinitionView
 } from "./views/product-workspace/ProductDefinitionViews";
 import { AdminRolesView } from "./views/backoffice/AdminRolesView";
 import { ProductsBackofficeView } from "./views/backoffice/ProductsBackofficeView";
+import { TeamDefinitionView } from "./views/backoffice/TeamDefinitionView";
 import { TeamsBackofficeView } from "./views/backoffice/TeamsBackofficeView";
 
 type ProductItem = { id: string; name: string; key: string; description: string | null; };
@@ -96,11 +99,13 @@ export const App = observer(function App() {
           <Route path="/auth/gitlab/callback" element={<GitlabCallbackView />} />
           <Route path="/profile" element={<Protected><ProfileView /></Protected>} />
           <Route path="/admin" element={<Protected><AdminRolesView /></Protected>} />
+          <Route path="/teams/:teamId/definition" element={<Protected><TeamDefinitionView /></Protected>} />
           <Route path="/teams" element={<Protected><TeamsBackofficeView /></Protected>} />
           <Route path="/products" element={<Protected><ProductsBackofficeView /></Protected>} />
 
           <Route path="/products/:productId" element={<Protected><ProductWorkspaceLayout /></Protected>}>
             <Route index element={<Navigate to={productRoutes.overview} replace />} />
+            <Route path={productRoutes.rootDefinition} element={<ProductDefinitionView />} />
             <Route path={productRoutes.overview} element={<ProductOverviewView />} />
             <Route path={productRoutes.backlog} element={<ProductBacklogView />} />
             <Route path={productRoutes.storyTasks} element={<StoryTasksView />} />
@@ -163,7 +168,7 @@ const Home = observer(function Home() {
             <article key={product.id} className="product-tile">
               <p className="product-key">{product.key}</p>
               <h4>{product.name}</h4>
-              <p>{product.description ?? "Sin descripcion"}</p>
+              <MarkdownPreview markdown={product.description} compact emptyLabel="Sin descripcion" />
               <div className="tile-actions"><NavLink to={productOverviewPath(product.id)} className="btn btn-primary">Workspace</NavLink><NavLink to={productSprintsPath(product.id)} className="btn btn-secondary">Sprints</NavLink></div>
             </article>
           ))}

@@ -179,6 +179,13 @@
   gap: 0.45rem;
 }
 
+.kb-meta-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
 .kb-meta-row .muted {
   margin: 0;
   font-size: 0.72rem;

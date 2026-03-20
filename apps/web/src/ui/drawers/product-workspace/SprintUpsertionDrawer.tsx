@@ -24,6 +24,7 @@ type PendingTask = {
   id: string;
   title: string;
   status: string;
+  unfinishedSprintCount?: number;
   story?: { id: string; title: string } | null;
   assignee?: { id: string; name: string } | null;
 };
@@ -95,9 +96,15 @@ export function SprintUpsertionForm(props: {
   const [sprintTasks, setSprintTasks] = React.useState<PendingTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(false);
   const [sprintTaskQuery, setSprintTaskQuery] = React.useState("");
+  const canManageTasks = Boolean(sprint && (sprint.status === "PLANNED" || sprint.status === "ACTIVE"));
 
   const loadTaskPools = React.useCallback(async () => {
     if (!sprint) return;
+    if (sprint.status !== "PLANNED" && sprint.status !== "ACTIVE") {
+      setPendingTasks([]);
+      setSprintTasks([]);
+      return;
+    }
     setTasksLoading(true);
     setError("");
     try {
@@ -231,7 +238,7 @@ export function SprintUpsertionForm(props: {
             }}
             disabled={saving}
           >
-            Ir a la definicion
+            Ver definicion
           </button>
         ) : null}
         {showCloseAction && closeLabel ? (
@@ -241,7 +248,7 @@ export function SprintUpsertionForm(props: {
         ) : null}
       </div>
 
-      {sprint ? (
+      {sprint && canManageTasks ? (
         <section className="card sprint-task-manager">
           <div className="section-head sprint-task-manager-head">
             <div>
@@ -275,6 +282,7 @@ export function SprintUpsertionForm(props: {
                       onClick={() => void addTaskToSprint(task.id)}
                     >
                       <strong>{task.title}</strong>
+                      {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
                       <span>{task.story?.title ?? "Sin historia"}</span>
                     </button>
                   ))}
@@ -306,7 +314,10 @@ export function SprintUpsertionForm(props: {
                     <p className="story-task-order">Entrada {index + 1}</p>
                     <strong>{task.title}</strong>
                   </div>
-                  <span className="status status-in-sprint">En sprint</span>
+                  <div className="row-actions compact">
+                    {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
+                    <span className="status status-in-sprint">En sprint</span>
+                  </div>
                 </div>
                 <div className="story-task-meta">
                   <span>Historia: {task.story?.title ?? "-"}</span>
@@ -325,6 +336,11 @@ export function SprintUpsertionForm(props: {
               </article>
             ))}
           </div>
+        </section>
+      ) : sprint ? (
+        <section className="card sprint-task-manager">
+          <h4>Tareas del sprint</h4>
+          <p className="muted">El sprint esta cerrado. La reasignacion ya no se hace desde este drawer; revisa el kanban para ver las tareas no terminadas registradas al cierre.</p>
         </section>
       ) : null}
 

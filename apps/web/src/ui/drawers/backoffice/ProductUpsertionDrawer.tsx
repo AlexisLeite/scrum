@@ -1,7 +1,10 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../../api/client";
 import { ProductController } from "../../../controllers";
+import { productRootDefinitionPath } from "../../../routes/product-routes";
 import { RichDescriptionField } from "../product-workspace/RichDescriptionField";
+import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 
 type ProductItem = {
@@ -19,9 +22,10 @@ function errorMessage(error: unknown): string {
 type SaveHook = () => void | Promise<void>;
 type ActivityItem = {
   id: string;
-  action: string;
-  createdAt: string;
-  actorUser?: { id: string; name: string; email: string; role: string };
+  action?: string;
+  createdAt?: string;
+  actorUser?: { id: string; name: string; email: string; role: string } | null;
+  detail?: { summary?: string; details?: string };
 };
 type ActivityListResult = { items: ActivityItem[]; page: number; pageSize: number; total: number };
 
@@ -40,18 +44,31 @@ export class ProductUpsertionDrawer extends Drawer {
         product={this.options.product}
         onSaved={this.options.onSaved}
         close={context.close}
+        definitionHref={this.options.product ? productRootDefinitionPath(this.options.product.id) : undefined}
       />
     );
   }
 }
 
-function ProductUpsertionForm(props: {
+export function ProductUpsertionForm(props: {
   controller: ProductController;
   product?: ProductItem;
   onSaved?: SaveHook;
   close: () => void;
+  closeLabel?: string;
+  definitionHref?: string;
+  closeOnSubmit?: boolean;
 }) {
-  const { controller, product, onSaved, close } = props;
+  const {
+    controller,
+    product,
+    onSaved,
+    close,
+    closeLabel = "Cancelar",
+    definitionHref,
+    closeOnSubmit = true
+  } = props;
+  const navigate = useNavigate();
   const isEditing = Boolean(product);
   const [name, setName] = React.useState(product?.name ?? "");
   const [key, setKey] = React.useState(product?.key ?? "");
@@ -100,7 +117,9 @@ function ProductUpsertionForm(props: {
       }
 
       if (onSaved) await onSaved();
-      close();
+      if (closeOnSubmit) {
+        close();
+      }
     } catch (submitError) {
       setError(errorMessage(submitError));
     } finally {
@@ -126,19 +145,7 @@ function ProductUpsertionForm(props: {
       {isEditing && product ? (
         <section className="card">
           <h4>Historial de actividad</h4>
-          <ul className="plain-list">
-            {activity.map((entry) => (
-              <li key={entry.id}>
-                <strong>{entry.action}</strong>
-                {" "}
-                <span className="muted">
-                  {new Date(entry.createdAt).toLocaleString()}
-                  {entry.actorUser ? ` - ${entry.actorUser.name}` : ""}
-                </span>
-              </li>
-            ))}
-            {activity.length === 0 && !activityError ? <li className="muted">Sin actividad registrada.</li> : null}
-          </ul>
+          <ActivityFeed entries={activity} />
           {activityError ? <p className="error-text">{activityError}</p> : null}
         </section>
       ) : null}
@@ -146,8 +153,20 @@ function ProductUpsertionForm(props: {
         <button className="btn btn-primary" disabled={saving} onClick={() => void submit()}>
           {isEditing ? "Guardar cambios" : "Crear producto"}
         </button>
+        {isEditing && definitionHref ? (
+          <button
+            className="btn btn-secondary"
+            disabled={saving}
+            onClick={() => {
+              close();
+              navigate(definitionHref);
+            }}
+          >
+            Ver definicion
+          </button>
+        ) : null}
         <button className="btn btn-secondary" disabled={saving} onClick={close}>
-          Cancelar
+          {closeLabel}
         </button>
       </div>
       {error ? <p className="error-text">{error}</p> : null}

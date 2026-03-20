@@ -3,6 +3,7 @@ import { observer } from "mobx-react-lite";
 import { AdminController, TeamController } from "../../controllers";
 import { useRootStore } from "../../stores/root-store";
 import { TeamUpsertionDrawer } from "../../ui/drawers/backoffice/TeamUpsertionDrawer";
+import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
 
 type UserItem = { id: string; name: string; email: string };
 type TeamMember = { userId: string; user?: UserItem };
@@ -70,7 +71,7 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
                   <button className="btn btn-secondary" onClick={() => void removeTeam(team)}>Eliminar</button>
                 </div>
               </div>
-              <p>{team.description ?? "Sin descripcion"}</p>
+              <MarkdownPreview markdown={team.description} compact emptyLabel="Sin descripcion" />
               <p className="muted">Miembros: {team.members?.length ?? 0}</p>
               <ul className="plain-list">
                 {(team.members ?? []).map((member) => (

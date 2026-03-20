@@ -1,7 +1,5 @@
 ﻿import React from "react";
-import { useNavigate } from "react-router-dom";
 import { ProductController } from "../../../controllers";
-import { productTaskDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import { MarkdownPreview } from "./MarkdownPreview";
@@ -36,8 +34,8 @@ type TaskDetail = {
   status: string;
   effortPoints: number | null;
   estimatedHours: number | null;
-  remainingHours: number | null;
   actualHours?: number | null;
+  unfinishedSprintCount?: number;
   assigneeId: string | null;
   assignee?: { id: string; name: string; email: string } | null;
   story?: { id: string; title: string; storyPoints: number; status: string } | null;
@@ -162,7 +160,6 @@ export function TaskCollaborationPanel(props: {
     onChanged
   } = props;
   const store = useRootStore();
-  const navigate = useNavigate();
   const [detail, setDetail] = React.useState<TaskDetail | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -194,6 +191,48 @@ export function TaskCollaborationPanel(props: {
     }
   };
 
+  const openTaskDrawerFromDetail = React.useCallback(
+    (taskDetail: TaskDetail) => {
+      store.drawers.add(
+        new TaskUpsertionDrawer({
+          controller,
+          productId,
+          stories,
+          sprints,
+          assignees,
+          statusOptions,
+          task: {
+            id: taskDetail.id,
+            title: taskDetail.title,
+            description: taskDetail.description,
+            status: taskDetail.status,
+            storyId: taskDetail.story?.id ?? taskDetail.storyId,
+            sprintId: taskDetail.sprint?.id ?? taskDetail.sprintId,
+            assigneeId: taskDetail.assignee?.id ?? taskDetail.assigneeId,
+            effortPoints: taskDetail.effortPoints,
+            estimatedHours: taskDetail.estimatedHours,
+            actualHours: taskDetail.actualHours ?? null,
+            unfinishedSprintCount: taskDetail.unfinishedSprintCount ?? 0
+          },
+          onDone: refresh
+        })
+      );
+    },
+    [assignees, controller, productId, refresh, sprints, statusOptions, stories, store.drawers]
+  );
+
+  const openTaskDrawerById = React.useCallback(
+    async (relatedTaskId: string) => {
+      try {
+        const relatedDetail = (await controller.loadTaskDetail(relatedTaskId)) as TaskDetail;
+        openTaskDrawerFromDetail(relatedDetail);
+      } catch (openError) {
+        setError(openError instanceof Error ? openError.message : "No se pudo abrir la tarea relacionada.");
+      }
+    },
+    [controller, openTaskDrawerFromDetail]
+  );
+
   const openNewChildDrawer = () => {
     if (!detail?.story?.id) return;
     store.drawers.add(
@@ -214,35 +253,7 @@ export function TaskCollaborationPanel(props: {
   };
 
   const openChildTaskDrawer = async (childTaskId: string) => {
-    try {
-      const childDetail = (await controller.loadTaskDetail(childTaskId)) as TaskDetail;
-      store.drawers.add(
-        new TaskUpsertionDrawer({
-          controller,
-          productId,
-          stories,
-          sprints,
-          assignees,
-          statusOptions,
-          task: {
-            id: childDetail.id,
-            title: childDetail.title,
-            description: childDetail.description,
-            status: childDetail.status,
-            storyId: childDetail.story?.id ?? childDetail.storyId,
-            sprintId: childDetail.sprint?.id ?? childDetail.sprintId,
-            assigneeId: childDetail.assignee?.id ?? childDetail.assigneeId,
-            effortPoints: childDetail.effortPoints,
-            estimatedHours: childDetail.estimatedHours,
-            remainingHours: childDetail.remainingHours,
-            actualHours: childDetail.actualHours ?? null
-          },
-          onDone: refresh
-        })
-      );
-    } catch (openError) {
-      setError(openError instanceof Error ? openError.message : "No se pudo abrir la tarea hija.");
-    }
+    await openTaskDrawerById(childTaskId);
   };
 
   const openDerivedTaskDrawer = (message: TaskMessageNode) => {
@@ -316,7 +327,7 @@ export function TaskCollaborationPanel(props: {
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => navigate(productTaskDefinitionPath(productId, detail.parentTask!.id))}
+            onClick={() => void openTaskDrawerById(detail.parentTask!.id)}
           >
             {detail.parentTask.title}
           </button>
@@ -384,7 +395,7 @@ export function TaskCollaborationPanel(props: {
           nodes={detail.conversation}
           onReply={(message) => setReplyTarget(message)}
           onCreateTask={openDerivedTaskDrawer}
-          onOpenDerivedTask={(derivedTaskId) => navigate(productTaskDefinitionPath(productId, derivedTaskId))}
+          onOpenDerivedTask={(derivedTaskId) => void openTaskDrawerById(derivedTaskId)}
         />
       ) : null}
       {error ? <p className="error-text">{error}</p> : null}

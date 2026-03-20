@@ -5,6 +5,7 @@ import { productStoryDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { ActivityTimeline } from "./ActivityTimeline";
+import { MarkdownPreview } from "./MarkdownPreview";
 import { RichDescriptionField } from "./RichDescriptionField";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 
@@ -34,7 +35,8 @@ type StoryTask = {
   assigneeId: string | null;
   effortPoints: number | null;
   estimatedHours: number | null;
-  remainingHours: number | null;
+  actualHours?: number | null;
+  unfinishedSprintCount?: number;
 };
 
 type SprintOption = {
@@ -222,7 +224,8 @@ export function StoryUpsertionForm(props: {
               assigneeId: task.assigneeId,
               effortPoints: task.effortPoints,
               estimatedHours: task.estimatedHours,
-              remainingHours: task.remainingHours
+              actualHours: task.actualHours ?? null,
+              unfinishedSprintCount: task.unfinishedSprintCount ?? 0
             }
           : undefined,
         defaultStoryId: story.id,
@@ -276,7 +279,10 @@ export function StoryUpsertionForm(props: {
                 <span className={statusClass(task.status)}>{task.status}</span>
               </div>
             </div>
-            <p className="story-task-summary">{task.description ?? "Sin descripcion"}</p>
+            <MarkdownPreview markdown={task.description} compact className="story-task-summary" emptyLabel="Sin descripcion" />
+            {task.unfinishedSprintCount ? (
+              <p className="muted">No se pudo terminar en {task.unfinishedSprintCount} sprint{task.unfinishedSprintCount === 1 ? "" : "s"}.</p>
+            ) : null}
             <div className="story-task-meta-grid">
               <div className="story-task-meta-item">
                 <span className="story-task-meta-label">Asignado</span>
@@ -287,8 +293,8 @@ export function StoryUpsertionForm(props: {
                 <strong>{task.estimatedHours != null ? `${task.estimatedHours}h` : "-"}</strong>
               </div>
               <div className="story-task-meta-item">
-                <span className="story-task-meta-label">Restantes</span>
-                <strong>{task.remainingHours != null ? `${task.remainingHours}h` : "-"}</strong>
+                <span className="story-task-meta-label">Reales</span>
+                <strong>{task.actualHours != null ? `${task.actualHours}h` : "-"}</strong>
               </div>
             </div>
             <div className="story-task-card-actions">
@@ -355,7 +361,7 @@ export function StoryUpsertionForm(props: {
             }}
             disabled={saving}
           >
-            Ir a la definicion
+            Ver definicion
           </button>
         ) : null}
         <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>

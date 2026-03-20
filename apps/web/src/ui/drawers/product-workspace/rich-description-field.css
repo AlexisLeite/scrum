@@ -45,6 +45,9 @@
   padding: 0.65rem 0.72rem;
   color: var(--text-main);
   background: transparent;
+  box-sizing: border-box;
+  resize: none;
+  overflow-y: hidden;
 }
 
 .rich-description-editor [class*="_toolbarRoot_"] {

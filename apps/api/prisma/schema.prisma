@@ -148,6 +148,7 @@ model Sprint {
   product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
   team        Team         @relation(fields: [teamId], references: [id], onDelete: Restrict)
   tasks       Task[]
+  unfinishedTasks TaskUnfinishedSprint[]
 
   @@index([productId])
   @@index([teamId])
@@ -197,12 +198,37 @@ model Task {
   sourceMessage    TaskMessage? @relation("TaskSourceMessage", fields: [sourceMessageId], references: [id], onDelete: SetNull)
   messages         TaskMessage[]
   statusHistory    TaskStatusHistory[]
+  unfinishedSprintSnapshots TaskUnfinishedSprint[]
 
   @@index([storyId])
   @@index([sprintId])
   @@index([assigneeId])
   @@index([parentTaskId])
   @@index([sourceMessageId])
+  @@index([sprintId, status, boardOrder])
+}
+
+model TaskUnfinishedSprint {
+  id             String    @id @default(cuid())
+  taskId         String?
+  sprintId       String
+  title          String
+  description    String?
+  status         String
+  boardOrder     Int
+  storyId        String?
+  storyTitle     String?
+  assigneeId     String?
+  assigneeName   String?
+  effortPoints   Int?
+  estimatedHours Float?
+  actualHours    Float?
+  recordedAt     DateTime  @default(now())
+  task           Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  sprint         Sprint    @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, sprintId])
+  @@index([taskId])
   @@index([sprintId, status, boardOrder])
 }
 

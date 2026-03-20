@@ -97,12 +97,6 @@ export class CreateSprintTaskDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  remainingHours?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
   actualHours?: number;
 }
 

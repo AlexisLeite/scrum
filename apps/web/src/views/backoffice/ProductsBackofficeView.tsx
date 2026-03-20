@@ -7,6 +7,7 @@ import {
 } from "../../routes/product-routes";
 import { useRootStore } from "../../stores/root-store";
 import { ProductUpsertionDrawer } from "../../ui/drawers/backoffice/ProductUpsertionDrawer";
+import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
 
 type ProductItem = { id: string; name: string; key: string; description: string | null };
 
@@ -68,7 +69,7 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
               <tr key={product.id}>
                 <td>{product.key}</td>
                 <td>{product.name}</td>
-                <td>{product.description ?? "-"}</td>
+                <td><MarkdownPreview markdown={product.description} compact emptyLabel="-" /></td>
                 <td>
                   <div className="row-actions compact">
                     <button className="btn btn-secondary" onClick={() => openEdit(product)}>Editar</button>

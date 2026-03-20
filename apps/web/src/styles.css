@@ -254,7 +254,7 @@ label {
   color: var(--text-muted);
 }
 
-label > small.muted {
+label>small.muted {
   margin-top: 0.2rem;
 }
 
@@ -589,7 +589,7 @@ a.btn:active {
   align-items: start;
 }
 
-.metrics-context-strip > div {
+.metrics-context-strip>div {
   display: grid;
   gap: 0.2rem;
 }
@@ -603,11 +603,9 @@ a.btn:active {
   border-radius: var(--radius-md);
   padding: 0.95rem;
   border: 1px solid var(--border-soft);
-  background: linear-gradient(
-    168deg,
-    color-mix(in srgb, var(--bg-card) 92%, transparent),
-    color-mix(in srgb, var(--bg-soft) 72%, transparent)
-  );
+  background: linear-gradient(168deg,
+      color-mix(in srgb, var(--bg-card) 92%, transparent),
+      color-mix(in srgb, var(--bg-soft) 72%, transparent));
 }
 
 .metric h3 {
@@ -733,11 +731,9 @@ a.btn:active {
   padding: 1rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-soft);
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--bg-card) 96%, transparent),
-    color-mix(in srgb, var(--bg-soft) 70%, transparent)
-  );
+  background: linear-gradient(165deg,
+      color-mix(in srgb, var(--bg-card) 96%, transparent),
+      color-mix(in srgb, var(--bg-soft) 70%, transparent));
   box-shadow: var(--shadow-soft);
   transition: transform var(--trans), border-color var(--trans), box-shadow var(--trans);
 }
@@ -771,6 +767,7 @@ a.btn:active {
 
 .story-card-heading {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
 }
@@ -917,6 +914,7 @@ a.btn:active {
 }
 
 @media (max-width: 760px) {
+
   .story-task-group-head,
   .story-task-card-head {
     flex-direction: column;
@@ -1070,6 +1068,7 @@ html .drawer-backdrop {
 }
 
 html .drawer-panel {
+  width: min(75vw, 1500px);
   background: var(--bg-card);
   border-left-color: var(--border);
   border-top-left-radius: var(--radius-xl);
@@ -1077,8 +1076,10 @@ html .drawer-panel {
   box-shadow: -16px 0 38px color-mix(in srgb, #06101e 40%, transparent);
 }
 
+html .drawer-panel-sm,
+html .drawer-panel-md,
 html .drawer-panel-lg {
-  width: min(96vw, 980px);
+  width: min(75vw, 1500px);
 }
 
 html .drawer-header {
@@ -1159,6 +1160,7 @@ html .drawer-content .card {
     border-bottom-left-radius: 0;
   }
 }
+
 .definition-hero {
   display: grid;
   gap: 1rem;
@@ -1196,7 +1198,7 @@ html .drawer-content .card {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
-.definition-context-grid > div,
+.definition-context-grid>div,
 .definition-note {
   display: grid;
   gap: 0.25rem;
@@ -1291,11 +1293,11 @@ html .drawer-content .card {
   min-width: 0;
 }
 
-.markdown-preview > :first-child {
+.markdown-preview> :first-child {
   margin-top: 0;
 }
 
-.markdown-preview > :last-child {
+.markdown-preview> :last-child {
   margin-bottom: 0;
 }
 

@@ -1,6 +1,7 @@
 import React from "react";
 import { ActivityEntityType } from "@scrum/contracts";
 import { ProductController } from "../../../controllers";
+import { ActivityFeed } from "./ActivityFeed";
 
 type ActivityTimelineProps = {
   controller: ProductController;
@@ -8,19 +9,7 @@ type ActivityTimelineProps = {
   entityId: string;
 };
 
-type ActivityEntry = {
-  id: string;
-  action?: string;
-  createdAt?: string;
-  actor?: { id?: string; name?: string; email?: string } | null;
-  actorUser?: { id?: string; name?: string; email?: string } | null;
-  summary?: string;
-  details?: string;
-  detail?: {
-    summary?: string;
-    details?: string;
-  };
-};
+type ActivityEntry = React.ComponentProps<typeof ActivityFeed>["entries"][number];
 
 type ActivityListResult = {
   items: ActivityEntry[];
@@ -28,25 +17,6 @@ type ActivityListResult = {
   pageSize: number;
   total: number;
 };
-
-function formatDateTime(value?: string): string {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
-}
-
-function resolveActorName(entry: ActivityEntry): string {
-  return entry.actor?.name ?? entry.actorUser?.name ?? entry.actor?.email ?? entry.actorUser?.email ?? "Sistema";
-}
-
-function resolveSummary(entry: ActivityEntry): string {
-  return entry.detail?.summary ?? entry.summary ?? entry.action ?? "actualizacion";
-}
-
-function resolveDetails(entry: ActivityEntry): string {
-  return entry.detail?.details ?? entry.details ?? "";
-}
 
 export function ActivityTimeline(props: ActivityTimelineProps) {
   const { controller, entityType, entityId } = props;
@@ -86,15 +56,7 @@ export function ActivityTimeline(props: ActivityTimelineProps) {
       {loading ? <p className="muted">Cargando actividad...</p> : null}
       {error ? <p className="error-text">{error}</p> : null}
       {!loading && !error && entries.length === 0 ? <p className="muted">Sin actividad registrada.</p> : null}
-      <ul className="plain-list">
-        {entries.map((entry) => (
-          <li key={entry.id}>
-            <strong>{resolveSummary(entry)}</strong>
-            <span className="muted"> por {resolveActorName(entry)} en {formatDateTime(entry.createdAt)}</span>
-            {resolveDetails(entry) ? <p className="muted">{resolveDetails(entry)}</p> : null}
-          </li>
-        ))}
-      </ul>
+      <ActivityFeed entries={entries} />
     </section>
   );
 }

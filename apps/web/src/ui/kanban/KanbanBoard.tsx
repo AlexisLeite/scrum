@@ -13,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { MarkdownPreview } from "../drawers/product-workspace/MarkdownPreview";
 import { TaskCompletionDialog } from "../drawers/product-workspace/TaskCompletionDialog";
 import "./kanban.css";
 import { KanbanAssignee, KanbanColumn, KanbanTask } from "./types";
@@ -45,6 +46,7 @@ type KanbanBoardProps = {
   columns: KanbanColumn[];
   assignees: KanbanAssignee[];
   statusOptions: string[];
+  readOnly?: boolean;
   isTaskPending?: (taskId: string) => boolean;
   onCreateTask: (defaultStatus: string) => void;
   onEditTask: (task: KanbanTask) => void;
@@ -145,7 +147,6 @@ function moveTaskInColumns(
   const updatedTask: KanbanTask = {
     ...movedTask,
     status: targetColumnName,
-    remainingHours: targetColumnName === "Done" ? 0 : movedTask.remainingHours,
     actualHours: targetColumnName === "Done" ? actualHours ?? movedTask.actualHours : movedTask.actualHours
   };
 
@@ -215,18 +216,27 @@ function TaskCardContent(props: {
             </option>
           ))}
         </select>
-        <button type="button" className="btn btn-secondary kb-edit-btn" onClick={() => onEditTask(task)}>
+        <button
+          type="button"
+          className="btn btn-secondary kb-edit-btn"
+          onClick={() => onEditTask(task)}
+          disabled={pending || dragDisabled}
+        >
           Editar
         </button>
       </div>
 
-      <p className="kb-description" title={description}>
-        {description}
-      </p>
+      <div title={description}>
+        <MarkdownPreview markdown={task.description} compact className="kb-description" emptyLabel="Sin descripcion" />
+      </div>
 
       <div className="kb-meta-row">
         <span className="muted">Actualizado: {formatUpdatedAt(task.updatedAt)}</span>
-        <span className="pill">SP {task.effortPoints ?? "-"}</span>
+        <div className="kb-meta-pills">
+          {task.isHistoricalUnfinished ? <span className="pill">Pendiente al cierre</span> : null}
+          {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
+          <span className="pill">SP {task.effortPoints ?? "-"}</span>
+        </div>
       </div>
     </>
   );
@@ -280,6 +290,7 @@ function KanbanColumnView(props: {
   column: KanbanColumn;
   assignees: KanbanAssignee[];
   statusOptions: string[];
+  readOnly: boolean;
   canReorder: boolean;
   isTaskPending?: (taskId: string) => boolean;
   onCreateTask: (defaultStatus: string) => void;
@@ -287,7 +298,7 @@ function KanbanColumnView(props: {
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
   onStatusChange: (task: KanbanTask, status: string) => Promise<void>;
 }) {
-  const { column, assignees, statusOptions, canReorder, isTaskPending, onCreateTask, onEditTask, onAssigneeChange, onStatusChange } = props;
+  const { column, assignees, statusOptions, readOnly, canReorder, isTaskPending, onCreateTask, onEditTask, onAssigneeChange, onStatusChange } = props;
   const { setNodeRef, isOver } = useDroppable({ id: column.name, disabled: !canReorder });
 
   return (
@@ -301,6 +312,7 @@ function KanbanColumnView(props: {
             className="btn btn-secondary btn-icon"
             onClick={() => onCreateTask(column.name)}
             aria-label={`Crear tarea en ${column.name}`}
+            disabled={readOnly}
           >
             +
           </button>
@@ -317,8 +329,8 @@ function KanbanColumnView(props: {
                 task={task}
                 assignees={assignees}
                 statusOptions={statusOptions}
-                pending={pending}
-                dragDisabled={pending || !canReorder}
+                pending={readOnly || pending}
+                dragDisabled={readOnly || pending || !canReorder}
                 onAssigneeChange={onAssigneeChange}
                 onStatusChange={onStatusChange}
                 onEditTask={onEditTask}
@@ -349,7 +361,7 @@ function KanbanDragOverlay(props: { task: KanbanTask | null }) {
           {task.story?.title ?? "Sin historia"}
         </span>
       </div>
-      <p className="kb-description">{previewText(task.description)}</p>
+      <MarkdownPreview markdown={task.description} compact className="kb-description" emptyLabel="Sin descripcion" />
       <div className="kb-meta-row">
         <span className="muted">Actualizado: {formatUpdatedAt(task.updatedAt)}</span>
         <span className="pill">SP {task.effortPoints ?? "-"}</span>
@@ -362,6 +374,7 @@ export function KanbanBoard({
   columns,
   assignees,
   statusOptions,
+  readOnly = false,
   isTaskPending,
   onCreateTask,
   onEditTask,
@@ -409,7 +422,7 @@ export function KanbanBoard({
     () => localColumns.reduce((acc, column) => acc + column.tasks.length, 0),
     [localColumns]
   );
-  const canReorder = !search.trim() && assigneeFilter === "all";
+  const canReorder = !readOnly && !search.trim() && assigneeFilter === "all";
 
   const persistMove = React.useCallback(
     async (task: KanbanTask, fromColumn: string, targetColumn: string, targetIndex: number, actualHours?: number) => {
@@ -609,6 +622,7 @@ export function KanbanBoard({
                 column={column}
                 assignees={assignees}
                 statusOptions={statusOptions}
+                readOnly={readOnly}
                 canReorder={canReorder}
                 isTaskPending={isTaskPending}
                 onCreateTask={onCreateTask}
@@ -631,8 +645,8 @@ export function KanbanBoard({
         initialHours={
           completionRequest?.task.actualHours != null
             ? String(completionRequest.task.actualHours)
-            : completionRequest?.task.remainingHours != null
-              ? String(completionRequest.task.remainingHours)
+            : completionRequest?.task.estimatedHours != null
+              ? String(completionRequest.task.estimatedHours)
               : ""
         }
         onCancel={() => {
