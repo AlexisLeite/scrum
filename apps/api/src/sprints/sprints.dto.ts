@@ -71,6 +71,14 @@ export class CreateSprintTaskDto {
 
   @IsOptional()
   @IsString()
+  parentTaskId?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceMessageId?: string;
+
+  @IsOptional()
+  @IsString()
   status: string = "Todo";
 
   @IsOptional()
@@ -90,6 +98,12 @@ export class CreateSprintTaskDto {
   @IsNumber()
   @Min(0)
   remainingHours?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  actualHours?: number;
 }
 
 export class MoveSprintTaskDto {
@@ -101,4 +115,10 @@ export class MoveSprintTaskDto {
   @IsNumber()
   @Min(0)
   position!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  actualHours?: number;
 }

@@ -1,0 +1,3 @@
+• turbo 2.8.17
+@scrum/api:dev: ERROR: command finished with error: command (C:\Users\alexi\.codex\worktrees\602a\scrum\apps\api) C:\Users\alexi\AppData\Local\pnpm\.tools\pnpm\10.0.0\bin\pnpm.CMD run dev exited (-1073741510)
+@scrum/api#dev^C

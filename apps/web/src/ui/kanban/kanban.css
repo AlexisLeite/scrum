@@ -20,20 +20,25 @@
   display: grid;
   gap: 0.7rem;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  align-items: start;
 }
 
 .kb-column {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0.65rem;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-soft) 84%, transparent);
   padding: 0.65rem;
   min-height: 460px;
+  align-items: stretch;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
 }
 
 .kb-column.is-drop-column {
   border-color: color-mix(in srgb, var(--accent-c) 46%, var(--border-soft));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-c) 22%, transparent);
 }
 
 .kb-column-head {
@@ -48,9 +53,13 @@
 }
 
 .kb-task-list {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0.5rem;
-  align-content: start;
+  align-items: stretch;
+  justify-content: flex-start;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .kb-card {
@@ -60,17 +69,31 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--bg-card) 97%, transparent);
   padding: 0.55rem;
+  box-shadow: 0 8px 20px rgba(3, 8, 18, 0.14);
 }
 
 .kb-card.is-dragging {
-  opacity: 0.55;
+  opacity: 0.42;
+}
+
+.kb-card-overlay {
+  width: min(320px, 92vw);
+  rotate: 1deg;
+  box-shadow: 0 16px 34px rgba(3, 8, 18, 0.3);
 }
 
 .kb-title-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.55rem;
-  align-items: baseline;
+  align-items: center;
+}
+
+.kb-title-main {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
 }
 
 .kb-title-row h5 {
@@ -90,6 +113,36 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.kb-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-soft) 86%, transparent);
+  color: var(--text-muted);
+  cursor: grab;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.kb-drag-handle:active {
+  cursor: grabbing;
+}
+
+.kb-drag-handle.is-static {
+  pointer-events: none;
+}
+
+.kb-drag-handle:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .kb-control-row {
@@ -131,17 +184,6 @@
   font-size: 0.72rem;
 }
 
-.kb-drop-marker {
-  height: 0;
-  border-top: 2px solid transparent;
-  border-radius: var(--radius-pill);
-  transition: border-color 90ms ease;
-}
-
-.kb-drop-marker.is-visible {
-  border-color: color-mix(in srgb, var(--accent-a) 75%, transparent);
-}
-
 @media (max-width: 760px) {
   .kb-control-row {
     grid-template-columns: 1fr;
@@ -149,5 +191,9 @@
 
   .kb-edit-btn {
     width: 100%;
+  }
+
+  .kb-story {
+    max-width: 100px;
   }
 }

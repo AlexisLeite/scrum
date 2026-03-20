@@ -1,6 +1,6 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
-import { NavLink, Navigate, Route, Routes, useNavigate, useSearchParams } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthController, ProductController } from "./controllers";
 import { ProductWorkspaceLayout } from "./layouts/ProductWorkspaceLayout";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -24,6 +24,11 @@ import {
   SprintPlanningView,
   StoryTasksView
 } from "./views/ProductWorkspaceViews";
+import {
+  SprintDefinitionView,
+  StoryDefinitionView,
+  TaskDefinitionView
+} from "./views/product-workspace/ProductDefinitionViews";
 import { AdminRolesView } from "./views/backoffice/AdminRolesView";
 import { ProductsBackofficeView } from "./views/backoffice/ProductsBackofficeView";
 import { TeamsBackofficeView } from "./views/backoffice/TeamsBackofficeView";
@@ -34,10 +39,24 @@ export const App = observer(function App() {
   const store = useRootStore();
   const auth = React.useMemo(() => new AuthController(store), [store]);
 
-  React.useEffect(() => { void auth.refreshMe(); }, [auth]);
+  React.useEffect(() => {
+    let active = true;
+    store.session.setLoading(true);
+    void auth.refreshMe().finally(() => {
+      if (!active) {
+        return;
+      }
+      store.session.setLoading(false);
+      store.session.setHydrated(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [auth, store.session]);
 
   const user = store.session.user;
   const isAuthed = Boolean(user);
+  const showGuestNavigation = store.session.hydrated && !isAuthed;
 
   return (
     <div className="app-shell">
@@ -55,12 +74,12 @@ export const App = observer(function App() {
               <NavLink to="/profile" className={({ isActive }) => isActive ? "topnav-link active" : "topnav-link"}>Perfil</NavLink>
               {user?.role === "platform_admin" ? <NavLink to="/admin" className={({ isActive }) => isActive ? "topnav-link active" : "topnav-link"}>Admin</NavLink> : null}
             </>
-          ) : (
+          ) : showGuestNavigation ? (
             <>
               <NavLink to="/login" className={({ isActive }) => isActive ? "topnav-link active" : "topnav-link"}>Login</NavLink>
               <NavLink to="/signup" className={({ isActive }) => isActive ? "topnav-link active" : "topnav-link"}>Registro</NavLink>
             </>
-          )}
+          ) : null}
         </nav>
         <div className="topbar-right">
           {isAuthed ? <span className="pill">{user?.name}</span> : null}
@@ -85,9 +104,12 @@ export const App = observer(function App() {
             <Route path={productRoutes.overview} element={<ProductOverviewView />} />
             <Route path={productRoutes.backlog} element={<ProductBacklogView />} />
             <Route path={productRoutes.storyTasks} element={<StoryTasksView />} />
+            <Route path={productRoutes.storyDefinition} element={<StoryDefinitionView />} />
             <Route path={productRoutes.sprints} element={<SprintPlanningView />} />
+            <Route path={productRoutes.sprintDefinition} element={<SprintDefinitionView />} />
             <Route path={productRoutes.board} element={<SprintBoardView />} />
             <Route path={productRoutes.metrics} element={<ProductMetricsView />} />
+            <Route path={productRoutes.taskDefinition} element={<TaskDefinitionView />} />
           </Route>
 
           <Route path="/products/:productId/stories/:storyId/tasks" element={<Protected><LegacyStoryTasksRedirect /></Protected>} />
@@ -154,7 +176,21 @@ const Home = observer(function Home() {
 
 function Protected({ children }: { children: React.ReactNode }) {
   const store = useRootStore();
-  if (!store.session.user) return <Navigate to="/login" replace />;
+  const location = useLocation();
+
+  if (!store.session.hydrated || store.session.loading) {
+    return (
+      <section className="card page-state">
+        <h2>Restaurando sesion</h2>
+        <p>Verificando credenciales antes de resolver la navegacion actual.</p>
+      </section>
+    );
+  }
+
+  if (!store.session.user) {
+    const from = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?from=${encodeURIComponent(from)}`} replace />;
+  }
   return <>{children}</>;
 }
 
@@ -162,14 +198,17 @@ const LoginView = observer(function LoginView() {
   const store = useRootStore();
   const auth = React.useMemo(() => new AuthController(store), [store]);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const returnTo = resolveReturnTo(searchParams.get("from"), location.state);
 
   return (
     <section className="card narrow">
       <h2>Iniciar sesion</h2>
       <div className="form-grid"><label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label></div>
-      <div className="row-actions"><button className="btn btn-primary" onClick={async () => { try { await auth.login({ email, password }); navigate("/"); } catch { return; } }}>Entrar</button><button className="btn btn-secondary" onClick={() => void auth.getGitLabRedirect()}>Entrar con GitLab</button></div>
+      <div className="row-actions"><button className="btn btn-primary" onClick={async () => { try { await auth.login({ email, password }); navigate(returnTo, { replace: true }); } catch { return; } }}>Entrar</button><button className="btn btn-secondary" onClick={() => void auth.getGitLabRedirect()}>Entrar con GitLab</button></div>
       {store.session.error ? <p className="error-text">{store.session.error}</p> : null}
     </section>
   );
@@ -179,15 +218,18 @@ const SignupView = observer(function SignupView() {
   const store = useRootStore();
   const auth = React.useMemo(() => new AuthController(store), [store]);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = React.useState("");
   const [name, setName] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const returnTo = resolveReturnTo(searchParams.get("from"), location.state);
 
   return (
     <section className="card narrow">
       <h2>Crear cuenta</h2>
       <div className="form-grid"><label>Nombre<input value={name} onChange={(event) => setName(event.target.value)} /></label><label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label></div>
-      <button className="btn btn-primary" onClick={async () => { try { await auth.signup({ email, name, password }); navigate("/"); } catch { return; } }}>Crear cuenta</button>
+      <button className="btn btn-primary" onClick={async () => { try { await auth.signup({ email, name, password }); navigate(returnTo, { replace: true }); } catch { return; } }}>Crear cuenta</button>
       {store.session.error ? <p className="error-text">{store.session.error}</p> : null}
     </section>
   );
@@ -219,6 +261,23 @@ const GitlabCallbackView = observer(function GitlabCallbackView() {
 
   return <section className="card narrow"><p>{message}</p></section>;
 });
+
+function resolveReturnTo(rawFrom: string | null, state: unknown): string {
+  const fromState = typeof state === "object" && state !== null && "from" in state
+    ? (state as { from?: { pathname?: string; search?: string; hash?: string } }).from
+    : undefined;
+
+  const statePath = fromState?.pathname
+    ? `${fromState.pathname}${fromState.search ?? ""}${fromState.hash ?? ""}`
+    : "";
+  const candidate = rawFrom || statePath || "/";
+
+  if (!candidate.startsWith("/") || candidate.startsWith("//") || candidate.startsWith("/login")) {
+    return "/";
+  }
+
+  return candidate;
+}
 
 const ProfileView = observer(function ProfileView() {
   const store = useRootStore();

@@ -12,6 +12,7 @@ export interface NamedEntity {
 export class SessionStore {
   user: UserProfileDto | null = null;
   loading = false;
+  hydrated = false;
   error: string | null = null;
 
   constructor() {
@@ -24,6 +25,10 @@ export class SessionStore {
 
   setLoading(value: boolean) {
     this.loading = value;
+  }
+
+  setHydrated(value: boolean) {
+    this.hydrated = value;
   }
 
   setError(value: string | null) {

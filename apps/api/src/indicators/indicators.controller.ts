@@ -19,8 +19,8 @@ export class IndicatorsController {
   }
 
   @Get("teams/:teamId/velocity")
-  teamVelocity(@CurrentUser() user: AuthUser, @Param("teamId") teamId: string) {
-    return this.indicatorsService.teamVelocity(teamId, user);
+  teamVelocity(@CurrentUser() user: AuthUser, @Param("teamId") teamId: string, @Query("window") window?: string) {
+    return this.indicatorsService.teamVelocity(teamId, user, window);
   }
 
   @Get("products/:productId/stats")
@@ -38,8 +38,8 @@ export class IndicatorsController {
   }
 
   @Get("users/:userId/velocity")
-  userVelocity(@CurrentUser() user: AuthUser, @Param("userId") userId: string) {
-    return this.indicatorsService.userVelocity(userId, user);
+  userVelocity(@CurrentUser() user: AuthUser, @Param("userId") userId: string, @Query("window") window?: string) {
+    return this.indicatorsService.userVelocity(userId, user, window);
   }
 
   @Get("users/:userId/stats")

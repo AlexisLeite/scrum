@@ -10,8 +10,10 @@ import {
 import { useRootStore } from "../stores/root-store";
 import { SprintUpsertionDrawer } from "../ui/drawers/product-workspace/SprintUpsertionDrawer";
 import { StoryUpsertionDrawer } from "../ui/drawers/product-workspace/StoryUpsertionDrawer";
+import { TaskCompletionDialog } from "../ui/drawers/product-workspace/TaskCompletionDialog";
 import { TaskUpsertionDrawer } from "../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { KanbanBoard } from "../ui/kanban";
+import { ProductMetricsPanel } from "./product-workspace/ProductMetricsPanel";
 
 type StoryStatus = "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
 type SprintStatus = "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
@@ -46,6 +48,7 @@ type TaskItem = {
   effortPoints: number | null;
   estimatedHours: number | null;
   remainingHours: number | null;
+  actualHours?: number | null;
 };
 type TeamMember = { userId: string; user?: { id: string; name: string; email: string } };
 type TeamItem = { id: string; name: string; description: string | null; members?: TeamMember[] };
@@ -62,6 +65,7 @@ type BoardTask = {
   effortPoints?: number | null;
   estimatedHours?: number | null;
   remainingHours?: number | null;
+  actualHours?: number | null;
   assignee?: { id: string; name: string } | null;
   story?: { id: string; title: string } | null;
 };
@@ -313,6 +317,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
   const { productId, storyId } = useParams<{ productId: string; storyId: string }>();
   const [formError, setFormError] = React.useState("");
   const [updatingTaskId, setUpdatingTaskId] = React.useState("");
+  const [completionRequest, setCompletionRequest] = React.useState<{ taskId: string; title: string } | null>(null);
 
   React.useEffect(() => {
     if (!storyId || !productId) return;
@@ -340,11 +345,19 @@ export const StoryTasksView = observer(function StoryTasksView() {
     await Promise.all([controller.loadTasks(storyId), controller.loadStories(productId)]);
   };
 
-  const updateTaskStatus = async (taskId: string, nextStatus: string) => {
+  const updateTaskStatus = async (task: TaskItem, nextStatus: string, actualHours?: number) => {
     setFormError("");
-    setUpdatingTaskId(taskId);
+    setUpdatingTaskId(task.id);
     try {
-      await controller.updateTaskStatus(taskId, nextStatus);
+      if (nextStatus === "Done") {
+        await controller.updateTask(task.id, {
+          status: nextStatus,
+          actualHours,
+          remainingHours: 0
+        });
+      } else {
+        await controller.updateTaskStatus(task.id, nextStatus);
+      }
       await reloadStoryTasks();
     } catch (statusError) {
       setFormError(getErrorMessage(statusError));
@@ -411,7 +424,14 @@ export const StoryTasksView = observer(function StoryTasksView() {
                 <td>
                   <select
                     value={task.status}
-                    onChange={(event) => void updateTaskStatus(task.id, event.target.value)}
+                    onChange={(event) => {
+                      const nextStatus = event.target.value;
+                      if (nextStatus === "Done" && task.status !== "Done" && task.actualHours == null) {
+                        setCompletionRequest({ taskId: task.id, title: task.title });
+                        return;
+                      }
+                      void updateTaskStatus(task, nextStatus, task.actualHours ?? undefined);
+                    }}
                     disabled={updatingTaskId === task.id}
                   >
                     {statusOptions.map((option) => (
@@ -427,6 +447,8 @@ export const StoryTasksView = observer(function StoryTasksView() {
                   <small>Est.: {task.estimatedHours ?? "-"}</small>
                   <br />
                   <small>Rest.: {task.remainingHours ?? "-"}</small>
+                  <br />
+                  <small>Real: {task.actualHours ?? "-"}</small>
                 </td>
                 <td>
                   <button className="btn btn-secondary" onClick={() => openTaskDrawer(task)}>
@@ -443,6 +465,18 @@ export const StoryTasksView = observer(function StoryTasksView() {
           </tbody>
         </table>
       </section>
+      <TaskCompletionDialog
+        open={Boolean(completionRequest)}
+        taskTitle={completionRequest?.title ?? "esta tarea"}
+        onCancel={() => setCompletionRequest(null)}
+        onConfirm={(hours) => {
+          const task = tasks.find((entry) => entry.id === completionRequest?.taskId);
+          setCompletionRequest(null);
+          if (task) {
+            void updateTaskStatus(task, "Done", hours);
+          }
+        }}
+      />
     </div>
   );
 });
@@ -600,7 +634,8 @@ export const SprintBoardView = observer(function SprintBoardView() {
               assigneeId: task.assignee?.id ?? task.assigneeId ?? null,
               effortPoints: task.effortPoints ?? null,
               estimatedHours: task.estimatedHours ?? null,
-              remainingHours: task.remainingHours ?? null
+              remainingHours: task.remainingHours ?? null,
+              actualHours: task.actualHours ?? null
             }
           : undefined,
         fixedSprintId: task ? undefined : sprintId,
@@ -613,11 +648,11 @@ export const SprintBoardView = observer(function SprintBoardView() {
     );
   };
 
-  const updateBoardTaskStatus = async (taskId: string, nextStatus: string) => {
+  const updateBoardTaskStatus = async (taskId: string, nextStatus: string, actualHours?: number) => {
     setBoardError("");
     setPendingTaskIds((previous) => ({ ...previous, [taskId]: true }));
     try {
-      await controller.updateTaskStatus(taskId, nextStatus);
+      await controller.updateTaskStatus(taskId, nextStatus, actualHours);
       await reloadBoardData();
       await controller.loadStories(productId);
     } catch (statusError) {
@@ -649,11 +684,11 @@ export const SprintBoardView = observer(function SprintBoardView() {
     }
   };
 
-  const moveBoardTask = async (taskId: string, status: string, position: number) => {
+  const moveBoardTask = async (taskId: string, status: string, position: number, actualHours?: number) => {
     setBoardError("");
     setPendingTaskIds((previous) => ({ ...previous, [taskId]: true }));
     try {
-      await controller.moveBoardTask(sprintId, taskId, { status, position });
+      await controller.moveBoardTask(sprintId, taskId, { status, position, actualHours });
       await reloadBoardData();
       await controller.loadStories(productId);
     } catch (moveError) {
@@ -738,7 +773,13 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
   const [userId, setUserId] = React.useState("");
   const [sprintId, setSprintId] = React.useState("");
   const [statsError, setStatsError] = React.useState("");
-  const [productStats, setProductStats] = React.useState<Record<string, unknown> | null>(null);
+  const [productStats, setProductStats] = React.useState<{
+    window: string;
+    from: string;
+    to: string;
+    tasks: { worked: number; completed: number; completionRate: number };
+    velocity: { completedPoints: number; completedSprints: number; averagePointsPerSprint: number };
+  } | null>(null);
 
   React.useEffect(() => {
     if (productId) void controller.loadSprints(productId);
@@ -749,6 +790,69 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
   const sprints = store.sprints.items as SprintItem[];
   const teams = store.teams.items as TeamItem[];
   const assignableUsers = buildAssignableUsers(teams);
+  const selectedSprint = sprints.find((sprint) => sprint.id === sprintId);
+  const selectedTeam = teams.find((team) => team.id === teamId);
+  const selectedUser = assignableUsers.find((user) => user.id === userId);
+
+  React.useEffect(() => {
+    if (sprints.length === 0 || sprintId) return;
+    setSprintId(sprints.find((sprint) => sprint.status === "ACTIVE")?.id ?? sprints[0].id);
+  }, [sprintId, sprints]);
+
+  React.useEffect(() => {
+    if (teams.length === 0 || teamId) return;
+    setTeamId(teams[0].id);
+  }, [teamId, teams]);
+
+  React.useEffect(() => {
+    if (assignableUsers.length === 0 || userId) return;
+    setUserId(assignableUsers[0].id);
+  }, [assignableUsers, userId]);
+
+  React.useEffect(() => {
+    if (selectedSprint?.teamId && selectedSprint.teamId !== teamId) {
+      setTeamId(selectedSprint.teamId);
+    }
+  }, [selectedSprint?.teamId, teamId]);
+
+  React.useEffect(() => {
+    let active = true;
+
+    const loadMetrics = async () => {
+      setStatsError("");
+      try {
+        const jobs: Array<Promise<unknown>> = [
+          controller.loadProductStatsByWindow(productId, windowSize).then((stats) => {
+            if (active) {
+              setProductStats(stats);
+            }
+          })
+        ];
+
+        if (sprintId) {
+          jobs.push(controller.loadBurnupByWindow(productId, sprintId, windowSize));
+        }
+        if (teamId) {
+          jobs.push(controller.loadTeamVelocityByWindow(teamId, windowSize));
+        }
+        if (userId) {
+          jobs.push(controller.loadUserVelocityByWindow(userId, windowSize));
+        }
+
+        await Promise.all(jobs);
+      } catch (error) {
+        if (active) {
+          setStatsError(getErrorMessage(error));
+        }
+      }
+    };
+
+    void loadMetrics();
+
+    return () => {
+      active = false;
+    };
+  }, [controller, productId, sprintId, teamId, userId, windowSize]);
 
   return (
     <div className="stack-lg">
@@ -758,10 +862,10 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
           <label>
             Ventana
             <select value={windowSize} onChange={(event) => setWindowSize(event.target.value as "week" | "month" | "semester" | "year")}>
-              <option value="week">week</option>
-              <option value="month">month</option>
-              <option value="semester">semester</option>
-              <option value="year">year</option>
+              <option value="week">Ultima semana</option>
+              <option value="month">Ultimo mes</option>
+              <option value="semester">Ultimos 6 meses</option>
+              <option value="year">Ultimo ano</option>
             </select>
           </label>
           <label>
@@ -798,90 +902,23 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
             </select>
           </label>
         </div>
-        <div className="row-actions compact">
-          <button
-            className="btn btn-secondary"
-            disabled={!sprintId}
-            onClick={async () => {
-              setStatsError("");
-              try {
-                await controller.loadBurnupByWindow(productId, sprintId, windowSize);
-                const stats = await controller.loadProductStatsByWindow(productId, windowSize);
-                setProductStats(stats);
-              } catch (error) {
-                setStatsError(getErrorMessage(error));
-              }
-            }}
-          >
-            Cargar burn chart
-          </button>
-          <button
-            className="btn btn-secondary"
-            disabled={!teamId}
-            onClick={async () => {
-              setStatsError("");
-              try {
-                await controller.loadTeamVelocityByWindow(teamId, windowSize);
-              } catch (error) {
-                setStatsError(getErrorMessage(error));
-              }
-            }}
-          >
-            Velocidad equipo
-          </button>
-          <button
-            className="btn btn-secondary"
-            disabled={!userId}
-            onClick={async () => {
-              setStatsError("");
-              try {
-                await controller.loadUserVelocityByWindow(userId, windowSize);
-              } catch (error) {
-                setStatsError(getErrorMessage(error));
-              }
-            }}
-          >
-            Velocidad usuario
-          </button>
-        </div>
+        <p className="muted">Las metricas se actualizan automaticamente cuando cambias la ventana, sprint, equipo o usuario.</p>
         {statsError ? <p className="error-text">{statsError}</p> : null}
-        {productStats ? (
-          <div className="row-actions compact">
-            <span className="pill">Stats producto ({windowSize})</span>
-            <code>{JSON.stringify(productStats)}</code>
-          </div>
-        ) : null}
       </section>
-      <section className="card">
-        <h3>Burnup</h3>
-        <ReactECharts
-          option={{
-            tooltip: { trigger: "axis" },
-            xAxis: { type: "category", data: store.burnup.map((item) => item.date) },
-            yAxis: { type: "value" },
-            series: [{ name: "Completado", type: "bar", data: store.burnup.map((item) => item.completedPoints) }]
-          }}
-          style={{ height: 300 }}
-        />
-      </section>
-      <section className="metrics-grid">
-        <article className="card">
-          <h3>Velocidad equipo</h3>
-          <ul className="plain-list">
-            {store.teamVelocity.map((point, index) => (
-              <li key={`${point.sprintName}-${index}`}>{point.sprintName}: {point.completedPoints} pts</li>
-            ))}
-          </ul>
-        </article>
-        <article className="card">
-          <h3>Velocidad usuario</h3>
-          <ul className="plain-list">
-            {store.userVelocity.map((point, index) => (
-              <li key={`${point.sprintName}-${index}`}>{point.sprintName}: {point.completedPoints} pts</li>
-            ))}
-          </ul>
-        </article>
-      </section>
+      <ProductMetricsPanel
+        windowSize={windowSize}
+        sprintName={selectedSprint?.name ?? ""}
+        teamName={selectedTeam?.name ?? ""}
+        userName={selectedUser?.name ?? ""}
+        productStats={productStats}
+        burnup={store.burnup}
+        teamVelocity={store.teamVelocity}
+        userVelocity={store.userVelocity}
+      />
     </div>
   );
 });
+
+
+
+

@@ -16,6 +16,7 @@ import {
   ListsToggle,
   markdownShortcutPlugin,
   MDXEditor,
+  MDXEditorMethods,
   quotePlugin,
   Separator,
   tablePlugin,
@@ -51,11 +52,24 @@ const CODE_BLOCK_LANGUAGES: Record<string, string> = {
 export function RichDescriptionField(props: RichDescriptionFieldProps) {
   const { label, value, onChange, rows = 6 } = props;
   const minHeight = Math.max(rows, 4) * 24;
+  const editorRef = React.useRef<MDXEditorMethods | null>(null);
+
+  React.useEffect(() => {
+    if (!editorRef.current) {
+      return;
+    }
+    const currentMarkdown = editorRef.current.getMarkdown();
+    const nextMarkdown = value || "";
+    if (currentMarkdown !== nextMarkdown) {
+      editorRef.current.setMarkdown(nextMarkdown);
+    }
+  }, [value]);
 
   return (
     <div className="rich-description-field">
       <span className="rich-description-label">{label}</span>
       <MDXEditor
+        ref={editorRef}
         markdown={value || ""}
         onChange={(nextValue) => onChange(nextValue)}
         className="rich-description-editor"

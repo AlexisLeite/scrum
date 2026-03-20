@@ -1,0 +1,72 @@
+.task-search-picker {
+  position: relative;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.task-search-picker-label {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.task-search-picker-label > span {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.task-search-picker-label input {
+  width: 100%;
+}
+
+.task-search-picker-panel {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  box-shadow: var(--shadow-surface);
+  backdrop-filter: blur(18px);
+}
+
+.task-search-picker-list {
+  display: grid;
+  gap: 0.55rem;
+  max-height: 22rem;
+  overflow: auto;
+}
+
+.task-search-picker-option {
+  display: grid;
+  gap: 0.38rem;
+  width: 100%;
+  padding: 0.8rem 0.85rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.task-search-picker-option:hover,
+.task-search-picker-option.is-active {
+  border-color: color-mix(in srgb, var(--accent-a) 42%, var(--border));
+  background: color-mix(in srgb, var(--bg-hover) 88%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-a) 12%, transparent);
+}
+
+.task-search-picker-option-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.task-search-picker-option .status {
+  justify-self: flex-start;
+}

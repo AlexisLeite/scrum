@@ -79,8 +79,10 @@ export class ActivityService {
       this.prisma.activityLog.count({ where })
     ]);
 
+    const enrichedItems = await this.decorateItems(items);
+
     return {
-      items,
+      items: enrichedItems,
       page: pagination.page,
       pageSize: pagination.pageSize,
       total
@@ -132,8 +134,10 @@ export class ActivityService {
       this.prisma.activityLog.count({ where })
     ]);
 
+    const enrichedItems = await this.decorateItems(items);
+
     return {
-      items,
+      items: enrichedItems,
       page: pagination.page,
       pageSize: pagination.pageSize,
       total
@@ -282,6 +286,236 @@ export class ActivityService {
       return Prisma.JsonNull;
     }
     return value as Prisma.InputJsonValue;
+  }
+
+  private async decorateItems(
+    items: Array<{
+      entityType: ActivityEntityType;
+      entityId: string;
+      action: string;
+      metadataJson: unknown;
+      actorUser?: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+      } | null;
+      [key: string]: unknown;
+    }>
+  ) {
+    const taskIds = new Set<string>();
+    const storyIds = new Set<string>();
+    const sprintIds = new Set<string>();
+    const productIds = new Set<string>();
+    const teamIds = new Set<string>();
+    const messageIds = new Set<string>();
+
+    const collectString = (set: Set<string>, value: unknown) => {
+      if (typeof value === "string" && value.trim()) {
+        set.add(value);
+      }
+    };
+
+    for (const item of items) {
+      if (item.entityType === ActivityEntityType.TASK) collectString(taskIds, item.entityId);
+      if (item.entityType === ActivityEntityType.STORY) collectString(storyIds, item.entityId);
+      if (item.entityType === ActivityEntityType.SPRINT) collectString(sprintIds, item.entityId);
+      if (item.entityType === ActivityEntityType.PRODUCT) collectString(productIds, item.entityId);
+      if (item.entityType === ActivityEntityType.TEAM) collectString(teamIds, item.entityId);
+
+      const metadata = this.asRecord(item.metadataJson);
+      collectString(taskIds, metadata.taskId);
+      collectString(taskIds, metadata.parentTaskId);
+      collectString(taskIds, metadata.sourceTaskId);
+      collectString(storyIds, metadata.storyId);
+      collectString(sprintIds, metadata.sprintId);
+      collectString(productIds, metadata.productId);
+      collectString(teamIds, metadata.teamId);
+      collectString(messageIds, metadata.messageId);
+      collectString(messageIds, metadata.parentMessageId);
+      collectString(messageIds, metadata.sourceMessageId);
+    }
+
+    const [tasks, stories, sprints, products, teams, messages] = await Promise.all([
+      taskIds.size > 0
+        ? this.prisma.task.findMany({
+            where: { id: { in: Array.from(taskIds) } },
+            select: { id: true, title: true, status: true }
+          })
+        : [],
+      storyIds.size > 0
+        ? this.prisma.userStory.findMany({
+            where: { id: { in: Array.from(storyIds) } },
+            select: { id: true, title: true, status: true }
+          })
+        : [],
+      sprintIds.size > 0
+        ? this.prisma.sprint.findMany({
+            where: { id: { in: Array.from(sprintIds) } },
+            select: { id: true, name: true, status: true }
+          })
+        : [],
+      productIds.size > 0
+        ? this.prisma.product.findMany({
+            where: { id: { in: Array.from(productIds) } },
+            select: { id: true, name: true, key: true }
+          })
+        : [],
+      teamIds.size > 0
+        ? this.prisma.team.findMany({
+            where: { id: { in: Array.from(teamIds) } },
+            select: { id: true, name: true }
+          })
+        : [],
+      messageIds.size > 0
+        ? this.prisma.taskMessage.findMany({
+            where: { id: { in: Array.from(messageIds) } },
+            select: { id: true, body: true, taskId: true }
+          })
+        : []
+    ]);
+
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    const storyById = new Map(stories.map((story) => [story.id, story]));
+    const sprintById = new Map(sprints.map((sprint) => [sprint.id, sprint]));
+    const productById = new Map(products.map((product) => [product.id, product]));
+    const teamById = new Map(teams.map((team) => [team.id, team]));
+    const messageById = new Map(messages.map((message) => [message.id, message]));
+
+    return items.map((item) => {
+      const metadata = this.asRecord(item.metadataJson);
+      const detail = {
+        entityLabel: this.resolveEntityLabel(item.entityType, item.entityId, {
+          taskById,
+          storyById,
+          sprintById,
+          productById,
+          teamById
+        }),
+        task: typeof metadata.taskId === "string" ? taskById.get(metadata.taskId) ?? null : null,
+        parentTask: typeof metadata.parentTaskId === "string" ? taskById.get(metadata.parentTaskId) ?? null : null,
+        sourceTask: typeof metadata.sourceTaskId === "string" ? taskById.get(metadata.sourceTaskId) ?? null : null,
+        story: typeof metadata.storyId === "string" ? storyById.get(metadata.storyId) ?? null : null,
+        sprint: typeof metadata.sprintId === "string" ? sprintById.get(metadata.sprintId) ?? null : null,
+        product: typeof metadata.productId === "string" ? productById.get(metadata.productId) ?? null : null,
+        team: typeof metadata.teamId === "string" ? teamById.get(metadata.teamId) ?? null : null,
+        message:
+          typeof metadata.messageId === "string"
+            ? messageById.get(metadata.messageId) ?? null
+            : typeof metadata.sourceMessageId === "string"
+              ? messageById.get(metadata.sourceMessageId) ?? null
+              : null
+      };
+
+      return {
+        ...item,
+        detail: {
+          ...detail,
+          summary: this.buildSummary(item.action, metadata, detail)
+        }
+      };
+    });
+  }
+
+  private resolveEntityLabel(
+    entityType: ActivityEntityType,
+    entityId: string,
+    maps: {
+      taskById: Map<string, { title: string }>;
+      storyById: Map<string, { title: string }>;
+      sprintById: Map<string, { name: string }>;
+      productById: Map<string, { name: string; key: string }>;
+      teamById: Map<string, { name: string }>;
+    }
+  ) {
+    if (entityType === ActivityEntityType.TASK) {
+      return maps.taskById.get(entityId)?.title ?? entityId;
+    }
+    if (entityType === ActivityEntityType.STORY) {
+      return maps.storyById.get(entityId)?.title ?? entityId;
+    }
+    if (entityType === ActivityEntityType.SPRINT) {
+      return maps.sprintById.get(entityId)?.name ?? entityId;
+    }
+    if (entityType === ActivityEntityType.PRODUCT) {
+      const product = maps.productById.get(entityId);
+      return product ? `${product.key} ${product.name}` : entityId;
+    }
+    if (entityType === ActivityEntityType.TEAM) {
+      return maps.teamById.get(entityId)?.name ?? entityId;
+    }
+    return entityId;
+  }
+
+  private buildSummary(
+    action: string,
+    metadata: Record<string, unknown>,
+    detail: {
+      entityLabel: string;
+      task: { title: string } | null;
+      parentTask: { title: string } | null;
+      sourceTask: { title: string } | null;
+      story: { title: string } | null;
+      sprint: { name: string } | null;
+      product: { name: string; key: string } | null;
+      team: { name: string } | null;
+      message: { body: string } | null;
+    }
+  ) {
+    if (action === "SPRINT_TASK_ADDED") {
+      return `Se agrego la tarea "${detail.task?.title ?? detail.entityLabel}" al sprint.`;
+    }
+    if (action === "SPRINT_TASK_REMOVED") {
+      return `Se quito la tarea "${detail.task?.title ?? detail.entityLabel}" del sprint.`;
+    }
+    if (action === "SPRINT_TASK_CREATED") {
+      return `Se creo la tarea "${detail.task?.title ?? detail.entityLabel}" dentro del sprint "${detail.entityLabel}".`;
+    }
+    if (action === "TASK_CREATED_FROM_MESSAGE") {
+      return `Se creo la tarea "${detail.entityLabel}" a partir de un mensaje${detail.sourceTask ? ` en "${detail.sourceTask.title}"` : ""}.`;
+    }
+    if (action === "TASK_MESSAGE_CREATED") {
+      const preview = typeof metadata.bodyPreview === "string" ? metadata.bodyPreview : detail.message?.body?.slice(0, 140);
+      return `Nuevo mensaje en "${detail.entityLabel}": ${preview ?? "sin detalle"}`;
+    }
+    if (action === "TASK_CREATED" || action === "TASK_CREATED_IN_SPRINT") {
+      return `Se creo la tarea "${detail.entityLabel}".`;
+    }
+    if (action === "TASK_DELETED") {
+      return `Se elimino la tarea "${detail.entityLabel}".`;
+    }
+    if (action === "TASK_STATUS_UPDATED") {
+      return `Se actualizo el estado de "${detail.entityLabel}".`;
+    }
+    if (action === "TASK_ASSIGNED") {
+      return `Se actualizo la asignacion de "${detail.entityLabel}".`;
+    }
+    if (action === "TASK_MOVED_ON_BOARD") {
+      const fromStatus = typeof metadata.fromStatus === "string" ? metadata.fromStatus : "columna anterior";
+      const toStatus = typeof metadata.toStatus === "string" ? metadata.toStatus : "nueva columna";
+      return `Se movio "${detail.entityLabel}" de ${fromStatus} a ${toStatus}.`;
+    }
+    if (action === "TASK_UPDATED") {
+      const changedFields = Array.isArray(metadata.changedFields) ? metadata.changedFields.join(", ") : "propiedades";
+      return `Se actualizaron ${changedFields} en "${detail.entityLabel}".`;
+    }
+    if (action === "SPRINT_CREATED") {
+      return `Se creo el sprint "${detail.entityLabel}".`;
+    }
+    if (action === "SPRINT_STARTED") {
+      return `Se inicio el sprint "${detail.entityLabel}".`;
+    }
+    if (action === "SPRINT_COMPLETED") {
+      return `Se completo el sprint "${detail.entityLabel}".`;
+    }
+    return action;
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+    return {};
   }
 
 }

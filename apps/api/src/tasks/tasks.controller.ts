@@ -4,6 +4,8 @@ import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { Roles } from "../common/roles.decorator";
 import {
   AssignTaskDto,
+  CreateTaskFromMessageDto,
+  CreateTaskMessageDto,
   CreateTaskDto,
   UpdateTaskDto,
   UpdateTaskStatusDto
@@ -18,6 +20,16 @@ export class TasksController {
   @Get("stories/:storyId/tasks")
   listByStory(@CurrentUser() user: AuthUser, @Param("storyId") storyId: string) {
     return this.tasksService.listByStory(storyId, user);
+  }
+
+  @Get("tasks/:id/detail")
+  getDetail(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.tasksService.getDetail(id, user);
+  }
+
+  @Get("tasks/:id/messages")
+  listMessages(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.tasksService.listMessages(id, user);
   }
 
   @Post("stories/:storyId/tasks")
@@ -41,7 +53,7 @@ export class TasksController {
   @Patch("tasks/:id/status")
   @Roles("platform_admin", "product_owner", "scrum_master", "team_member")
   updateStatus(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: UpdateTaskStatusDto) {
-    return this.tasksService.updateStatus(id, dto.status, user);
+    return this.tasksService.updateStatus(id, dto.status, user, dto.actualHours);
   }
 
   @Patch("tasks/:id/assign")
@@ -49,4 +61,22 @@ export class TasksController {
   assign(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: AssignTaskDto) {
     return this.tasksService.assign(id, dto.assigneeId, dto.sprintId, user);
   }
+
+  @Post("tasks/:id/messages")
+  @Roles("platform_admin", "product_owner", "scrum_master", "team_member")
+  addMessage(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: CreateTaskMessageDto) {
+    return this.tasksService.addMessage(id, dto, user);
+  }
+
+  @Post("tasks/:id/messages/:messageId/tasks")
+  @Roles("platform_admin", "product_owner", "scrum_master", "team_member")
+  createFromMessage(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Param("messageId") messageId: string,
+    @Body() dto: CreateTaskFromMessageDto
+  ) {
+    return this.tasksService.createFromMessage(id, messageId, dto, user);
+  }
 }
+

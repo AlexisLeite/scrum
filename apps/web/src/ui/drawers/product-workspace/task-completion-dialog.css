@@ -1,0 +1,31 @@
+.task-completion-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: color-mix(in srgb, #08111d 54%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+.task-completion-dialog {
+  width: min(100%, 520px);
+  display: grid;
+  gap: 0.9rem;
+  padding: 1.1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-surface);
+}
+
+.task-completion-dialog-head h3 {
+  margin-bottom: 0;
+}
+
+.task-completion-dialog-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

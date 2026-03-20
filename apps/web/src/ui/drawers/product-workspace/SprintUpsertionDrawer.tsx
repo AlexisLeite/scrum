@@ -1,8 +1,12 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { ProductController } from "../../../controllers";
+import { productSprintDefinitionPath } from "../../../routes/product-routes";
+import { TaskSearchPicker } from "../../../components/TaskSearchPicker";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { RichDescriptionField } from "./RichDescriptionField";
+import "./sprint-upsertion-form.css";
 
 type SprintTeamOption = { id: string; name: string };
 
@@ -37,19 +41,48 @@ function asDateInput(value: string | null | undefined): string {
   return value.slice(0, 10);
 }
 
+function normalize(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function taskMatchesQuery(task: PendingTask, query: string): boolean {
+  const normalizedQuery = normalize(query);
+  if (!normalizedQuery) return true;
+  return [task.title, task.story?.title, task.assignee?.name, task.status]
+    .map(normalize)
+    .join(" ")
+    .includes(normalizedQuery);
+}
+
 export class SprintUpsertionDrawer extends Drawer {
   constructor(private readonly options: SprintUpsertionDrawerOptions) {
     super(options.sprint ? "Editar sprint" : "Nuevo sprint", { size: "lg" });
   }
 
   render(context: DrawerRenderContext): React.ReactNode {
-    return <SprintUpsertionForm options={this.options} close={context.close} />;
+    return (
+      <SprintUpsertionForm
+        options={this.options}
+        close={context.close}
+        definitionHref={
+          this.options.sprint ? productSprintDefinitionPath(this.options.productId, this.options.sprint.id) : undefined
+        }
+      />
+    );
   }
 }
 
-function SprintUpsertionForm(props: { options: SprintUpsertionDrawerOptions; close: () => void }) {
-  const { options, close } = props;
+export function SprintUpsertionForm(props: {
+  options: SprintUpsertionDrawerOptions;
+  close: () => void;
+  closeLabel?: string;
+  definitionHref?: string;
+  closeOnSubmit?: boolean;
+  showCloseAction?: boolean;
+}) {
+  const { options, close, closeLabel = "Cancelar", definitionHref, closeOnSubmit = true, showCloseAction = true } = props;
   const { controller, productId, teams, sprint, onDone } = options;
+  const navigate = useNavigate();
 
   const [name, setName] = React.useState(sprint?.name ?? "");
   const [goal, setGoal] = React.useState(sprint?.goal ?? "");
@@ -61,6 +94,7 @@ function SprintUpsertionForm(props: { options: SprintUpsertionDrawerOptions; clo
   const [pendingTasks, setPendingTasks] = React.useState<PendingTask[]>([]);
   const [sprintTasks, setSprintTasks] = React.useState<PendingTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(false);
+  const [sprintTaskQuery, setSprintTaskQuery] = React.useState("");
 
   const loadTaskPools = React.useCallback(async () => {
     if (!sprint) return;
@@ -107,7 +141,9 @@ function SprintUpsertionForm(props: { options: SprintUpsertionDrawerOptions; clo
       if (onDone) {
         await onDone();
       }
-      close();
+      if (closeOnSubmit) {
+        close();
+      }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "No se pudo guardar el sprint.");
     } finally {
@@ -142,6 +178,11 @@ function SprintUpsertionForm(props: { options: SprintUpsertionDrawerOptions; clo
       setError(actionError instanceof Error ? actionError.message : "No se pudo quitar la tarea del sprint.");
     }
   };
+
+  const visibleSprintTasks = React.useMemo(
+    () => sprintTasks.filter((task) => taskMatchesQuery(task, sprintTaskQuery)),
+    [sprintTaskQuery, sprintTasks]
+  );
 
   return (
     <div className="form-grid">
@@ -180,48 +221,108 @@ function SprintUpsertionForm(props: { options: SprintUpsertionDrawerOptions; clo
         <button type="button" className="btn btn-primary" onClick={() => void submit()} disabled={saving}>
           {sprint ? "Guardar sprint" : "Crear sprint"}
         </button>
-        <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>
-          Cancelar
-        </button>
+        {sprint && definitionHref ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => {
+              close();
+              navigate(definitionHref);
+            }}
+            disabled={saving}
+          >
+            Ir a la definicion
+          </button>
+        ) : null}
+        {showCloseAction && closeLabel ? (
+          <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>
+            {closeLabel}
+          </button>
+        ) : null}
       </div>
 
       {sprint ? (
-        <section className="card">
-          <h4>Tareas pendientes</h4>
+        <section className="card sprint-task-manager">
+          <div className="section-head sprint-task-manager-head">
+            <div>
+              <h4>Tareas del sprint</h4>
+              <p className="muted">Agrega tareas desde un buscador con teclado y filtra la lista actual sin perder contexto.</p>
+            </div>
+            <div className="workspace-meta">
+              <span className="pill">Pendientes {pendingTasks.length}</span>
+              <span className="pill">En sprint {sprintTasks.length}</span>
+            </div>
+          </div>
           {tasksLoading ? <p className="muted">Cargando tareas...</p> : null}
 
-          <div className="form-grid">
-            {pendingTasks.length === 0 ? <p className="muted">No hay tareas pendientes para agregar.</p> : null}
-            {pendingTasks.map((task) => (
-              <div key={task.id} className="section-head">
-                <div>
-                  <strong>{task.title}</strong>
-                  <p className="muted">Historia: {task.story?.title ?? "-"}</p>
+          <div className="sprint-task-picker-shell">
+            <TaskSearchPicker
+              label="Agregar tarea al sprint"
+              tasks={pendingTasks}
+              loading={tasksLoading}
+              placeholder="Busca por tarea, historia o responsable. Enter agrega la seleccionada"
+              onPick={addTaskToSprint}
+            />
+            {pendingTasks.length > 0 ? (
+              <div className="sprint-task-suggestions">
+                <p className="muted">Sugeridas</p>
+                <div className="sprint-task-suggestion-list">
+                  {pendingTasks.slice(0, 5).map((task) => (
+                    <button
+                      key={task.id}
+                      type="button"
+                      className="sprint-task-suggestion"
+                      onClick={() => void addTaskToSprint(task.id)}
+                    >
+                      <strong>{task.title}</strong>
+                      <span>{task.story?.title ?? "Sin historia"}</span>
+                    </button>
+                  ))}
                 </div>
-                <button type="button" className="btn btn-secondary" onClick={() => void addTaskToSprint(task.id)}>
-                  + Agregar
-                </button>
               </div>
-            ))}
+            ) : null}
           </div>
 
-          <h4>Tareas en sprint</h4>
-          <div className="form-grid">
-            {sprintTasks.length === 0 ? <p className="muted">No hay tareas asignadas al sprint.</p> : null}
-            {sprintTasks.map((task) => (
-              <div key={task.id} className="section-head">
-                <div>
-                  <strong>{task.title}</strong>
-                  <p className="muted">Historia: {task.story?.title ?? "-"}</p>
+          <div className="section-head">
+            <h5>Tareas ya agregadas</h5>
+            <label className="sprint-task-filter">
+              <span>Filtrar</span>
+              <input
+                value={sprintTaskQuery}
+                onChange={(event) => setSprintTaskQuery(event.target.value)}
+                placeholder="Filtrar por titulo, historia o responsable"
+              />
+            </label>
+          </div>
+
+          <div className="story-task-stack">
+            {visibleSprintTasks.length === 0 ? (
+              <p className="muted">No hay tareas asignadas al sprint para el filtro actual.</p>
+            ) : null}
+            {visibleSprintTasks.map((task, index) => (
+              <article key={task.id} className="story-task-card sprint-task-card">
+                <div className="story-task-card-head">
+                  <div>
+                    <p className="story-task-order">Entrada {index + 1}</p>
+                    <strong>{task.title}</strong>
+                  </div>
+                  <span className="status status-in-sprint">En sprint</span>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => void removeTaskFromSprint(task.id)}
-                >
-                  Quitar
-                </button>
-              </div>
+                <div className="story-task-meta">
+                  <span>Historia: {task.story?.title ?? "-"}</span>
+                  <span>Responsable: {task.assignee?.name ?? "Sin asignar"}</span>
+                  <span>Estado: {task.status}</span>
+                </div>
+                <div className="row-actions compact">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => void removeTaskFromSprint(task.id)}
+                  >
+                    Quitar
+                  </button>
+                </div>
+              </article>
             ))}
           </div>
         </section>

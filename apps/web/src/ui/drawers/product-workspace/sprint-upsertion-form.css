@@ -1,0 +1,91 @@
+.sprint-task-manager {
+  display: grid;
+  gap: 1rem;
+  padding: 1.15rem;
+  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-soft) 78%, transparent);
+}
+
+.sprint-task-manager-head {
+  align-items: flex-start;
+}
+
+.sprint-task-picker-shell {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.sprint-task-suggestions {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.sprint-task-suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.sprint-task-suggestion {
+  display: inline-grid;
+  gap: 0.15rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.sprint-task-suggestion span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.sprint-task-suggestion:hover {
+  border-color: color-mix(in srgb, var(--accent-a) 38%, var(--border));
+  background: color-mix(in srgb, var(--bg-hover) 88%, transparent);
+}
+
+.sprint-task-filter {
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(100%, 22rem);
+}
+
+.sprint-task-filter span {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.sprint-task-filter input {
+  width: 100%;
+}
+
+.sprint-task-card {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.95rem 1rem;
+}
+
+.sprint-task-card .story-task-card-head {
+  align-items: flex-start;
+}
+
+.sprint-task-card .story-task-order {
+  margin-bottom: 0.15rem;
+}
+
+.sprint-task-card .story-task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 760px) {
+  .sprint-task-filter {
+    min-width: 0;
+  }
+}

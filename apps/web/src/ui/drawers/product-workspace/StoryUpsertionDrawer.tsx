@@ -1,5 +1,7 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { ProductController, TeamController } from "../../../controllers";
+import { productStoryDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { ActivityTimeline } from "./ActivityTimeline";
@@ -63,20 +65,41 @@ function statusClass(status: string): string {
   return `status status-${normalized}`;
 }
 
+function compareStoryTasks(left: StoryTask, right: StoryTask): number {
+  if (left.sprintId && !right.sprintId) return 1;
+  if (!left.sprintId && right.sprintId) return -1;
+  return left.title.localeCompare(right.title, "es", { sensitivity: "base" });
+}
+
 export class StoryUpsertionDrawer extends Drawer {
   constructor(private readonly options: StoryUpsertionDrawerOptions) {
     super(options.story ? "Editar historia" : "Nueva historia", { size: "lg" });
   }
 
   render(context: DrawerRenderContext): React.ReactNode {
-    return <StoryUpsertionForm options={this.options} close={context.close} />;
+    return (
+      <StoryUpsertionForm
+        options={this.options}
+        close={context.close}
+        definitionHref={
+          this.options.story ? productStoryDefinitionPath(this.options.productId, this.options.story.id) : undefined
+        }
+      />
+    );
   }
 }
 
-function StoryUpsertionForm(props: { options: StoryUpsertionDrawerOptions; close: () => void }) {
-  const { options, close } = props;
+export function StoryUpsertionForm(props: {
+  options: StoryUpsertionDrawerOptions;
+  close: () => void;
+  closeLabel?: string;
+  definitionHref?: string;
+  closeOnSubmit?: boolean;
+}) {
+  const { options, close, closeLabel = "Cancelar", definitionHref, closeOnSubmit = true } = props;
   const { controller, productId, story, onDone } = options;
   const store = useRootStore();
+  const navigate = useNavigate();
   const teamController = React.useMemo(() => new TeamController(store), [store]);
   const [title, setTitle] = React.useState(story?.title ?? "");
   const [description, setDescription] = React.useState(story?.description ?? "");
@@ -95,7 +118,32 @@ function StoryUpsertionForm(props: { options: StoryUpsertionDrawerOptions; close
   const assignees = buildAssignableUsers(teams);
   const sprintNameById = new Map(sprints.map((entry) => [entry.id, entry.name]));
   const assigneeNameById = new Map(assignees.map((entry) => [entry.id, entry.name]));
-  const statusOptions = Array.from(new Set(["Todo", "In Progress", "Blocked", "Done", ...tasks.map((task) => task.status)]));
+  const statusOptions = Array.from(
+    new Set(["Todo", "In Progress", "Blocked", "Done", ...tasks.map((task) => task.status)])
+  );
+  const orderedTasks = React.useMemo(() => [...tasks].sort(compareStoryTasks), [tasks]);
+  const backlogTasks = orderedTasks.filter((task) => !task.sprintId);
+  const sprintTaskGroups = orderedTasks.reduce<Array<{ sprintId: string; sprintName: string; tasks: StoryTask[] }>>(
+    (groups, task) => {
+      if (!task.sprintId) {
+        return groups;
+      }
+
+      const existing = groups.find((group) => group.sprintId === task.sprintId);
+      if (existing) {
+        existing.tasks.push(task);
+        return groups;
+      }
+
+      groups.push({
+        sprintId: task.sprintId,
+        sprintName: sprintNameById.get(task.sprintId) ?? task.sprintId,
+        tasks: [task]
+      });
+      return groups;
+    },
+    []
+  );
 
   const loadStoryTasks = React.useCallback(async () => {
     if (!story) {
@@ -140,7 +188,9 @@ function StoryUpsertionForm(props: { options: StoryUpsertionDrawerOptions; close
       if (onDone) {
         await onDone();
       }
-      close();
+      if (closeOnSubmit) {
+        close();
+      }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "No se pudo guardar la historia.");
     } finally {
@@ -247,8 +297,21 @@ function StoryUpsertionForm(props: { options: StoryUpsertionDrawerOptions; close
         >
           {story ? "Guardar historia" : "Crear historia"}
         </button>
+        {story && definitionHref ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => {
+              close();
+              navigate(definitionHref);
+            }}
+            disabled={saving}
+          >
+            Ir a la definicion
+          </button>
+        ) : null}
         <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>
-          Cancelar
+          {closeLabel}
         </button>
       </div>
       {story ? (
@@ -264,32 +327,88 @@ function StoryUpsertionForm(props: { options: StoryUpsertionDrawerOptions; close
               +
             </button>
           </div>
-          <p className="muted">Gestiona altas, ediciones y bajas de tareas sin salir del drawer de historia.</p>
+          <p className="muted">
+            Orden visible: primero backlog y luego tareas comprometidas en sprint. Cada tarjeta resume estado,
+            responsable y esfuerzo para que la historia sea legible de un vistazo.
+          </p>
           {tasksLoading ? <p className="muted">Cargando tareas...</p> : null}
-          <div className="form-grid">
-            {tasks.map((task) => (
-              <div key={task.id} className="section-head">
-                <div>
-                  <strong>{task.title}</strong>
-                  <p className="muted">{task.description ?? "Sin descripcion"}</p>
-                  <p className="muted">
-                    <span className={statusClass(task.status)}>{task.status}</span>
-                    {" · "}Sprint: {task.sprintId ? sprintNameById.get(task.sprintId) ?? task.sprintId : "Backlog"}
-                    {" · "}Asignado: {task.assigneeId ? assigneeNameById.get(task.assigneeId) ?? task.assigneeId : "Sin asignar"}
-                  </p>
-                </div>
-                <div className="row-actions compact">
-                  <button type="button" className="btn btn-secondary" onClick={() => openTaskDrawer(task)}>
-                    Editar tarea
-                  </button>
-                  <button type="button" className="btn btn-secondary" onClick={() => void removeTask(task.id)}>
-                    Quitar
-                  </button>
-                </div>
+          {!tasksLoading && tasks.length === 0 ? <p className="muted">La historia aun no tiene tareas.</p> : null}
+
+          {backlogTasks.length > 0 ? (
+            <div className="story-task-group">
+              <div className="story-task-group-head">
+                <h5>Backlog</h5>
+                <span className="pill">{backlogTasks.length} tareas</span>
               </div>
-            ))}
-            {!tasksLoading && tasks.length === 0 ? <p className="muted">La historia aun no tiene tareas.</p> : null}
-          </div>
+              <div className="story-task-stack">
+                {backlogTasks.map((task, index) => (
+                  <article key={task.id} className="story-task-card">
+                    <div className="story-task-card-head">
+                      <div>
+                        <p className="story-task-order">Secuencia {index + 1}</p>
+                        <strong>{task.title}</strong>
+                      </div>
+                      <span className={statusClass(task.status)}>{task.status}</span>
+                    </div>
+                    <p className="story-task-summary">{task.description ?? "Sin descripcion"}</p>
+                    <div className="story-task-meta">
+                      <span>Backlog</span>
+                      <span>
+                        Asignado: {task.assigneeId ? assigneeNameById.get(task.assigneeId) ?? task.assigneeId : "Sin asignar"}
+                      </span>
+                      <span>Horas: {task.estimatedHours ?? "-"} / Restante: {task.remainingHours ?? "-"}</span>
+                    </div>
+                    <div className="row-actions compact">
+                      <button type="button" className="btn btn-secondary" onClick={() => openTaskDrawer(task)}>
+                        Editar tarea
+                      </button>
+                      <button type="button" className="btn btn-secondary" onClick={() => void removeTask(task.id)}>
+                        Quitar
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {sprintTaskGroups.map((group) => (
+            <div key={group.sprintId} className="story-task-group">
+              <div className="story-task-group-head">
+                <h5>{group.sprintName}</h5>
+                <span className="pill">{group.tasks.length} tareas</span>
+              </div>
+              <div className="story-task-stack">
+                {group.tasks.map((task, index) => (
+                  <article key={task.id} className="story-task-card">
+                    <div className="story-task-card-head">
+                      <div>
+                        <p className="story-task-order">Secuencia {index + 1}</p>
+                        <strong>{task.title}</strong>
+                      </div>
+                      <span className={statusClass(task.status)}>{task.status}</span>
+                    </div>
+                    <p className="story-task-summary">{task.description ?? "Sin descripcion"}</p>
+                    <div className="story-task-meta">
+                      <span>Sprint: {group.sprintName}</span>
+                      <span>
+                        Asignado: {task.assigneeId ? assigneeNameById.get(task.assigneeId) ?? task.assigneeId : "Sin asignar"}
+                      </span>
+                      <span>Horas: {task.estimatedHours ?? "-"} / Restante: {task.remainingHours ?? "-"}</span>
+                    </div>
+                    <div className="row-actions compact">
+                      <button type="button" className="btn btn-secondary" onClick={() => openTaskDrawer(task)}>
+                        Editar tarea
+                      </button>
+                      <button type="button" className="btn btn-secondary" onClick={() => void removeTask(task.id)}>
+                        Quitar
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ))}
           {taskError ? <p className="error-text">{taskError}</p> : null}
         </section>
       ) : null}

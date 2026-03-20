@@ -388,7 +388,15 @@ export class SprintsService {
           const targetTaskId = targetIds[index];
           await tx.task.update({
             where: { id: targetTaskId },
-            data: targetTaskId === taskId ? { status: dto.status, boardOrder: index + 1 } : { boardOrder: index + 1 }
+            data:
+              targetTaskId === taskId
+                ? {
+                    status: dto.status,
+                    boardOrder: index + 1,
+                    remainingHours: dto.status === "Done" ? 0 : undefined,
+                    actualHours: dto.status === "Done" ? dto.actualHours ?? undefined : undefined
+                  }
+                : { boardOrder: index + 1 }
           });
         }
         await tx.taskStatusHistory.create({
@@ -424,7 +432,8 @@ export class SprintsService {
         sprintId: id,
         fromStatus: task.status,
         toStatus: dto.status,
-        toPosition: boundedPosition
+        toPosition: boundedPosition,
+        actualHours: dto.actualHours
       },
       beforeJson: task,
       afterJson: updatedTask

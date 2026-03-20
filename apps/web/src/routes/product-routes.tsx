@@ -5,10 +5,18 @@ export const productRoutes = {
   overview: "overview",
   backlog: "backlog",
   storyTasks: "backlog/stories/:storyId/tasks",
+  storyDefinition: "backlog/stories/:storyId/definition",
   sprints: "sprints",
+  sprintDefinition: "sprints/:sprintId/definition",
   board: "sprints/:sprintId/board",
-  metrics: "metrics"
+  metrics: "metrics",
+  taskDefinition: "tasks/:taskId/definition"
 } as const;
+
+export type ProductDefinitionTarget =
+  | { type: "story"; id: string }
+  | { type: "sprint"; id: string }
+  | { type: "task"; id: string };
 
 export function productOverviewPath(productId: string): string {
   return `/products/${productId}/overview`;
@@ -22,8 +30,16 @@ export function productStoryTasksPath(productId: string, storyId: string): strin
   return `/products/${productId}/backlog/stories/${storyId}/tasks`;
 }
 
+export function productStoryDefinitionPath(productId: string, storyId: string): string {
+  return `/products/${productId}/backlog/stories/${storyId}/definition`;
+}
+
 export function productSprintsPath(productId: string): string {
   return `/products/${productId}/sprints`;
+}
+
+export function productSprintDefinitionPath(productId: string, sprintId: string): string {
+  return `/products/${productId}/sprints/${sprintId}/definition`;
 }
 
 export function productBoardPath(productId: string, sprintId: string): string {
@@ -32,6 +48,23 @@ export function productBoardPath(productId: string, sprintId: string): string {
 
 export function productMetricsPath(productId: string): string {
   return `/products/${productId}/metrics`;
+}
+
+export function productTaskDefinitionPath(productId: string, taskId: string): string {
+  return `/products/${productId}/tasks/${taskId}/definition`;
+}
+
+export function productDefinitionPath(productId: string, target: ProductDefinitionTarget): string {
+  switch (target.type) {
+    case "story":
+      return productStoryDefinitionPath(productId, target.id);
+    case "sprint":
+      return productSprintDefinitionPath(productId, target.id);
+    case "task":
+      return productTaskDefinitionPath(productId, target.id);
+    default:
+      return productOverviewPath(productId);
+  }
 }
 
 export function LegacyStoryTasksRedirect() {

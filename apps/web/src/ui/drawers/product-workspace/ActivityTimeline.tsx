@@ -16,6 +16,10 @@ type ActivityEntry = {
   actorUser?: { id?: string; name?: string; email?: string } | null;
   summary?: string;
   details?: string;
+  detail?: {
+    summary?: string;
+    details?: string;
+  };
 };
 
 type ActivityListResult = {
@@ -34,6 +38,14 @@ function formatDateTime(value?: string): string {
 
 function resolveActorName(entry: ActivityEntry): string {
   return entry.actor?.name ?? entry.actorUser?.name ?? entry.actor?.email ?? entry.actorUser?.email ?? "Sistema";
+}
+
+function resolveSummary(entry: ActivityEntry): string {
+  return entry.detail?.summary ?? entry.summary ?? entry.action ?? "actualizacion";
+}
+
+function resolveDetails(entry: ActivityEntry): string {
+  return entry.detail?.details ?? entry.details ?? "";
 }
 
 export function ActivityTimeline(props: ActivityTimelineProps) {
@@ -77,9 +89,9 @@ export function ActivityTimeline(props: ActivityTimelineProps) {
       <ul className="plain-list">
         {entries.map((entry) => (
           <li key={entry.id}>
-            <strong>{entry.action ?? entry.summary ?? "actualizacion"}</strong>
+            <strong>{resolveSummary(entry)}</strong>
             <span className="muted"> por {resolveActorName(entry)} en {formatDateTime(entry.createdAt)}</span>
-            {entry.details ? <p className="muted">{entry.details}</p> : null}
+            {resolveDetails(entry) ? <p className="muted">{resolveDetails(entry)}</p> : null}
           </li>
         ))}
       </ul>

@@ -4,7 +4,32 @@ import { ActivityService } from "../activity/activity.service";
 import { AuthUser } from "../common/current-user.decorator";
 import { TeamScopeService } from "../common/team-scope.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { CreateTaskDto, UpdateTaskDto } from "./tasks.dto";
+import { CreateTaskDto, CreateTaskFromMessageDto, CreateTaskMessageDto, UpdateTaskDto } from "./tasks.dto";
+
+type TaskCreationLineage = {
+  parentTaskId: string | null;
+  sourceMessageId: string | null;
+};
+
+type TaskCreationInput = {
+  storyId: string;
+  productId: string;
+  sprintId?: string | null;
+  teamId?: string;
+  assigneeId?: string | null;
+  title: string;
+  description?: string | null;
+  status: string;
+  effortPoints?: number | null;
+  estimatedHours?: number | null;
+  remainingHours?: number | null;
+  actualHours?: number | null;
+  parentTaskId?: string | null;
+  sourceMessageId?: string | null;
+  actorUserId: string;
+  action: string;
+  metadataJson?: Record<string, unknown>;
+};
 
 @Injectable()
 export class TasksService {
@@ -30,6 +55,25 @@ export class TasksService {
     });
   }
 
+  async getDetail(id: string, user: AuthUser) {
+    const task = await this.getTaskWithAccess(id, user);
+    const conversation = await this.loadTaskConversation(id);
+
+    return {
+      ...task,
+      childSummary: {
+        total: task.childTasks.length,
+        completed: task.childTasks.filter((child) => child.status === "Done").length
+      },
+      conversation
+    };
+  }
+
+  async listMessages(taskId: string, user: AuthUser) {
+    await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
+    return this.loadTaskConversation(taskId);
+  }
+
   async create(storyId: string, dto: CreateTaskDto, user: AuthUser) {
     const story = await this.prisma.userStory.findUnique({ where: { id: storyId } });
     if (!story) {
@@ -42,48 +86,26 @@ export class TasksService {
       const sprint = await this.validateSprintForProduct(dto.sprintId, story.productId);
       sprintTeamId = sprint.teamId;
     }
+    const lineage = await this.resolveTaskLineage(story.productId, storyId, dto.parentTaskId, dto.sourceMessageId);
 
-    const task = await this.prisma.task.create({
-      data: {
-        storyId,
-        productId: story.productId,
-        sprintId: dto.sprintId,
-        assigneeId: dto.assigneeId,
-        title: dto.title,
-        description: dto.description,
-        status: dto.status,
-        boardOrder: dto.sprintId ? await this.getNextBoardOrder(dto.sprintId, dto.status) : 0,
-        effortPoints: dto.effortPoints,
-        estimatedHours: dto.estimatedHours,
-        remainingHours: dto.remainingHours
-      }
-    });
-
-    await this.prisma.taskStatusHistory.create({
-      data: {
-        taskId: task.id,
-        toStatus: task.status
-      }
-    });
-
-    await this.recomputeStoryStatus(storyId);
-    await this.activityService.record({
-      actorUserId: user.sub,
+    return this.createTaskRecord({
+      storyId,
+      productId: story.productId,
+      sprintId: dto.sprintId,
       teamId: sprintTeamId,
-      productId: task.productId,
-      entityType: ActivityEntityType.TASK,
-      entityId: task.id,
-      action: "TASK_CREATED",
-      metadataJson: {
-        storyId: task.storyId,
-        sprintId: task.sprintId,
-        assigneeId: task.assigneeId,
-        status: task.status
-      },
-      afterJson: task
+      assigneeId: dto.assigneeId,
+      title: dto.title,
+      description: dto.description,
+      status: dto.status,
+      effortPoints: dto.effortPoints,
+      estimatedHours: dto.estimatedHours,
+      remainingHours: dto.remainingHours,
+      actualHours: dto.actualHours,
+      parentTaskId: lineage.parentTaskId,
+      sourceMessageId: lineage.sourceMessageId,
+      actorUserId: user.sub,
+      action: "TASK_CREATED"
     });
-
-    return task;
   }
 
   async update(id: string, dto: UpdateTaskDto, user: AuthUser, action: string = "TASK_UPDATED") {
@@ -101,7 +123,8 @@ export class TasksService {
         description: true,
         effortPoints: true,
         estimatedHours: true,
-        remainingHours: true
+        remainingHours: true,
+        actualHours: true
       }
     });
     if (!current) {
@@ -112,6 +135,9 @@ export class TasksService {
     const hasStatus = dto.status !== undefined;
     const hasAssigneeId = dto.assigneeId !== undefined;
     const hasSprintId = dto.sprintId !== undefined;
+    const closesTask = hasStatus && dto.status === "Done" && current.status !== "Done";
+    const nextRemainingHours =
+      dto.remainingHours !== undefined ? dto.remainingHours : closesTask ? 0 : undefined;
 
     if (hasStatus && typeof dto.status !== "string") {
       throw new BadRequestException("Task status must be a string");
@@ -142,7 +168,8 @@ export class TasksService {
         description: dto.description,
         effortPoints: dto.effortPoints,
         estimatedHours: dto.estimatedHours,
-        remainingHours: dto.remainingHours,
+        remainingHours: nextRemainingHours,
+        actualHours: dto.actualHours,
         status: hasStatus ? dto.status : undefined,
         assigneeId: hasAssigneeId ? dto.assigneeId ?? null : undefined,
         sprintId: hasSprintId ? dto.sprintId ?? null : undefined,
@@ -176,7 +203,8 @@ export class TasksService {
       action,
       metadataJson: {
         storyId: current.storyId,
-        changedFields
+        changedFields,
+        actualHours: updated.actualHours
       },
       beforeJson: current,
       afterJson: updated
@@ -199,7 +227,8 @@ export class TasksService {
         status: true,
         effortPoints: true,
         estimatedHours: true,
-        remainingHours: true
+        remainingHours: true,
+        actualHours: true
       }
     });
     if (!task) {
@@ -234,8 +263,8 @@ export class TasksService {
     return { ok: true };
   }
 
-  updateStatus(id: string, status: string, user: AuthUser) {
-    return this.update(id, { status }, user, "TASK_STATUS_UPDATED");
+  updateStatus(id: string, status: string, user: AuthUser, actualHours?: number) {
+    return this.update(id, { status, actualHours }, user, "TASK_STATUS_UPDATED");
   }
 
   assign(id: string, assigneeId: string | null | undefined, sprintId: string | null | undefined, user: AuthUser) {
@@ -247,6 +276,107 @@ export class TasksService {
       payload.sprintId = sprintId;
     }
     return this.update(id, payload, user, "TASK_ASSIGNED");
+  }
+
+  async addMessage(taskId: string, dto: CreateTaskMessageDto, user: AuthUser) {
+    const task = await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
+    if (dto.parentMessageId) {
+      const parentMessage = await this.prisma.taskMessage.findUnique({
+        where: { id: dto.parentMessageId },
+        select: { id: true, taskId: true }
+      });
+      if (!parentMessage || parentMessage.taskId !== taskId) {
+        throw new BadRequestException("Parent message does not belong to this task");
+      }
+    }
+
+    const message = await this.prisma.taskMessage.create({
+      data: {
+        taskId,
+        authorUserId: user.sub,
+        parentMessageId: dto.parentMessageId ?? null,
+        body: dto.body
+      },
+      include: {
+        authorUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true
+          }
+        }
+      }
+    });
+
+    await this.activityService.record({
+      actorUserId: user.sub,
+      productId: task.productId,
+      teamId: task.sprint?.teamId,
+      entityType: ActivityEntityType.TASK,
+      entityId: taskId,
+      action: "TASK_MESSAGE_CREATED",
+      metadataJson: {
+        taskId,
+        taskTitle: task.title,
+        messageId: message.id,
+        parentMessageId: message.parentMessageId,
+        bodyPreview: dto.body.slice(0, 140)
+      },
+      afterJson: {
+        id: message.id,
+        taskId,
+        parentMessageId: message.parentMessageId,
+        body: message.body
+      }
+    });
+
+    return message;
+  }
+
+  async createFromMessage(taskId: string, messageId: string, dto: CreateTaskFromMessageDto, user: AuthUser) {
+    const task = await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
+    const sourceMessage = await this.prisma.taskMessage.findUnique({
+      where: { id: messageId },
+      select: {
+        id: true,
+        body: true,
+        taskId: true
+      }
+    });
+    if (!sourceMessage || sourceMessage.taskId !== taskId) {
+      throw new BadRequestException("Source message does not belong to this task");
+    }
+
+    let sprintTeamId = task.sprint?.teamId;
+    if (dto.sprintId) {
+      const sprint = await this.validateSprintForProduct(dto.sprintId, task.productId);
+      sprintTeamId = sprint.teamId;
+    }
+
+    return this.createTaskRecord({
+      storyId: task.storyId,
+      productId: task.productId,
+      sprintId: dto.sprintId ?? task.sprintId,
+      teamId: sprintTeamId,
+      assigneeId: dto.assigneeId,
+      title: dto.title,
+      description: dto.description ?? sourceMessage.body,
+      status: dto.status ?? "Todo",
+      effortPoints: dto.effortPoints,
+      estimatedHours: dto.estimatedHours,
+      remainingHours: dto.remainingHours,
+      actualHours: dto.actualHours,
+      parentTaskId: taskId,
+      sourceMessageId: messageId,
+      actorUserId: user.sub,
+      action: "TASK_CREATED_FROM_MESSAGE",
+      metadataJson: {
+        sourceTaskId: taskId,
+        sourceTaskTitle: task.title,
+        sourceMessageId: messageId
+      }
+    });
   }
 
   async recomputeStoryStatus(storyId: string) {
@@ -310,20 +440,45 @@ export class TasksService {
     if (story.productId !== sprint.productId) {
       throw new BadRequestException("Story does not belong to sprint product");
     }
+    const lineage = await this.resolveTaskLineage(sprint.productId, dto.storyId, dto.parentTaskId, dto.sourceMessageId);
 
+    return this.createTaskRecord({
+      storyId: dto.storyId,
+      productId: sprint.productId,
+      sprintId: sprint.id,
+      teamId: sprint.teamId,
+      assigneeId: dto.assigneeId,
+      title: dto.title,
+      description: dto.description,
+      status: dto.status,
+      effortPoints: dto.effortPoints,
+      estimatedHours: dto.estimatedHours,
+      remainingHours: dto.remainingHours,
+      actualHours: dto.actualHours,
+      parentTaskId: lineage.parentTaskId,
+      sourceMessageId: lineage.sourceMessageId,
+      actorUserId: user.sub,
+      action: "TASK_CREATED_IN_SPRINT"
+    });
+  }
+
+  private async createTaskRecord(input: TaskCreationInput) {
     const task = await this.prisma.task.create({
       data: {
-        storyId: dto.storyId,
-        productId: sprint.productId,
-        sprintId: sprint.id,
-        assigneeId: dto.assigneeId,
-        title: dto.title,
-        description: dto.description,
-        status: dto.status,
-        boardOrder: await this.getNextBoardOrder(sprint.id, dto.status),
-        effortPoints: dto.effortPoints,
-        estimatedHours: dto.estimatedHours,
-        remainingHours: dto.remainingHours
+        storyId: input.storyId,
+        productId: input.productId,
+        sprintId: input.sprintId ?? null,
+        assigneeId: input.assigneeId ?? null,
+        parentTaskId: input.parentTaskId ?? null,
+        sourceMessageId: input.sourceMessageId ?? null,
+        title: input.title,
+        description: input.description ?? null,
+        status: input.status,
+        boardOrder: input.sprintId ? await this.getNextBoardOrder(input.sprintId, input.status) : 0,
+        effortPoints: input.effortPoints ?? null,
+        estimatedHours: input.estimatedHours ?? null,
+        remainingHours: input.status === "Done" ? 0 : input.remainingHours ?? null,
+        actualHours: input.actualHours ?? null
       }
     });
 
@@ -334,23 +489,264 @@ export class TasksService {
       }
     });
 
-    await this.recomputeStoryStatus(story.id);
+    await this.recomputeStoryStatus(input.storyId);
     await this.activityService.record({
-      actorUserId: user.sub,
-      teamId: sprint.teamId,
-      productId: sprint.productId,
+      actorUserId: input.actorUserId,
+      teamId: input.teamId,
+      productId: input.productId,
       entityType: ActivityEntityType.TASK,
       entityId: task.id,
-      action: "TASK_CREATED_IN_SPRINT",
+      action: input.action,
       metadataJson: {
         storyId: task.storyId,
         sprintId: task.sprintId,
         assigneeId: task.assigneeId,
-        status: task.status
+        status: task.status,
+        actualHours: task.actualHours,
+        parentTaskId: task.parentTaskId,
+        sourceMessageId: task.sourceMessageId,
+        ...(input.metadataJson ?? {})
       },
       afterJson: task
     });
+
     return task;
+  }
+
+  private async resolveTaskLineage(
+    productId: string,
+    storyId: string,
+    parentTaskId?: string | null,
+    sourceMessageId?: string | null
+  ): Promise<TaskCreationLineage> {
+    let resolvedParentTaskId = parentTaskId ?? null;
+    let resolvedSourceMessageId = sourceMessageId ?? null;
+
+    if (resolvedParentTaskId) {
+      const parentTask = await this.prisma.task.findUnique({
+        where: { id: resolvedParentTaskId },
+        select: {
+          id: true,
+          productId: true,
+          storyId: true
+        }
+      });
+      if (!parentTask || parentTask.productId !== productId || parentTask.storyId !== storyId) {
+        throw new BadRequestException("Parent task does not belong to the same story");
+      }
+    }
+
+    if (resolvedSourceMessageId) {
+      const sourceMessage = await this.prisma.taskMessage.findUnique({
+        where: { id: resolvedSourceMessageId },
+        select: {
+          id: true,
+          taskId: true,
+          task: {
+            select: {
+              productId: true,
+              storyId: true
+            }
+          }
+        }
+      });
+      if (!sourceMessage || sourceMessage.task.productId !== productId || sourceMessage.task.storyId !== storyId) {
+        throw new BadRequestException("Source message does not belong to the same story");
+      }
+      if (resolvedParentTaskId && resolvedParentTaskId !== sourceMessage.taskId) {
+        throw new BadRequestException("Source message must belong to the selected parent task");
+      }
+      resolvedParentTaskId = sourceMessage.taskId;
+    }
+
+    return {
+      parentTaskId: resolvedParentTaskId,
+      sourceMessageId: resolvedSourceMessageId
+    };
+  }
+
+  private async getTaskWithAccess(
+    id: string,
+    user: AuthUser,
+    options: { withChildren?: boolean; withMessages?: boolean } = {}
+  ) {
+    const { withChildren = true, withMessages = true } = options;
+    const task = await this.prisma.task.findUnique({
+      where: { id },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        story: {
+          select: {
+            id: true,
+            title: true,
+            storyPoints: true,
+            status: true
+          }
+        },
+        sprint: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            teamId: true
+          }
+        },
+        parentTask: {
+          select: {
+            id: true,
+            title: true,
+            status: true
+          }
+        },
+        sourceMessage: withMessages
+          ? {
+              select: {
+                id: true,
+                body: true,
+                createdAt: true,
+                taskId: true,
+                authorUser: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true
+                  }
+                }
+              }
+            }
+          : false,
+        childTasks: withChildren
+          ? {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                updatedAt: true,
+                assignee: {
+                  select: {
+                    id: true,
+                    name: true
+                  }
+                },
+                sourceMessageId: true
+              },
+              orderBy: [{ status: "asc" }, { updatedAt: "desc" }]
+            }
+          : false,
+        messages: withMessages
+          ? {
+              select: {
+                id: true,
+                parentMessageId: true,
+                body: true,
+                createdAt: true,
+                updatedAt: true,
+                authorUser: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true
+                  }
+                },
+                derivedTasks: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                    updatedAt: true
+                  },
+                  orderBy: { createdAt: "desc" }
+                }
+              },
+              orderBy: { createdAt: "asc" }
+            }
+          : false
+      }
+    });
+    if (!task) {
+      throw new BadRequestException("Task not found");
+    }
+
+    await this.assertProductAccess(user, task.productId);
+    return task;
+  }
+
+  private async loadTaskConversation(taskId: string) {
+    const messages = await this.prisma.taskMessage.findMany({
+      where: { taskId },
+      include: {
+        authorUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true
+          }
+        },
+        derivedTasks: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            updatedAt: true
+          },
+          orderBy: { createdAt: "desc" }
+        }
+      },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return this.buildMessageTree(messages);
+  }
+
+  private buildMessageTree(
+    messages: Array<{
+      id: string;
+      parentMessageId: string | null;
+      body: string;
+      createdAt: Date;
+      updatedAt: Date;
+      authorUser: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+      } | null;
+      derivedTasks: Array<{
+        id: string;
+        title: string;
+        status: string;
+        updatedAt: Date;
+      }>;
+    }>
+  ) {
+    const nodes = new Map(
+      messages.map((message) => [
+        message.id,
+        {
+          ...message,
+          replies: [] as Array<unknown>
+        }
+      ])
+    );
+    const roots: Array<(typeof nodes extends Map<any, infer V> ? V : never)> = [];
+
+    for (const node of nodes.values()) {
+      if (node.parentMessageId && nodes.has(node.parentMessageId)) {
+        (nodes.get(node.parentMessageId)!.replies as Array<typeof node>).push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+
+    return roots;
   }
 
   private async assertProductAccess(user: AuthUser, productId: string) {
@@ -399,28 +795,30 @@ export class TasksService {
   }
 
   private getTaskChangedFields(
-    before: {
-      title: string;
-      description: string | null;
-      effortPoints: number | null;
-      estimatedHours: number | null;
-      remainingHours: number | null;
-      status: string;
-      assigneeId: string | null;
-      sprintId: string | null;
-      boardOrder: number;
-    },
+      before: {
+        title: string;
+        description: string | null;
+        effortPoints: number | null;
+        estimatedHours: number | null;
+        remainingHours: number | null;
+        actualHours: number | null;
+        status: string;
+        assigneeId: string | null;
+        sprintId: string | null;
+        boardOrder: number;
+      },
     after: {
-      title: string;
-      description: string | null;
-      effortPoints: number | null;
-      estimatedHours: number | null;
-      remainingHours: number | null;
-      status: string;
-      assigneeId: string | null;
-      sprintId: string | null;
-      boardOrder: number;
-    }
+        title: string;
+        description: string | null;
+        effortPoints: number | null;
+        estimatedHours: number | null;
+        remainingHours: number | null;
+        actualHours: number | null;
+        status: string;
+        assigneeId: string | null;
+        sprintId: string | null;
+        boardOrder: number;
+      }
   ): string[] {
     const keys: Array<keyof typeof before> = [
       "title",
@@ -428,6 +826,7 @@ export class TasksService {
       "effortPoints",
       "estimatedHours",
       "remainingHours",
+      "actualHours",
       "status",
       "assigneeId",
       "sprintId",

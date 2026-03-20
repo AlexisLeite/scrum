@@ -12,6 +12,9 @@ export type KanbanTask = {
   storyId?: string | null;
   assigneeId?: string | null;
   effortPoints?: number | null;
+  estimatedHours?: number | null;
+  remainingHours?: number | null;
+  actualHours?: number | null;
   assignee?: { id: string; name: string } | null;
   story?: { id: string; title: string } | null;
 };

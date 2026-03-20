@@ -1,18 +1,45 @@
 import React from "react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  closestCorners,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent
+} from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { TaskCompletionDialog } from "../drawers/product-workspace/TaskCompletionDialog";
 import "./kanban.css";
 import { KanbanAssignee, KanbanColumn, KanbanTask } from "./types";
 
 type AssigneeFilter = "all" | "unassigned" | string;
 
-type DragState = {
+type ActiveDragState = {
   taskId: string;
   fromColumn: string;
+  snapshot: KanbanColumn[];
+  task: KanbanTask;
 };
 
-type DropState = {
-  columnName: string;
-  beforeTaskId: string | null;
-};
+type CompletionRequest =
+  | {
+      mode: "status";
+      task: KanbanTask;
+      nextStatus: string;
+    }
+  | {
+      mode: "move";
+      task: KanbanTask;
+      fromColumn: string;
+      targetColumnName: string;
+      visibleIndex: number;
+      snapshot: KanbanColumn[];
+    };
 
 type KanbanBoardProps = {
   columns: KanbanColumn[];
@@ -21,9 +48,9 @@ type KanbanBoardProps = {
   isTaskPending?: (taskId: string) => boolean;
   onCreateTask: (defaultStatus: string) => void;
   onEditTask: (task: KanbanTask) => void;
-  onStatusChange: (taskId: string, status: string) => Promise<void>;
+  onStatusChange: (taskId: string, status: string, actualHours?: number) => Promise<void>;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
-  onMoveTask?: (taskId: string, status: string, position: number) => Promise<void>;
+  onMoveTask?: (taskId: string, status: string, position: number, actualHours?: number) => Promise<void>;
 };
 
 function normalizeText(value: string | null | undefined): string {
@@ -33,7 +60,7 @@ function normalizeText(value: string | null | undefined): string {
 function copyColumns(columns: KanbanColumn[]): KanbanColumn[] {
   return columns.map((column) => ({
     ...column,
-    tasks: [...column.tasks]
+    tasks: column.tasks.map((task) => ({ ...task }))
   }));
 }
 
@@ -60,6 +87,277 @@ function previewText(value: string | null | undefined): string {
   return plain || "Sin descripcion";
 }
 
+function findTask(columns: KanbanColumn[], taskId: string) {
+  for (const column of columns) {
+    const task = column.tasks.find((entry) => entry.id === taskId);
+    if (task) {
+      return task;
+    }
+  }
+  return undefined;
+}
+
+function findTaskColumn(columns: KanbanColumn[], taskId: string): string | null {
+  for (const column of columns) {
+    if (column.tasks.some((task) => task.id === taskId)) {
+      return column.name;
+    }
+  }
+  return null;
+}
+
+function findColumn(columns: KanbanColumn[], id: string): KanbanColumn | undefined {
+  return columns.find((column) => column.name === id);
+}
+
+function findContainer(columns: KanbanColumn[], id: string): string | null {
+  if (findColumn(columns, id)) {
+    return id;
+  }
+  return findTaskColumn(columns, id);
+}
+
+function findTaskIndex(columns: KanbanColumn[], columnName: string, taskId: string): number {
+  return columns.find((column) => column.name === columnName)?.tasks.findIndex((task) => task.id === taskId) ?? -1;
+}
+
+function moveTaskInColumns(
+  columns: KanbanColumn[],
+  taskId: string,
+  fromColumnName: string,
+  targetColumnName: string,
+  targetIndex: number,
+  actualHours?: number
+): KanbanColumn[] {
+  const next = copyColumns(columns);
+  const fromColumn = next.find((column) => column.name === fromColumnName);
+  const targetColumn = next.find((column) => column.name === targetColumnName);
+  if (!fromColumn || !targetColumn) {
+    return columns;
+  }
+
+  const sourceIndex = fromColumn.tasks.findIndex((task) => task.id === taskId);
+  if (sourceIndex < 0) {
+    return columns;
+  }
+
+  const [movedTask] = fromColumn.tasks.splice(sourceIndex, 1);
+  const updatedTask: KanbanTask = {
+    ...movedTask,
+    status: targetColumnName,
+    remainingHours: targetColumnName === "Done" ? 0 : movedTask.remainingHours,
+    actualHours: targetColumnName === "Done" ? actualHours ?? movedTask.actualHours : movedTask.actualHours
+  };
+
+  const boundedIndex = Math.max(0, Math.min(targetIndex, targetColumn.tasks.length));
+  targetColumn.tasks.splice(boundedIndex, 0, updatedTask);
+  return next;
+}
+
+function TaskCardContent(props: {
+  task: KanbanTask;
+  assignees: KanbanAssignee[];
+  statusOptions: string[];
+  pending: boolean;
+  dragDisabled: boolean;
+  dragHandleProps?: Record<string, unknown>;
+  onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
+  onStatusChange: (task: KanbanTask, status: string) => Promise<void>;
+  onEditTask: (task: KanbanTask) => void;
+}) {
+  const { task, assignees, statusOptions, pending, dragDisabled, dragHandleProps, onAssigneeChange, onStatusChange, onEditTask } = props;
+  const description = previewText(task.description);
+  const taskStatusOptions = statusOptions.includes(task.status) ? statusOptions : [task.status, ...statusOptions];
+
+  return (
+    <>
+      <div className="kb-title-row">
+        <div className="kb-title-main">
+          <button
+            type="button"
+            className="kb-drag-handle"
+            aria-label={`Reordenar ${task.title}`}
+            disabled={dragDisabled}
+            {...dragHandleProps}
+          >
+            ::
+          </button>
+          <h5>{task.title}</h5>
+        </div>
+        <span className="kb-story" title={task.story?.title ?? "Sin historia"}>
+          {task.story?.title ?? "Sin historia"}
+        </span>
+      </div>
+
+      <div className="kb-control-row">
+        <select
+          value={task.assigneeId ?? ""}
+          aria-label={`Asignado de ${task.title}`}
+          disabled={pending}
+          onChange={(event) => void onAssigneeChange(task.id, event.target.value ? event.target.value : null)}
+        >
+          <option value="">Sin asignar</option>
+          {assignees.map((user) => (
+            <option key={user.id} value={user.id}>
+              {user.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={task.status}
+          aria-label={`Estado de ${task.title}`}
+          disabled={pending}
+          onChange={(event) => void onStatusChange(task, event.target.value)}
+        >
+          {taskStatusOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+        <button type="button" className="btn btn-secondary kb-edit-btn" onClick={() => onEditTask(task)}>
+          Editar
+        </button>
+      </div>
+
+      <p className="kb-description" title={description}>
+        {description}
+      </p>
+
+      <div className="kb-meta-row">
+        <span className="muted">Actualizado: {formatUpdatedAt(task.updatedAt)}</span>
+        <span className="pill">SP {task.effortPoints ?? "-"}</span>
+      </div>
+    </>
+  );
+}
+
+function SortableTaskCard(props: {
+  task: KanbanTask;
+  assignees: KanbanAssignee[];
+  statusOptions: string[];
+  pending: boolean;
+  dragDisabled: boolean;
+  onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
+  onStatusChange: (task: KanbanTask, status: string) => Promise<void>;
+  onEditTask: (task: KanbanTask) => void;
+}) {
+  const { task, assignees, statusOptions, pending, dragDisabled, onAssigneeChange, onStatusChange, onEditTask } = props;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    disabled: dragDisabled
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition
+  };
+
+  return (
+    <article
+      ref={setNodeRef}
+      style={style}
+      data-task-id={task.id}
+      className={`kb-card ${isDragging ? "is-dragging" : ""}`}
+      title={`${task.title} - ${previewText(task.description)}`}
+    >
+      <TaskCardContent
+        task={task}
+        assignees={assignees}
+        statusOptions={statusOptions}
+        pending={pending}
+        dragDisabled={dragDisabled}
+        dragHandleProps={{ ...attributes, ...listeners }}
+        onAssigneeChange={onAssigneeChange}
+        onStatusChange={onStatusChange}
+        onEditTask={onEditTask}
+      />
+    </article>
+  );
+}
+
+function KanbanColumnView(props: {
+  column: KanbanColumn;
+  assignees: KanbanAssignee[];
+  statusOptions: string[];
+  canReorder: boolean;
+  isTaskPending?: (taskId: string) => boolean;
+  onCreateTask: (defaultStatus: string) => void;
+  onEditTask: (task: KanbanTask) => void;
+  onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
+  onStatusChange: (task: KanbanTask, status: string) => Promise<void>;
+}) {
+  const { column, assignees, statusOptions, canReorder, isTaskPending, onCreateTask, onEditTask, onAssigneeChange, onStatusChange } = props;
+  const { setNodeRef, isOver } = useDroppable({ id: column.name, disabled: !canReorder });
+
+  return (
+    <section ref={setNodeRef} className={`kb-column ${isOver ? "is-drop-column" : ""}`}>
+      <header className="kb-column-head">
+        <h4>{column.name}</h4>
+        <div className="row-actions compact">
+          <span className="pill">{column.tasks.length}</span>
+          <button
+            type="button"
+            className="btn btn-secondary btn-icon"
+            onClick={() => onCreateTask(column.name)}
+            aria-label={`Crear tarea en ${column.name}`}
+          >
+            +
+          </button>
+        </div>
+      </header>
+
+      <SortableContext items={column.tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+        <div className="kb-task-list">
+          {column.tasks.map((task) => {
+            const pending = isTaskPending ? isTaskPending(task.id) : false;
+            return (
+              <SortableTaskCard
+                key={task.id}
+                task={task}
+                assignees={assignees}
+                statusOptions={statusOptions}
+                pending={pending}
+                dragDisabled={pending || !canReorder}
+                onAssigneeChange={onAssigneeChange}
+                onStatusChange={onStatusChange}
+                onEditTask={onEditTask}
+              />
+            );
+          })}
+          {column.tasks.length === 0 ? <p className="muted">Sin tareas en esta columna.</p> : null}
+        </div>
+      </SortableContext>
+    </section>
+  );
+}
+
+function KanbanDragOverlay(props: { task: KanbanTask | null }) {
+  const { task } = props;
+  if (!task) {
+    return null;
+  }
+
+  return (
+    <article className="kb-card kb-card-overlay">
+      <div className="kb-title-row">
+        <div className="kb-title-main">
+          <span className="kb-drag-handle is-static">::</span>
+          <h5>{task.title}</h5>
+        </div>
+        <span className="kb-story" title={task.story?.title ?? "Sin historia"}>
+          {task.story?.title ?? "Sin historia"}
+        </span>
+      </div>
+      <p className="kb-description">{previewText(task.description)}</p>
+      <div className="kb-meta-row">
+        <span className="muted">Actualizado: {formatUpdatedAt(task.updatedAt)}</span>
+        <span className="pill">SP {task.effortPoints ?? "-"}</span>
+      </div>
+    </article>
+  );
+}
+
 export function KanbanBoard({
   columns,
   assignees,
@@ -74,12 +372,18 @@ export function KanbanBoard({
   const [search, setSearch] = React.useState("");
   const [assigneeFilter, setAssigneeFilter] = React.useState<AssigneeFilter>("all");
   const [localColumns, setLocalColumns] = React.useState<KanbanColumn[]>(() => copyColumns(columns));
-  const [drag, setDrag] = React.useState<DragState | null>(null);
-  const [drop, setDrop] = React.useState<DropState | null>(null);
+  const [activeDrag, setActiveDrag] = React.useState<ActiveDragState | null>(null);
+  const [completionRequest, setCompletionRequest] = React.useState<CompletionRequest | null>(null);
 
   React.useEffect(() => {
     setLocalColumns(copyColumns(columns));
   }, [columns]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 }
+    })
+  );
 
   const filteredColumns = React.useMemo(() => {
     const q = normalizeText(search);
@@ -89,12 +393,7 @@ export function KanbanBoard({
         if (assigneeFilter === "unassigned" && task.assigneeId) return false;
         if (assigneeFilter !== "all" && assigneeFilter !== "unassigned" && task.assigneeId !== assigneeFilter) return false;
         if (!q) return true;
-        const haystack = [
-          task.title,
-          task.description ?? "",
-          task.story?.title ?? "",
-          task.assignee?.name ?? ""
-        ]
+        const haystack = [task.title, task.description ?? "", task.story?.title ?? "", task.assignee?.name ?? ""]
           .map(normalizeText)
           .join(" ");
         return haystack.includes(q);
@@ -110,242 +409,260 @@ export function KanbanBoard({
     () => localColumns.reduce((acc, column) => acc + column.tasks.length, 0),
     [localColumns]
   );
+  const canReorder = !search.trim() && assigneeFilter === "all";
 
-  const performDrop = React.useCallback(
-    async (targetColumnName: string, beforeTaskId: string | null) => {
-      if (!drag) return;
-      if (targetColumnName === drag.fromColumn && beforeTaskId === drag.taskId) {
-        setDrop(null);
-        setDrag(null);
+  const persistMove = React.useCallback(
+    async (task: KanbanTask, fromColumn: string, targetColumn: string, targetIndex: number, actualHours?: number) => {
+      if (!onMoveTask) {
+        if (fromColumn !== targetColumn) {
+          await onStatusChange(task.id, targetColumn, actualHours);
+        }
         return;
       }
-
-      let movedTask: KanbanTask | undefined;
-      let movedAcrossColumns = false;
-      let nextPosition = 0;
-
-      setLocalColumns((previous) => {
-        const next = copyColumns(previous);
-        const fromColumn = next.find((column) => column.name === drag.fromColumn);
-        const toColumn = next.find((column) => column.name === targetColumnName);
-        if (!fromColumn || !toColumn) return previous;
-
-        const sourceIndex = fromColumn.tasks.findIndex((task) => task.id === drag.taskId);
-        if (sourceIndex < 0) return previous;
-
-        const [task] = fromColumn.tasks.splice(sourceIndex, 1);
-        movedTask = task;
-        movedAcrossColumns = drag.fromColumn !== targetColumnName;
-
-        if (movedAcrossColumns) {
-          task.status = targetColumnName;
-        }
-
-        let insertIndex = toColumn.tasks.length;
-        if (beforeTaskId) {
-          const beforeIndex = toColumn.tasks.findIndex((item) => item.id === beforeTaskId);
-          if (beforeIndex >= 0) {
-            insertIndex = beforeIndex;
-          }
-        }
-
-        if (!movedAcrossColumns && sourceIndex < insertIndex) {
-          insertIndex -= 1;
-        }
-
-        toColumn.tasks.splice(insertIndex, 0, task);
-        nextPosition = insertIndex;
-        return next;
-      });
-
-      setDrop(null);
-      setDrag(null);
-
-      if (movedTask) {
-        if (onMoveTask) {
-          await onMoveTask(movedTask.id, targetColumnName, nextPosition);
-          return;
-        }
-        if (movedAcrossColumns && movedTask.status !== drag.fromColumn) {
-          await onStatusChange(movedTask.id, movedTask.status);
-        }
-      }
+      await onMoveTask(task.id, targetColumn, targetIndex, actualHours);
     },
-    [drag, onMoveTask, onStatusChange]
+    [onMoveTask, onStatusChange]
   );
 
-  const onCardDragStart = (event: React.DragEvent<HTMLElement>, taskId: string, fromColumn: string) => {
-    event.dataTransfer.effectAllowed = "move";
-    setDrag({ taskId, fromColumn });
+  const handleStatusSelect = React.useCallback(
+    async (task: KanbanTask, nextStatus: string, actualHours?: number) => {
+      if (nextStatus === task.status) {
+        return;
+      }
+      if (nextStatus === "Done" && task.status !== "Done" && task.actualHours == null && actualHours === undefined) {
+        setCompletionRequest({ mode: "status", task, nextStatus });
+        return;
+      }
+      if (onMoveTask) {
+        const targetColumn = localColumns.find((column) => column.name === nextStatus);
+        await onMoveTask(task.id, nextStatus, targetColumn?.tasks.length ?? 0, actualHours);
+        return;
+      }
+      await onStatusChange(task.id, nextStatus, actualHours);
+    },
+    [localColumns, onMoveTask, onStatusChange]
+  );
+
+  const clearDrag = () => {
+    setActiveDrag(null);
   };
 
-  const onCardDragOver = (event: React.DragEvent<HTMLElement>, columnName: string, beforeTaskId: string) => {
-    event.preventDefault();
-    if (!drag) return;
-    setDrop({ columnName, beforeTaskId });
-  };
-
-  const onColumnDragOver = (event: React.DragEvent<HTMLElement>, columnName: string) => {
-    event.preventDefault();
-    if (!drag) return;
-    setDrop({ columnName, beforeTaskId: null });
-  };
-
-  const onCardDrop = (event: React.DragEvent<HTMLElement>, columnName: string, beforeTaskId: string) => {
-    event.preventDefault();
-    void performDrop(columnName, beforeTaskId);
-  };
-
-  const onColumnDrop = (event: React.DragEvent<HTMLElement>, columnName: string) => {
-    event.preventDefault();
-    void performDrop(columnName, null);
-  };
-
-  const handleStatusSelect = async (task: KanbanTask, nextStatus: string) => {
-    if (nextStatus === task.status) {
+  const handleDragStart = (event: DragStartEvent) => {
+    if (!canReorder) {
       return;
     }
-    if (onMoveTask) {
-      const targetColumn = localColumns.find((column) => column.name === nextStatus);
-      await onMoveTask(task.id, nextStatus, targetColumn?.tasks.length ?? 0);
+    const taskId = String(event.active.id);
+    const fromColumn = findTaskColumn(localColumns, taskId);
+    const task = findTask(localColumns, taskId);
+    if (!fromColumn || !task) {
       return;
     }
-    await onStatusChange(task.id, nextStatus);
+    setActiveDrag({
+      taskId,
+      fromColumn,
+      snapshot: copyColumns(localColumns),
+      task: { ...task }
+    });
   };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    if (!canReorder || !activeDrag || !event.over) {
+      return;
+    }
+
+    const activeId = String(event.active.id);
+    const overId = String(event.over.id);
+    const activeContainer = findTaskColumn(localColumns, activeId);
+    const overContainer = findContainer(localColumns, overId);
+
+    if (!activeContainer || !overContainer || activeContainer === overContainer) {
+      return;
+    }
+
+    const overTasks = localColumns.find((column) => column.name === overContainer)?.tasks ?? [];
+    const overIndex = overId === overContainer ? overTasks.length : overTasks.findIndex((task) => task.id === overId);
+
+    setLocalColumns((previous) =>
+      moveTaskInColumns(previous, activeId, activeContainer, overContainer, overIndex >= 0 ? overIndex : overTasks.length)
+    );
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    if (!activeDrag) {
+      return;
+    }
+
+    const snapshot = activeDrag.snapshot;
+    const taskId = activeDrag.taskId;
+    const overId = event.over ? String(event.over.id) : null;
+
+    if (!overId) {
+      setLocalColumns(snapshot);
+      clearDrag();
+      return;
+    }
+
+    const currentColumn = findTaskColumn(localColumns, taskId);
+    const targetColumn = findContainer(localColumns, overId) ?? currentColumn;
+    if (!currentColumn || !targetColumn) {
+      setLocalColumns(snapshot);
+      clearDrag();
+      return;
+    }
+
+    let targetIndex = findTaskIndex(localColumns, currentColumn, taskId);
+    let nextColumns = localColumns;
+
+    if (currentColumn === activeDrag.fromColumn) {
+      const originalTasks = snapshot.find((column) => column.name === activeDrag.fromColumn)?.tasks ?? [];
+      const currentIndex = originalTasks.findIndex((task) => task.id === taskId);
+      const nextIndex =
+        overId === activeDrag.fromColumn
+          ? originalTasks.length - 1
+          : originalTasks.findIndex((task) => task.id === overId);
+
+      if (currentIndex >= 0 && nextIndex >= 0 && currentIndex !== nextIndex) {
+        nextColumns = moveTaskInColumns(snapshot, taskId, activeDrag.fromColumn, activeDrag.fromColumn, nextIndex);
+        targetIndex = findTaskIndex(nextColumns, activeDrag.fromColumn, taskId);
+      } else {
+        targetIndex = currentIndex;
+        nextColumns = snapshot;
+      }
+    } else {
+      nextColumns = moveTaskInColumns(snapshot, taskId, activeDrag.fromColumn, currentColumn, targetIndex);
+    }
+
+    const movedTask = findTask(snapshot, taskId) ?? activeDrag.task;
+
+    if (targetColumn === "Done" && movedTask.status !== "Done" && movedTask.actualHours == null) {
+      setLocalColumns(snapshot);
+      setCompletionRequest({
+        mode: "move",
+        task: movedTask,
+        fromColumn: activeDrag.fromColumn,
+        targetColumnName: targetColumn,
+        visibleIndex: targetIndex,
+        snapshot
+      });
+      clearDrag();
+      return;
+    }
+
+    setLocalColumns(nextColumns);
+    clearDrag();
+
+    if (activeDrag.fromColumn === targetColumn && findTaskIndex(snapshot, activeDrag.fromColumn, taskId) === targetIndex) {
+      return;
+    }
+
+    await persistMove(movedTask, activeDrag.fromColumn, targetColumn, targetIndex);
+  };
+
+  const activeTask = activeDrag ? findTask(localColumns, activeDrag.taskId) ?? activeDrag.task : null;
 
   return (
-    <div className="kb-board">
-      <div className="kb-toolbar">
-        <label>
-          Buscar
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Titulo, historia, descripcion o assignee"
-          />
-        </label>
-        <label>
-          Filtrar por usuario
-          <select value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}>
-            <option value="all">Todos</option>
-            <option value="unassigned">Sin asignar</option>
-            {assignees.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name}
-              </option>
+    <>
+      <div className="kb-board">
+        <div className="kb-toolbar">
+          <label>
+            Buscar
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Titulo, historia, descripcion o assignee"
+            />
+          </label>
+          <label>
+            Filtrar por usuario
+            <select value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}>
+              <option value="all">Todos</option>
+              <option value="unassigned">Sin asignar</option>
+              {assignees.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="kb-count muted">
+            Mostrando {visibleCount} de {totalCount} tareas
+          </p>
+        </div>
+
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={(event) => void handleDragEnd(event)}
+          onDragCancel={() => {
+            if (activeDrag) {
+              setLocalColumns(activeDrag.snapshot);
+            }
+            clearDrag();
+          }}
+        >
+          <div className="kb-columns">
+            {filteredColumns.map((column) => (
+              <KanbanColumnView
+                key={column.name}
+                column={column}
+                assignees={assignees}
+                statusOptions={statusOptions}
+                canReorder={canReorder}
+                isTaskPending={isTaskPending}
+                onCreateTask={onCreateTask}
+                onEditTask={onEditTask}
+                onAssigneeChange={onAssigneeChange}
+                onStatusChange={handleStatusSelect}
+              />
             ))}
-          </select>
-        </label>
-        <p className="kb-count muted">
-          Mostrando {visibleCount} de {totalCount} tareas
-        </p>
+          </div>
+
+          <DragOverlay>
+            <KanbanDragOverlay task={activeTask} />
+          </DragOverlay>
+        </DndContext>
       </div>
 
-      <div className="kb-columns">
-        {filteredColumns.map((column) => (
-          <section
-            key={column.name}
-            className={`kb-column ${drop?.columnName === column.name ? "is-drop-column" : ""}`}
-            onDragOver={(event) => onColumnDragOver(event, column.name)}
-            onDrop={(event) => onColumnDrop(event, column.name)}
-          >
-            <header className="kb-column-head">
-              <h4>{column.name}</h4>
-              <div className="row-actions compact">
-                <span className="pill">{column.tasks.length}</span>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-icon"
-                  onClick={() => onCreateTask(column.name)}
-                  aria-label={`Crear tarea en ${column.name}`}
-                >
-                  +
-                </button>
-              </div>
-            </header>
-
-            <div className="kb-task-list">
-              {column.tasks.map((task) => {
-                const pending = isTaskPending ? isTaskPending(task.id) : false;
-                const description = previewText(task.description);
-                const isDropBefore = drop?.columnName === column.name && drop.beforeTaskId === task.id;
-                const taskStatusOptions = statusOptions.includes(task.status) ? statusOptions : [task.status, ...statusOptions];
-
-                return (
-                  <React.Fragment key={task.id}>
-                    <div className={`kb-drop-marker ${isDropBefore ? "is-visible" : ""}`} />
-                    <article
-                      className={`kb-card ${drag?.taskId === task.id ? "is-dragging" : ""}`}
-                      draggable={!pending}
-                      onDragStart={(event) => onCardDragStart(event, task.id, column.name)}
-                      onDragEnd={() => {
-                        setDrag(null);
-                        setDrop(null);
-                      }} 
-                      title={`${task.title} - ${task.description}`}
-                      onDragOver={(event) => onCardDragOver(event, column.name, task.id)}
-                      onDrop={(event) => onCardDrop(event, column.name, task.id)}
-                    >
-                      <div className="kb-title-row">
-                        <h5>{task.title}</h5>
-                        <span className="kb-story" title={task.story?.title ?? "Sin historia"}>
-                          {task.story?.title ?? "Sin historia"}
-                        </span>
-                      </div>
-
-                      <div className="kb-control-row">
-                        <select
-                          value={task.assigneeId ?? ""}
-                          aria-label={`Asignado de ${task.title}`}
-                          disabled={pending}
-                          onChange={(event) =>
-                            void onAssigneeChange(task.id, event.target.value ? event.target.value : null)
-                          }
-                        >
-                          <option value="">Sin asignar</option>
-                          {assignees.map((user) => (
-                            <option key={user.id} value={user.id}>
-                              {user.name}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={task.status}
-                          aria-label={`Estado de ${task.title}`}
-                          disabled={pending}
-                          onChange={(event) => void handleStatusSelect(task, event.target.value)}
-                        >
-                          {taskStatusOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                        <button type="button" className="btn btn-secondary kb-edit-btn" onClick={() => onEditTask(task)}>
-                          Editar
-                        </button>
-                      </div>
-
-                      <p className="kb-description" title={description}>
-                        {description}
-                      </p>
-
-                      <div className="kb-meta-row">
-                        <span className="muted">Actualizado: {formatUpdatedAt(task.updatedAt)}</span>
-                        <span className="pill">SP {task.effortPoints ?? "-"}</span>
-                      </div>
-                    </article>
-                  </React.Fragment>
-                );
-              })}
-
-              <div className={`kb-drop-marker ${drop?.columnName === column.name && drop.beforeTaskId === null ? "is-visible" : ""}`} />
-
-              {column.tasks.length === 0 ? <p className="muted">Sin tareas en esta columna.</p> : null}
-            </div>
-          </section>
-        ))}
-      </div>
-    </div>
+      <TaskCompletionDialog
+        open={completionRequest !== null}
+        taskTitle={completionRequest?.task.title ?? "esta tarea"}
+        initialHours={
+          completionRequest?.task.actualHours != null
+            ? String(completionRequest.task.actualHours)
+            : completionRequest?.task.remainingHours != null
+              ? String(completionRequest.task.remainingHours)
+              : ""
+        }
+        onCancel={() => {
+          if (completionRequest?.mode === "move") {
+            setLocalColumns(completionRequest.snapshot);
+          }
+          setCompletionRequest(null);
+        }}
+        onConfirm={(hours) => {
+          const request = completionRequest;
+          setCompletionRequest(null);
+          if (!request) {
+            return;
+          }
+          if (request.mode === "status") {
+            void handleStatusSelect(request.task, request.nextStatus, hours);
+            return;
+          }
+          const nextColumns = moveTaskInColumns(
+            request.snapshot,
+            request.task.id,
+            request.fromColumn,
+            request.targetColumnName,
+            request.visibleIndex,
+            hours
+          );
+          setLocalColumns(nextColumns);
+          void persistMove(request.task, request.fromColumn, request.targetColumnName, request.visibleIndex, hours);
+        }}
+      />
+    </>
   );
 }

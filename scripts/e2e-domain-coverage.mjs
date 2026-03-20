@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import process from "node:process";
+import { PrismaClient } from "../apps/api/node_modules/@prisma/client/index.js";
 
 const apiPort = process.env.E2E_API_PORT ?? "3001";
 const baseUrl = `http://127.0.0.1:${apiPort}/api/v1`;
@@ -128,6 +129,7 @@ async function waitForApi() {
 async function main() {
   process.env.DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://scrum:scrum@localhost:5433/scrum?schema=public";
   process.env.PORT = apiPort;
+  const prisma = new PrismaClient();
 
   await run("cmd", ["/c", "pnpm db:push"]);
   await run("cmd", ["/c", "pnpm db:seed"]);
@@ -172,6 +174,12 @@ async function main() {
     assert.equal(meAfter.name, "Team Member Updated");
 
     const ts = Date.now().toString().slice(-7);
+    const now = new Date();
+    const sprintA1StartDate = new Date(now);
+    sprintA1StartDate.setUTCDate(sprintA1StartDate.getUTCDate() - 2);
+    sprintA1StartDate.setUTCHours(9, 0, 0, 0);
+    const sprintA1EndDate = new Date(now);
+    sprintA1EndDate.setUTCHours(18, 0, 0, 0);
 
     const teamA = await scrum.request("POST", "/teams", {
       name: `E2E-Team-A-${ts}`,
@@ -365,6 +373,60 @@ async function main() {
       remainingHours: 2
     }, [201]);
 
+    const rootMessage = await member.request("POST", `/tasks/${taskA1.id}/messages`, {
+      body: `Primer mensaje ${ts}`
+    }, [201]);
+    assert.equal(rootMessage.taskId, taskA1.id);
+    assert.equal(rootMessage.authorUser?.email, "member@scrum.local");
+
+    const replyMessage = await member.request("POST", `/tasks/${taskA1.id}/messages`, {
+      body: `Respuesta ${ts}`,
+      parentMessageId: rootMessage.id
+    }, [201]);
+    assert.equal(replyMessage.parentMessageId, rootMessage.id);
+
+    const directChildTask = await member.request("POST", `/stories/${storyA.id}/tasks`, {
+      title: `Task child ${ts}`,
+      description: "child by parent task",
+      status: "Todo",
+      parentTaskId: taskA1.id
+    }, [201]);
+    assert.equal(directChildTask.parentTaskId, taskA1.id);
+
+    const derivedTask = await member.request("POST", `/tasks/${taskA1.id}/messages/${rootMessage.id}/tasks`, {
+      title: `Task from msg ${ts}`,
+      description: "derived from message",
+      status: "Todo",
+      estimatedHours: 1,
+      remainingHours: 1
+    }, [201]);
+    assert.equal(derivedTask.parentTaskId, taskA1.id);
+    assert.equal(derivedTask.sourceMessageId, rootMessage.id);
+
+    const conversation = await member.request("GET", `/tasks/${taskA1.id}/messages`, undefined, [200]);
+    assert.equal(conversation.length, 1, "conversation should return one root message");
+    assert.equal(conversation[0].id, rootMessage.id);
+    assert.equal(conversation[0].replies.length, 1, "root message should include one reply");
+    assert.equal(conversation[0].replies[0].id, replyMessage.id);
+    assert.ok(
+      conversation[0].derivedTasks.some((task) => task.id === derivedTask.id),
+      "message should list derived tasks"
+    );
+
+    const taskDetail = await member.request("GET", `/tasks/${taskA1.id}/detail`, undefined, [200]);
+    assert.equal(taskDetail.id, taskA1.id);
+    assert.equal(taskDetail.parentTask, null);
+    assert.equal(taskDetail.childSummary.total, 2);
+    assert.equal(taskDetail.childSummary.completed, 0);
+    assert.ok(taskDetail.childTasks.some((task) => task.id === directChildTask.id));
+    assert.ok(taskDetail.childTasks.some((task) => task.id === derivedTask.id));
+    assert.equal(taskDetail.conversation.length, 1);
+    assert.equal(taskDetail.conversation[0].id, rootMessage.id);
+
+    const derivedTaskDetail = await member.request("GET", `/tasks/${derivedTask.id}/detail`, undefined, [200]);
+    assert.equal(derivedTaskDetail.parentTask.id, taskA1.id);
+    assert.equal(derivedTaskDetail.sourceMessage.id, rootMessage.id);
+
     await member.expectStatus("PATCH", `/tasks/${taskA1.id}/assign`, {
       assigneeId: memberRecord.id
     }, 403);
@@ -372,7 +434,9 @@ async function main() {
     const sprintA1 = await scrum.request("POST", `/products/${productA.id}/sprints`, {
       teamId: teamA.id,
       name: `Sprint A1 ${ts}`,
-      goal: "initial sprint"
+      goal: "initial sprint",
+      startDate: sprintA1StartDate.toISOString(),
+      endDate: sprintA1EndDate.toISOString()
     }, [201]);
 
     const sprintA2 = await scrum.request("POST", `/products/${productA.id}/sprints`, {
@@ -478,6 +542,8 @@ async function main() {
     assert.ok(pendingAfter.some((entry) => entry.id === taskA2.id), "removed task should become pending");
 
     await member.request("PATCH", `/tasks/${taskA2.id}/status`, { status: "Done" }, [200]);
+    await member.request("PATCH", `/tasks/${directChildTask.id}/status`, { status: "Done" }, [200]);
+    await member.request("PATCH", `/tasks/${derivedTask.id}/status`, { status: "Done" }, [200]);
     const storiesAfterDone = await member.request("GET", `/products/${productA.id}/stories`, undefined, [200]);
     const storyDone = storiesAfterDone.find((entry) => entry.id === storyA.id);
     assert.equal(storyDone?.status, "DONE", "story should derive DONE when all tasks done");
@@ -494,6 +560,147 @@ async function main() {
 
     await scrum.request("POST", `/sprints/${sprintA1.id}/complete`, undefined, [201]);
 
+    const day1 = new Date(sprintA1StartDate);
+    const day2 = new Date(sprintA1StartDate);
+    day2.setUTCDate(day2.getUTCDate() + 1);
+    const day3 = new Date(sprintA1EndDate);
+    const toStamp = (base, hour, minute = 0) => {
+      const value = new Date(base);
+      value.setUTCHours(hour, minute, 0, 0);
+      return value;
+    };
+
+    await prisma.activityLog.updateMany({
+      where: {
+        entityType: "SPRINT",
+        entityId: sprintA1.id,
+        action: "SPRINT_CREATED"
+      },
+      data: { createdAt: toStamp(day1, 7, 0) }
+    });
+    await prisma.activityLog.updateMany({
+      where: {
+        entityType: "SPRINT",
+        entityId: sprintA1.id,
+        action: "SPRINT_STARTED"
+      },
+      data: { createdAt: toStamp(day1, 8, 0) }
+    });
+    await prisma.activityLog.updateMany({
+      where: {
+        entityType: "SPRINT",
+        entityId: sprintA1.id,
+        action: "SPRINT_TASK_ADDED"
+      },
+      data: { createdAt: toStamp(day1, 8, 30) }
+    });
+    await prisma.activityLog.updateMany({
+      where: {
+        entityType: "SPRINT",
+        entityId: sprintA1.id,
+        action: "SPRINT_TASK_CREATED"
+      },
+      data: { createdAt: toStamp(day1, 9, 30) }
+    });
+    await prisma.activityLog.updateMany({
+      where: {
+        entityType: "SPRINT",
+        entityId: sprintA1.id,
+        action: "SPRINT_TASK_REMOVED"
+      },
+      data: { createdAt: toStamp(day2, 10, 0) }
+    });
+    await prisma.activityLog.updateMany({
+      where: {
+        entityType: "SPRINT",
+        entityId: sprintA1.id,
+        action: "SPRINT_COMPLETED"
+      },
+      data: { createdAt: toStamp(day3, 18, 0) }
+    });
+
+    await prisma.task.update({
+      where: { id: taskA1.id },
+      data: {
+        createdAt: toStamp(day1, 8, 0),
+        updatedAt: toStamp(day3, 12, 0)
+      }
+    });
+    await prisma.task.update({
+      where: { id: taskA2.id },
+      data: {
+        createdAt: toStamp(day1, 8, 10),
+        updatedAt: toStamp(day3, 11, 0)
+      }
+    });
+    await prisma.task.update({
+      where: { id: createSprintTask.id },
+      data: {
+        createdAt: toStamp(day1, 9, 30),
+        updatedAt: toStamp(day3, 13, 0)
+      }
+    });
+
+    const taskA1History = await prisma.taskStatusHistory.findMany({
+      where: { taskId: taskA1.id },
+      orderBy: { changedAt: "asc" }
+    });
+    assert.ok(taskA1History.length >= 4, "taskA1 should have four status history rows");
+    await prisma.taskStatusHistory.update({ where: { id: taskA1History[0].id }, data: { changedAt: toStamp(day1, 8, 5) } });
+    await prisma.taskStatusHistory.update({ where: { id: taskA1History[1].id }, data: { changedAt: toStamp(day1, 12, 0) } });
+    await prisma.taskStatusHistory.update({ where: { id: taskA1History[2].id }, data: { changedAt: toStamp(day2, 9, 0) } });
+    await prisma.taskStatusHistory.update({ where: { id: taskA1History[3].id }, data: { changedAt: toStamp(day3, 12, 0) } });
+
+    const taskA2History = await prisma.taskStatusHistory.findMany({
+      where: { taskId: taskA2.id },
+      orderBy: { changedAt: "asc" }
+    });
+    assert.ok(taskA2History.length >= 3, "taskA2 should have three status history rows");
+    await prisma.taskStatusHistory.update({ where: { id: taskA2History[0].id }, data: { changedAt: toStamp(day1, 8, 10) } });
+    await prisma.taskStatusHistory.update({ where: { id: taskA2History[1].id }, data: { changedAt: toStamp(day1, 11, 0) } });
+    await prisma.taskStatusHistory.update({ where: { id: taskA2History[2].id }, data: { changedAt: toStamp(day3, 11, 0) } });
+
+    const sprintTaskHistory = await prisma.taskStatusHistory.findMany({
+      where: { taskId: createSprintTask.id },
+      orderBy: { changedAt: "asc" }
+    });
+    assert.ok(sprintTaskHistory.length >= 2, "createSprintTask should have two status history rows");
+    await prisma.taskStatusHistory.update({ where: { id: sprintTaskHistory[0].id }, data: { changedAt: toStamp(day1, 9, 35) } });
+    await prisma.taskStatusHistory.update({ where: { id: sprintTaskHistory[1].id }, data: { changedAt: toStamp(day3, 9, 0) } });
+
+    const sprintMembershipTaskLogs = await prisma.activityLog.findMany({
+      where: {
+        entityType: "TASK",
+        entityId: { in: [taskA1.id, taskA2.id, createSprintTask.id] },
+        OR: [
+          { beforeJson: { path: ["sprintId"], equals: sprintA1.id } },
+          { afterJson: { path: ["sprintId"], equals: sprintA1.id } }
+        ]
+      },
+      orderBy: { createdAt: "asc" }
+    });
+    for (const log of sprintMembershipTaskLogs) {
+      const beforeSprintId = log.beforeJson && typeof log.beforeJson === "object" && !Array.isArray(log.beforeJson)
+        ? log.beforeJson.sprintId
+        : null;
+      const afterSprintId = log.afterJson && typeof log.afterJson === "object" && !Array.isArray(log.afterJson)
+        ? log.afterJson.sprintId
+        : null;
+
+      if (log.entityId === taskA2.id && beforeSprintId !== sprintA1.id && afterSprintId === sprintA1.id) {
+        await prisma.activityLog.update({ where: { id: log.id }, data: { createdAt: toStamp(day1, 10, 0) } });
+      }
+      if (log.entityId === taskA1.id && beforeSprintId === sprintA1.id && afterSprintId !== sprintA1.id) {
+        await prisma.activityLog.update({ where: { id: log.id }, data: { createdAt: toStamp(day3, 12, 0) } });
+      }
+      if (log.entityId === createSprintTask.id && beforeSprintId === sprintA1.id && afterSprintId !== sprintA1.id) {
+        await prisma.activityLog.update({ where: { id: log.id }, data: { createdAt: toStamp(day3, 13, 0) } });
+      }
+      if (log.entityId === createSprintTask.id && beforeSprintId !== sprintA1.id && afterSprintId === sprintA1.id) {
+        await prisma.activityLog.update({ where: { id: log.id }, data: { createdAt: toStamp(day1, 9, 30) } });
+      }
+    }
+
     const indicatorsBurnup = await scrum.request(
       "GET",
       `/indicators/products/${productA.id}/burnup?sprintId=${sprintA1.id}`,
@@ -501,6 +708,28 @@ async function main() {
       [200]
     );
     assert.ok(Array.isArray(indicatorsBurnup), "burnup should return array");
+    assert.ok(indicatorsBurnup.length >= 3, "burnup should return one point per sprint day");
+    assert.equal(indicatorsBurnup[0]?.date, sprintA1StartDate.toISOString().slice(0, 10));
+    assert.equal(indicatorsBurnup.at(-1)?.date, sprintA1EndDate.toISOString().slice(0, 10));
+    assert.ok(indicatorsBurnup.some((point) => point.completedPoints > 0), "burnup should reflect completed work");
+    assert.deepEqual(
+      indicatorsBurnup.map((point) => point.date),
+      [day1, day2, day3].map((value) => value.toISOString().slice(0, 10)),
+      "burnup should include one point per sprint day in order"
+    );
+    assert.equal(indicatorsBurnup[0].completedPoints, 0, "first sprint day should start without completed points");
+    assert.ok(
+      indicatorsBurnup[1].completedPoints > indicatorsBurnup[0].completedPoints,
+      "burnup should increase on the day a task is completed"
+    );
+    assert.ok(
+      indicatorsBurnup[2].completedPoints < indicatorsBurnup[1].completedPoints,
+      "burnup should reflect later reopen/removal instead of repeating the final snapshot across all days"
+    );
+    assert.ok(
+      indicatorsBurnup[0].scopePoints > indicatorsBurnup[2].scopePoints,
+      "scope should shrink on later days when tasks leave the sprint"
+    );
 
     const indicatorsBurndown = await scrum.request(
       "GET",
@@ -509,21 +738,33 @@ async function main() {
       [200]
     );
     assert.ok(Array.isArray(indicatorsBurndown), "burndown should return array");
+    assert.equal(indicatorsBurndown.length, indicatorsBurnup.length, "burndown should mirror burnup day count");
+    assert.ok(
+      indicatorsBurndown[1].remainingPoints < indicatorsBurndown[0].remainingPoints,
+      "burndown remaining work should change when work is completed on a later day"
+    );
 
     const teamVelocity = await scrum.request("GET", `/indicators/teams/${teamA.id}/velocity`, undefined, [200]);
     assert.ok(Array.isArray(teamVelocity), "team velocity should return array");
+    const teamVelocityWindowed = await scrum.request("GET", `/indicators/teams/${teamA.id}/velocity?window=week`, undefined, [200]);
+    assert.ok(Array.isArray(teamVelocityWindowed), "team velocity window filter should return array");
 
     const userVelocity = await scrum.request("GET", `/indicators/users/${memberRecord.id}/velocity`, undefined, [200]);
     assert.ok(Array.isArray(userVelocity), "user velocity should return array");
+    const userVelocityWindowed = await scrum.request("GET", `/indicators/users/${memberRecord.id}/velocity?window=year`, undefined, [200]);
+    assert.ok(Array.isArray(userVelocityWindowed), "user velocity window filter should return array");
 
     const productStats = await scrum.request("GET", `/indicators/products/${productA.id}/stats?window=week`, undefined, [200]);
     assert.equal(productStats.window, "week");
+    assert.ok(productStats.summary, "product stats should include summary");
 
     const teamStats = await scrum.request("GET", `/indicators/teams/${teamA.id}/stats?window=semester`, undefined, [200]);
     assert.equal(teamStats.window, "semester");
+    assert.ok(teamStats.summary, "team stats should include summary");
 
     const userStats = await scrum.request("GET", `/indicators/users/${memberRecord.id}/stats?window=year`, undefined, [200]);
     assert.equal(userStats.window, "year");
+    assert.ok(userStats.summary, "user stats should include summary");
 
     await scrum.expectStatus("GET", `/indicators/products/${productA.id}/stats?window=invalid`, undefined, 400);
 
@@ -543,6 +784,28 @@ async function main() {
       [200]
     );
     assert.ok(Array.isArray(memberActivitySelf.items));
+
+    const taskActivity = await scrum.request(
+      "GET",
+      `/activity/entities/tasks/${taskA1.id}?page=1&pageSize=20`,
+      undefined,
+      [200]
+    );
+    assert.ok(
+      taskActivity.items.some((item) => item.action === "TASK_MESSAGE_CREATED"),
+      "task activity should include task messages"
+    );
+    const messageActivity = taskActivity.items.find((item) => item.action === "TASK_MESSAGE_CREATED");
+    assert.match(messageActivity.detail.summary, /Primer mensaje|Respuesta|Nuevo mensaje/i);
+    const derivedTaskActivityEntity = await scrum.request(
+      "GET",
+      `/activity/entities/tasks/${derivedTask.id}?page=1&pageSize=20`,
+      undefined,
+      [200]
+    );
+    const derivedTaskActivity = derivedTaskActivityEntity.items.find((item) => item.action === "TASK_CREATED_FROM_MESSAGE");
+    assert.ok(derivedTaskActivity, "derived task entity should include creation-from-message action");
+    assert.match(derivedTaskActivity.detail.summary, /a partir de un mensaje/i);
 
     const userStatsActivity = await scrum.request(
       "GET",
@@ -657,6 +920,7 @@ async function main() {
 
     console.log("\nExtended API domain e2e coverage passed.\n");
   } finally {
+    await prisma.$disconnect();
     if (!apiProcess.killed) {
       apiProcess.kill("SIGTERM");
     }

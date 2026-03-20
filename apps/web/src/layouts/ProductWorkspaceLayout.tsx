@@ -22,6 +22,7 @@ function ProductTabs({ productId }: { productId: string }) {
 }
 
 function getWorkspaceSectionLabel(pathname: string): string {
+  if (pathname.includes("/definition")) return "Definicion";
   if (pathname.includes("/backlog/stories/")) return "Tareas de historia";
   if (pathname.includes("/backlog")) return "Backlog";
   if (pathname.includes("/sprints/") && pathname.includes("/board")) return "Ejecucion de sprint";
@@ -33,7 +34,7 @@ function getWorkspaceSectionLabel(pathname: string): string {
 export const ProductWorkspaceLayout = observer(function ProductWorkspaceLayout() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
-  const { productId, storyId, sprintId } = useParams<{ productId: string; storyId?: string; sprintId?: string }>();
+  const { productId, storyId, sprintId, taskId } = useParams<{ productId: string; storyId?: string; sprintId?: string; taskId?: string }>();
   const location = useLocation();
 
   React.useEffect(() => {
@@ -52,6 +53,8 @@ export const ProductWorkspaceLayout = observer(function ProductWorkspaceLayout()
     ? `Historia ${storyId.slice(0, 8)}`
     : sprintId
       ? `Sprint ${sprintId.slice(0, 8)}`
+      : taskId
+        ? `Tarea ${taskId.slice(0, 8)}`
       : product?.key ?? "Producto";
 
   return (

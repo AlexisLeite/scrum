@@ -1,0 +1,545 @@
+
+> scrum-platform@ dev C:\Users\alexi\.codex\worktrees\602a\scrum
+> pnpm db:push && pnpm db:generate && pnpm db:seed && turbo run dev --parallel
+
+
+> scrum-platform@ db:push C:\Users\alexi\.codex\worktrees\602a\scrum
+> node scripts/run-with-env.mjs pnpm --filter @scrum/api prisma:push
+
+
+> @scrum/api@0.1.0 prisma:push C:\Users\alexi\.codex\worktrees\602a\scrum\apps\api
+> prisma db push --skip-generate
+
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "scrum", schema "public" at "localhost:5433"
+
+The database is already in sync with the Prisma schema.
+
+
+> scrum-platform@ db:generate C:\Users\alexi\.codex\worktrees\602a\scrum
+> node scripts/run-with-env.mjs pnpm --filter @scrum/api prisma:generate
+
+
+> @scrum/api@0.1.0 prisma:generate C:\Users\alexi\.codex\worktrees\602a\scrum\apps\api
+> prisma generate
+
+Prisma schema loaded from prisma\schema.prisma
+
+✔ Generated Prisma Client (v6.19.2) to .\..\..\node_modules\.pnpm\@prisma+client@6.19.2_prism_6b2b1af085fe6797f5a5ea830937a8e3\node_modules\@prisma\client in 159ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+
+
+> scrum-platform@ db:seed C:\Users\alexi\.codex\worktrees\602a\scrum
+> node scripts/run-with-env.mjs pnpm --filter @scrum/api prisma:seed
+
+
+> @scrum/api@0.1.0 prisma:seed C:\Users\alexi\.codex\worktrees\602a\scrum\apps\api
+> node prisma/seed.mjs
+
+• Packages in scope: @scrum/api, @scrum/contracts, @scrum/ui, @scrum/web
+• Running dev in 4 packages
+• Remote caching disabled, using shared worktree cache
+@scrum/web:dev: cache bypass, force executing eaac39b6e9601d6d
+@scrum/api:dev: cache bypass, force executing 5900c79ce0775f8d
+@scrum/web:dev: 
+@scrum/web:dev: > @scrum/web@0.1.0 dev C:\Users\alexi\.codex\worktrees\602a\scrum\apps\web
+@scrum/web:dev: > vite
+@scrum/web:dev: 
+@scrum/api:dev: 
+@scrum/api:dev: > @scrum/api@0.1.0 dev C:\Users\alexi\.codex\worktrees\602a\scrum\apps\api
+@scrum/api:dev: > nest start --watch
+@scrum/api:dev: 
+@scrum/web:dev: 
+@scrum/web:dev:   [32m[1mVITE[22m v6.4.1[39m  [2mready in [0m[1m406[22m[2m[0m ms[22m
+@scrum/web:dev: 
+@scrum/web:dev:   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+@scrum/web:dev: [2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+@scrum/api:dev: [2J[3J[H[[90m9:25:18 PM[0m] Starting compilation in watch mode...
+@scrum/api:dev: 
+@scrum/api:dev: [[90m9:25:21 PM[0m] Found 0 errors. Watching for file changes.
+@scrum/api:dev: 
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +17ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +3ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +2ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mActivityModule dependencies initialized[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mIndicatorsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAdminModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTeamsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mStoriesModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTasksModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mSprintsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mActivityController {/api/v1/activity}:[39m[38;5;3m +7ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/entities/:entityType/:entityId, GET} route[39m[38;5;3m +2ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/users/:userId, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/users/:userId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/record, POST} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAdminController {/api/v1/admin}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/teams, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/teams, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/role, PATCH} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/api/v1/auth}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/signup, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/login, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/refresh, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/logout, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/gitlab, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/gitlab/callback, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/me, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/me, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mTeamsController {/api/v1/teams}:[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/members, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/members/:userId, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/products, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/products, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/members, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/workflow, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/workflow, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mStoriesController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/stories, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/stories, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id/rank, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mTasksController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:storyId/tasks, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/detail, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:storyId/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/status, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/assign, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages/:messageId/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mSprintsController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/sprints, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/sprints, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/start, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/complete, POST} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/board, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/pending-tasks, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId/move, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mIndicatorsController {/api/v1/indicators}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/burnup, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/burndown, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/teams/:teamId/velocity, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/teams/:teamId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/users/:userId/velocity, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/users/:userId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 20072  - [39m03/19/2026, 9:25:23 PM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +15ms[39m
+@scrum/api:dev: [2J[3J[H[[90m9:29:24 PM[0m] File change detected. Starting incremental compilation...
+@scrum/api:dev: 
+@scrum/api:dev: [[90m9:29:24 PM[0m] Found 0 errors. Watching for file changes.
+@scrum/api:dev: 
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +16ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +3ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +2ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mActivityModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mIndicatorsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAdminModule dependencies initialized[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTeamsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mStoriesModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTasksModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mSprintsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mActivityController {/api/v1/activity}:[39m[38;5;3m +6ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/entities/:entityType/:entityId, GET} route[39m[38;5;3m +3ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/users/:userId, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/users/:userId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/record, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAdminController {/api/v1/admin}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/teams, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/teams, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/role, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/api/v1/auth}:[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/signup, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/login, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/refresh, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/logout, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/gitlab, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/gitlab/callback, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/me, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/me, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mTeamsController {/api/v1/teams}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/members, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/members/:userId, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/products, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/products, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/members, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/workflow, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/workflow, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mStoriesController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/stories, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/stories, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id/rank, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mTasksController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:storyId/tasks, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/detail, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:storyId/tasks, POST} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/status, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/assign, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages/:messageId/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mSprintsController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/sprints, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/sprints, POST} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/start, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/complete, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/board, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/pending-tasks, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId/move, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mIndicatorsController {/api/v1/indicators}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/burnup, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/burndown, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/teams/:teamId/velocity, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/teams/:teamId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/users/:userId/velocity, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/users/:userId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 33700  - [39m03/19/2026, 9:29:26 PM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +15ms[39m
+@scrum/api:dev: [2J[3J[H[[90m9:29:26 PM[0m] File change detected. Starting incremental compilation...
+@scrum/api:dev: 
+@scrum/api:dev: [[90m9:29:27 PM[0m] Found 0 errors. Watching for file changes.
+@scrum/api:dev: 
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +16ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +2ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +3ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mActivityModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mIndicatorsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAdminModule dependencies initialized[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTeamsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mStoriesModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTasksModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mSprintsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mActivityController {/api/v1/activity}:[39m[38;5;3m +6ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/entities/:entityType/:entityId, GET} route[39m[38;5;3m +2ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/users/:userId, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/users/:userId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/record, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAdminController {/api/v1/admin}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/teams, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/teams, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/role, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/api/v1/auth}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/signup, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/login, POST} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/refresh, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/logout, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/gitlab, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/gitlab/callback, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/me, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/me, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mTeamsController {/api/v1/teams}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/members, POST} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/members/:userId, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/products, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/products, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/members, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/workflow, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/workflow, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mStoriesController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/stories, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/stories, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id, PATCH} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id/rank, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mTasksController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:storyId/tasks, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/detail, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:storyId/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/status, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/assign, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages/:messageId/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mSprintsController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/sprints, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/sprints, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/start, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/complete, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/board, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/pending-tasks, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId/move, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mIndicatorsController {/api/v1/indicators}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/burnup, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/burndown, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/teams/:teamId/velocity, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/teams/:teamId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/users/:userId/velocity, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/users/:userId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 16060  - [39m03/19/2026, 9:29:28 PM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +14ms[39m
+@scrum/web:dev: [2m9:32:39 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/ui/kanban/KanbanBoard.tsx[22m
+@scrum/web:dev: [2m9:32:41 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ new dependencies optimized: [33m@dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities[32m[39m
+@scrum/web:dev: [2m9:32:41 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ optimized dependencies changed. reloading[39m
+@scrum/web:dev: [2m9:33:12 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/ui/kanban/kanban.css[22m
+@scrum/api:dev: [2J[3J[H[[90m9:33:20 PM[0m] File change detected. Starting incremental compilation...
+@scrum/api:dev: 
+@scrum/api:dev: [2J[3J[H[[90m9:33:20 PM[0m] File change detected. Starting incremental compilation...
+@scrum/api:dev: 
+@scrum/api:dev: [2J[3J[H[[90m9:33:22 PM[0m] File change detected. Starting incremental compilation...
+@scrum/api:dev: 
+@scrum/api:dev: [[90m9:33:23 PM[0m] Found 0 errors. Watching for file changes.
+@scrum/api:dev: 
+@scrum/api:dev: [2J[3J[H[[90m9:33:23 PM[0m] File change detected. Starting incremental compilation...
+@scrum/api:dev: 
+@scrum/api:dev: [[90m9:33:23 PM[0m] Found 0 errors. Watching for file changes.
+@scrum/api:dev: 
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +16ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +2ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +3ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mActivityModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mIndicatorsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAdminModule dependencies initialized[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTeamsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mStoriesModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTasksModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mSprintsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mActivityController {/api/v1/activity}:[39m[38;5;3m +6ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/entities/:entityType/:entityId, GET} route[39m[38;5;3m +2ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/users/:userId, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/users/:userId/stats, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/record, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAdminController {/api/v1/admin}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/teams, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/teams, PATCH} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/role, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/api/v1/auth}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/signup, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/login, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/refresh, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/logout, POST} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/gitlab, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/gitlab/callback, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/me, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/me, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mTeamsController {/api/v1/teams}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/members, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/members/:userId, DELETE} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/products, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/products, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/members, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/workflow, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/workflow, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mStoriesController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/stories, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/stories, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id/rank, POST} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mTasksController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:storyId/tasks, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/detail, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:storyId/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/status, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/assign, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages/:messageId/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mSprintsController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/sprints, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/sprints, POST} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/start, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/complete, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/board, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/pending-tasks, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId/move, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mIndicatorsController {/api/v1/indicators}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/burnup, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/burndown, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/teams/:teamId/velocity, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/stats, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/teams/:teamId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/users/:userId/velocity, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/users/:userId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 26024  - [39m03/19/2026, 9:33:25 PM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +15ms[39m
+@scrum/api:dev: [2J[3J[H[[90m9:37:30 PM[0m] File change detected. Starting incremental compilation...
+@scrum/api:dev: 
+@scrum/api:dev: [[90m9:37:30 PM[0m] Found 0 errors. Watching for file changes.
+@scrum/api:dev: 
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +16ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +3ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +2ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mActivityModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mIndicatorsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAdminModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTeamsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mStoriesModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTasksModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mSprintsModule dependencies initialized[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mActivityController {/api/v1/activity}:[39m[38;5;3m +6ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/entities/:entityType/:entityId, GET} route[39m[38;5;3m +3ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/users/:userId, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/users/:userId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/activity/record, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAdminController {/api/v1/admin}:[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/teams, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/teams, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/admin/users/:id/role, PATCH} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/api/v1/auth}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/signup, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/login, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/refresh, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/logout, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/gitlab, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/gitlab/callback, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/me, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/me, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mTeamsController {/api/v1/teams}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams, GET} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/members, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/members/:userId, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/products, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/teams/:id/products, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id, DELETE} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/members, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/workflow, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:id/workflow, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mStoriesController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/stories, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/stories, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:id/rank, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mTasksController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:storyId/tasks, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/detail, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/stories/:storyId/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/status, PATCH} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/assign, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/tasks/:id/messages/:messageId/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mSprintsController {/api/v1}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/sprints, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/sprints, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/start, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/complete, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/board, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/pending-tasks, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks, POST} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId, POST} route[39m[38;5;3m +1ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId, DELETE} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/sprints/:id/tasks/:taskId/move, PATCH} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mIndicatorsController {/api/v1/indicators}:[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/burnup, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/burndown, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/teams/:teamId/velocity, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/products/:productId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/teams/:teamId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/users/:userId/velocity, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/indicators/users/:userId/stats, GET} route[39m[38;5;3m +0ms[39m
+@scrum/api:dev: [32m[Nest] 36464  - [39m03/19/2026, 9:37:31 PM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +15ms[39m
+@scrum/api:dev: Terminate batch job (Y/N)? 
+@scrum/api:dev:  ELIFECYCLE  Command failed with exit code 3221225786.
+@scrum/web:dev:  ELIFECYCLE  Command failed with exit code 3221225786.
+ ELIFECYCLE  Command failed with exit code 3221225786.

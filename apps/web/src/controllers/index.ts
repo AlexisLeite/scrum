@@ -179,14 +179,36 @@ export class ProductController {
     return task;
   }
 
+  async loadTaskDetail(taskId: string) {
+    return apiClient.get<any>(`/tasks/${taskId}/detail`);
+  }
+
+  async loadTaskMessages(taskId: string) {
+    return apiClient.get<any[]>(`/tasks/${taskId}/messages`);
+  }
+
+  async createTaskMessage(taskId: string, payload: { body: string; parentMessageId?: string }) {
+    return apiClient.post<any>(`/tasks/${taskId}/messages`, payload);
+  }
+
+  async createTaskFromMessage(taskId: string, messageId: string, payload: any) {
+    const task = await apiClient.post<any>(`/tasks/${taskId}/messages/${messageId}/tasks`, payload);
+    this.store.tasks.upsert(task);
+    this.syncTaskInBoard(task);
+    return task;
+  }
+
   async deleteTask(taskId: string) {
     await apiClient.del(`/tasks/${taskId}`);
     this.store.tasks.remove(taskId);
     this.syncTaskInBoard({ id: taskId, status: "__deleted__" });
   }
 
-  async updateTaskStatus(taskId: string, status: string) {
-    const task = await apiClient.patch<any>(`/tasks/${taskId}/status`, { status });
+  async updateTaskStatus(taskId: string, status: string, actualHours?: number) {
+    const task = await apiClient.patch<any>(`/tasks/${taskId}/status`, {
+      status,
+      ...(actualHours !== undefined ? { actualHours } : {})
+    });
     this.store.tasks.upsert(task);
     this.syncTaskInBoard(task);
     return task;
@@ -233,7 +255,7 @@ export class ProductController {
     return board;
   }
 
-  async moveBoardTask(sprintId: string, taskId: string, payload: { status: string; position: number }) {
+  async moveBoardTask(sprintId: string, taskId: string, payload: { status: string; position: number; actualHours?: number }) {
     const task = await apiClient.patch<any>(`/sprints/${sprintId}/tasks/${taskId}/move`, payload);
     this.store.tasks.upsert(task);
     this.syncTaskInBoard(task);
