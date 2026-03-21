@@ -462,9 +462,9 @@ function KanbanColumnView(props: {
     && !column.tasks.some((task) => task.id === activeDrag.taskId)
   );
   const ghostIndex = activeDrag ? findTaskIndex(activeDrag.snapshot, activeDrag.fromColumn, activeDrag.taskId) : -1;
-  const renderItems = column.tasks.map((task) => ({ kind: "task" as const, task }));
+  const renderItems: { kind: 'task' | 'ghost', task: KanbanTask }[] = column.tasks.map((task) => ({ kind: "task" as const, task }));
   if (showGhost && activeDrag && ghostIndex >= 0) {
-    renderItems.splice(Math.min(ghostIndex, renderItems.length), 0, { kind: "ghost" as const, task: activeDrag.task });
+    renderItems.splice(Math.min(ghostIndex, renderItems.length), 0, { kind: "ghost", task: activeDrag.task });
   }
 
   return (
