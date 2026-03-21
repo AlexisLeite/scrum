@@ -26,6 +26,7 @@ type ActiveDragState = {
   snapshot: KanbanColumn[];
   task: KanbanTask;
   overlayWidth: number | null;
+  overlayHeight: number | null;
 };
 
 type CompletionRequest =
@@ -380,6 +381,34 @@ function SortableTaskCard(props: {
   );
 }
 
+function GhostTaskCard(props: { task: KanbanTask; height?: number | null }) {
+  const { task, height } = props;
+
+  return (
+    <article
+      className="kb-card kb-card-ghost"
+      style={height ? { minHeight: `${height}px` } : undefined}
+      aria-hidden="true"
+    >
+      <TaskCardContent
+        task={task}
+        assignees={[]}
+        statusOptions={[task.status]}
+        pending={false}
+        dragDisabled
+        allowAssigneeChange={false}
+        allowEditTask={false}
+        allowStatusChange={false}
+        editActionLabel=""
+        descriptionExpanded={false}
+        onAssigneeChange={async () => undefined}
+        onStatusChange={async () => undefined}
+        onEditTask={() => undefined}
+      />
+    </article>
+  );
+}
+
 function KanbanColumnView(props: {
   column: KanbanColumn;
   assignees: KanbanAssignee[];
@@ -397,6 +426,7 @@ function KanbanColumnView(props: {
   getTaskAssignees: (task: KanbanTask, assignees: KanbanAssignee[]) => KanbanAssignee[];
   expandedTaskIds: Set<string>;
   onExpandDescription: (taskId: string) => void;
+  activeDrag: ActiveDragState | null;
   onCreateTask: (defaultStatus: string) => void;
   onEditTask: (task: KanbanTask) => void;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
@@ -419,12 +449,23 @@ function KanbanColumnView(props: {
     getTaskAssignees,
     expandedTaskIds,
     onExpandDescription,
+    activeDrag,
     onCreateTask,
     onEditTask,
     onAssigneeChange,
     onStatusChange
   } = props;
   const { setNodeRef, isOver } = useDroppable({ id: column.name, disabled: !canReorder });
+  const showGhost = Boolean(
+    activeDrag
+    && column.name === activeDrag.fromColumn
+    && !column.tasks.some((task) => task.id === activeDrag.taskId)
+  );
+  const ghostIndex = activeDrag ? findTaskIndex(activeDrag.snapshot, activeDrag.fromColumn, activeDrag.taskId) : -1;
+  const renderItems = column.tasks.map((task) => ({ kind: "task" as const, task }));
+  if (showGhost && activeDrag && ghostIndex >= 0) {
+    renderItems.splice(Math.min(ghostIndex, renderItems.length), 0, { kind: "ghost" as const, task: activeDrag.task });
+  }
 
   return (
     <section ref={setNodeRef} className={`kb-column ${isOver ? "is-drop-column" : ""}`}>
@@ -448,7 +489,17 @@ function KanbanColumnView(props: {
 
       <SortableContext items={column.tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
         <div className="kb-task-list">
-          {column.tasks.map((task) => {
+          {renderItems.map((entry, index) => {
+            if (entry.kind === "ghost") {
+              return (
+                <GhostTaskCard
+                  key={`ghost:${activeDrag?.taskId ?? index}`}
+                  task={entry.task}
+                  height={activeDrag?.overlayHeight}
+                />
+              );
+            }
+            const task = entry.task;
             const pending = isTaskPending ? isTaskPending(task.id) : false;
             const taskAllowsStatus = canChangeStatus(task);
             return (
@@ -643,7 +694,8 @@ export function KanbanBoard({
       fromColumn,
       snapshot: copyColumns(localColumns),
       task: { ...task },
-      overlayWidth: event.active.rect.current.initial?.width ?? null
+      overlayWidth: event.active.rect.current.initial?.width ?? null,
+      overlayHeight: event.active.rect.current.initial?.height ?? null
     });
   };
 
@@ -801,6 +853,7 @@ export function KanbanBoard({
                 getTaskAssignees={getTaskAssignees}
                 expandedTaskIds={expandedTaskIds}
                 onExpandDescription={expandDescription}
+                activeDrag={activeDrag}
                 onCreateTask={onCreateTask}
                 onEditTask={onEditTask}
                 onAssigneeChange={onAssigneeChange}

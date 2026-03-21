@@ -77,6 +77,11 @@
   opacity: 0.42;
 }
 
+.kb-card-ghost {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .kb-card-overlay {
   box-shadow: 0 16px 34px rgba(3, 8, 18, 0.3);
   transform-origin: top left;
