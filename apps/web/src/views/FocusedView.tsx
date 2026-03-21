@@ -255,91 +255,86 @@ export const FocusedView = observer(function FocusedView() {
       <section className="card">
         <div className="section-head">
           <div>
-            <h3>Kanban pendiente</h3>
-            <p className="muted">{kanbanSummary}</p>
+            <h3>Sprint actual</h3>
           </div>
-          <div className="row-actions compact">
-            <span className="pill">{board.columns.length} columnas</span>
-            <span className="pill">{allTasks.length} activas</span>
-          </div>
+          {loading &&
+            <div className="muted">Cargando tareas pendientes...</div>
+          }
         </div>
-        {loading ? (
-          <p className="muted">Cargando tareas pendientes...</p>
-        ) : (
-          <KanbanBoard
-            columns={board.columns}
-            assignees={allAssignableUsers}
-            statusOptions={statusOptions}
-            readOnly={false}
-            allowCreateTask={false}
-            allowAssigneeChange
-            allowStatusChange
-            editActionLabel={(task) => editLabel}
-            canCreateTask={() => false}
-            canEditTask={() => true}
-            canChangeAssignee={(task) => {
-              if (!canAssignFocusedTask(user.role)) {
-                return false;
+
+        <KanbanBoard
+          columns={board.columns}
+          assignees={allAssignableUsers}
+          statusOptions={statusOptions}
+          readOnly={false}
+          allowCreateTask={false}
+          allowAssigneeChange
+          allowStatusChange
+          editActionLabel={(task) => editLabel}
+          canCreateTask={() => false}
+          canEditTask={() => true}
+          canChangeAssignee={(task) => {
+            if (!canAssignFocusedTask(user.role)) {
+              return false;
+            }
+            if (canAssignOthers) {
+              return true;
+            }
+            return canClaimFocusedTask(user.role, task) || task.assigneeId === user.id;
+          }}
+          canChangeStatus={(task) =>
+            canChangeFocusedTaskStatus(user.role) && canMoveFocusedTask(user.role, task, user.id)
+          }
+          canMoveTask={(task) => canMoveFocusedTask(user.role, task, user.id)}
+          getTaskAssignees={(task, assignees) => {
+            if (canAssignOthers) {
+              return assignees;
+            }
+            if (!canAssignFocusedTask(user.role)) {
+              return [];
+            }
+            return [{ id: user.id, name: user.name }];
+          }}
+          isTaskPending={(taskId) => Boolean(pendingTaskIds[taskId])}
+          onCreateTask={() => undefined}
+          onEditTask={(task) => void openTaskDrawer(task as FocusedTask)}
+          onAssigneeChange={(taskId, assigneeId) =>
+            withPendingTask(taskId, async () => {
+              const task = findTask(board, taskId);
+              if (!task) {
+                return;
               }
               if (canAssignOthers) {
-                return true;
+                await productController.assignTask(taskId, { assigneeId });
+                return;
               }
-              return canClaimFocusedTask(user.role, task) || task.assigneeId === user.id;
-            }}
-            canChangeStatus={(task) =>
-              canChangeFocusedTaskStatus(user.role) && canMoveFocusedTask(user.role, task, user.id)
-            }
-            canMoveTask={(task) => canMoveFocusedTask(user.role, task, user.id)}
-            getTaskAssignees={(task, assignees) => {
-              if (canAssignOthers) {
-                return assignees;
+              if (!user || assigneeId !== user.id || !canClaimFocusedTask(user.role, task)) {
+                return;
               }
-              if (!canAssignFocusedTask(user.role)) {
-                return [];
+              await productController.assignTask(taskId, { assigneeId: user.id });
+            })
+          }
+          onStatusChange={(taskId, status, actualHours) =>
+            withPendingTask(taskId, async () => {
+              const task = findTask(board, taskId);
+              if (!task || !canMoveFocusedTask(user.role, task, user.id)) {
+                return;
               }
-              return [{ id: user.id, name: user.name }];
-            }}
-            isTaskPending={(taskId) => Boolean(pendingTaskIds[taskId])}
-            onCreateTask={() => undefined}
-            onEditTask={(task) => void openTaskDrawer(task as FocusedTask)}
-            onAssigneeChange={(taskId, assigneeId) =>
-              withPendingTask(taskId, async () => {
-                const task = findTask(board, taskId);
-                if (!task) {
-                  return;
-                }
-                if (canAssignOthers) {
-                  await productController.assignTask(taskId, { assigneeId });
-                  return;
-                }
-                if (!user || assigneeId !== user.id || !canClaimFocusedTask(user.role, task)) {
-                  return;
-                }
-                await productController.assignTask(taskId, { assigneeId: user.id });
-              })
-            }
-            onStatusChange={(taskId, status, actualHours) =>
-              withPendingTask(taskId, async () => {
-                const task = findTask(board, taskId);
-                if (!task || !canMoveFocusedTask(user.role, task, user.id)) {
-                  return;
-                }
+              await productController.updateTaskStatus(taskId, status, actualHours);
+            })
+          }
+          onMoveTask={(taskId, status, position, actualHours) =>
+            withPendingTask(taskId, async () => {
+              const task = findTask(board, taskId);
+              const sprintId = task?.sprintId ?? task?.sprint?.id ?? null;
+              if (!task || !canMoveFocusedTask(user.role, task, user.id) || !sprintId) {
                 await productController.updateTaskStatus(taskId, status, actualHours);
-              })
-            }
-            onMoveTask={(taskId, status, position, actualHours) =>
-              withPendingTask(taskId, async () => {
-                const task = findTask(board, taskId);
-                const sprintId = task?.sprintId ?? task?.sprint?.id ?? null;
-                if (!task || !canMoveFocusedTask(user.role, task, user.id) || !sprintId) {
-                  await productController.updateTaskStatus(taskId, status, actualHours);
-                  return;
-                }
-                await productController.moveBoardTask(sprintId, taskId, { status, position, actualHours });
-              })
-            }
-          />
-        )}
+                return;
+              }
+              await productController.moveBoardTask(sprintId, taskId, { status, position, actualHours });
+            })
+          }
+        />
         {!loading && board.columns.length === 0 ? (
           <p className="muted">No hay tareas pendientes en kanban para mostrar ahora.</p>
         ) : null}

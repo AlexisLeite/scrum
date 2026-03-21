@@ -29,18 +29,18 @@ type ActiveDragState = {
 
 type CompletionRequest =
   | {
-      mode: "status";
-      task: KanbanTask;
-      nextStatus: string;
-    }
+    mode: "status";
+    task: KanbanTask;
+    nextStatus: string;
+  }
   | {
-      mode: "move";
-      task: KanbanTask;
-      fromColumn: string;
-      targetColumnName: string;
-      visibleIndex: number;
-      snapshot: KanbanColumn[];
-    };
+    mode: "move";
+    task: KanbanTask;
+    fromColumn: string;
+    targetColumnName: string;
+    visibleIndex: number;
+    snapshot: KanbanColumn[];
+  };
 
 type KanbanBoardProps = {
   columns: KanbanColumn[];
@@ -525,7 +525,7 @@ export function KanbanBoard({
     () => localColumns.reduce((acc, column) => acc + column.tasks.length, 0),
     [localColumns]
   );
-  const canReorder = !readOnly && allowStatusChange && !search.trim() && assigneeFilter === "all";
+  const canReorder = !readOnly && allowStatusChange;
   const resolveEditActionLabel = React.useCallback(
     (task: KanbanTask) => typeof editActionLabel === "function" ? editActionLabel(task) : editActionLabel,
     [editActionLabel]
