@@ -223,6 +223,7 @@ export const FocusedView = observer(function FocusedView() {
   const [pendingTaskIds, setPendingTaskIds] = React.useState<Record<string, boolean>>({});
   const [chartLoading, setChartLoading] = React.useState(false);
   const [selectedChartContextKey, setSelectedChartContextKey] = React.useState("");
+  const [chartRefreshToken, setChartRefreshToken] = React.useState(0);
 
   const reloadBoard = React.useCallback(async () => {
     setLoading(true);
@@ -286,6 +287,8 @@ export const FocusedView = observer(function FocusedView() {
       ?? null,
     [creationContexts, selectedChartContextKey]
   );
+  const selectedChartProductId = selectedChartContext?.productId ?? "";
+  const selectedChartSprintId = selectedChartContext?.sprintId ?? "";
 
   React.useEffect(() => {
     const nextKey = creationContexts[0] ? `${creationContexts[0].productId}:${creationContexts[0].sprintId}` : "";
@@ -298,19 +301,15 @@ export const FocusedView = observer(function FocusedView() {
   }, [creationContexts]);
 
   React.useEffect(() => {
-    if (!selectedChartContext) {
+    if (!selectedChartProductId || !selectedChartSprintId) {
       store.setBurnup([]);
       return;
     }
 
     let active = true;
     setChartLoading(true);
-    void productController.loadBurnup(selectedChartContext.productId, selectedChartContext.sprintId)
-      .catch(() => {
-        if (active) {
-          store.setBurnup([]);
-        }
-      })
+    void productController.loadBurnup(selectedChartProductId, selectedChartSprintId)
+      .catch(() => undefined)
       .finally(() => {
         if (active) {
           setChartLoading(false);
@@ -320,16 +319,25 @@ export const FocusedView = observer(function FocusedView() {
     return () => {
       active = false;
     };
-  }, [productController, selectedChartContext, store]);
+  }, [chartRefreshToken, productController, selectedChartProductId, selectedChartSprintId, store]);
+
+  const refreshSelectedChart = React.useCallback(() => {
+    if (!selectedChartProductId || !selectedChartSprintId) {
+      return;
+    }
+    setChartRefreshToken((current) => current + 1);
+  }, [selectedChartProductId, selectedChartSprintId]);
 
   const withPendingTask = async (taskId: string, job: () => Promise<void>) => {
     setPendingTaskIds((previous) => ({ ...previous, [taskId]: true }));
     try {
       await job();
       setError("");
+      refreshSelectedChart();
     } catch (mutationError) {
       setError(getErrorMessage(mutationError));
       await reloadBoard();
+      refreshSelectedChart();
     } finally {
       setPendingTaskIds((previous) => {
         const next = { ...previous };
@@ -590,7 +598,6 @@ export const FocusedView = observer(function FocusedView() {
         <div className="section-head">
           <div>
             <h3>Burnup / Burndown</h3>
-            <p className="muted">Seguimiento del sprint activo seleccionado dentro de tu vista Focused.</p>
           </div>
           {selectedChartContext ? (
             <span className="pill">
@@ -616,27 +623,30 @@ export const FocusedView = observer(function FocusedView() {
           </label>
         ) : null}
 
-        {chartLoading ? (
-          <p className="muted">Cargando serie temporal del sprint...</p>
-        ) : !selectedChartContext ? (
+        {!selectedChartContext ? (
           <p className="muted">No hay un sprint activo visible para calcular burnup y burndown.</p>
         ) : store.burnup.length > 0 ? (
-          <ReactECharts
-            option={{
-              animationDuration: 280,
-              tooltip: { trigger: "axis", ...buildTooltipTheme(chartTheme) },
-              legend: { top: 0, ...buildLegendTheme(chartTheme) },
-              grid: { left: 30, right: 24, bottom: 32, top: 42, containLabel: true },
-              xAxis: { type: "category", data: store.burnup.map((item) => item.date), ...buildAxisTheme(chartTheme) },
-              yAxis: { type: "value", name: "pts", ...buildAxisTheme(chartTheme) },
-              series: [
-                { name: "Completado", type: "line", smooth: true, data: store.burnup.map((item) => item.completedPoints) },
-                { name: "Scope", type: "line", smooth: true, data: store.burnup.map((item) => item.scopePoints) },
-                { name: "Restante", type: "line", smooth: true, data: store.burnup.map((item) => item.remainingPoints) }
-              ]
-            }}
-            style={{ height: 320 }}
-          />
+          <>
+            <ReactECharts
+              option={{
+                animationDuration: 280,
+                animationDurationUpdate: 220,
+                tooltip: { trigger: "axis", ...buildTooltipTheme(chartTheme) },
+                legend: { top: 0, ...buildLegendTheme(chartTheme) },
+                grid: { left: 30, right: 24, bottom: 32, top: 42, containLabel: true },
+                xAxis: { type: "category", data: store.burnup.map((item) => item.date), ...buildAxisTheme(chartTheme) },
+                yAxis: { type: "value", name: "pts", ...buildAxisTheme(chartTheme) },
+                series: [
+                  { name: "Completado", type: "line", smooth: true, data: store.burnup.map((item) => item.completedPoints) },
+                  { name: "Scope", type: "line", smooth: true, data: store.burnup.map((item) => item.scopePoints) },
+                  { name: "Restante", type: "line", smooth: true, data: store.burnup.map((item) => item.remainingPoints) }
+                ]
+              }}
+              notMerge={false}
+              lazyUpdate
+              style={{ height: 320 }}
+            />
+          </>
         ) : (
           <p className="muted">Aun no hay serie temporal disponible para este sprint.</p>
         )}
