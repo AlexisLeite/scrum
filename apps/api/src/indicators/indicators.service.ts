@@ -58,7 +58,7 @@ export class IndicatorsService {
 
   async userVelocity(userId: string, viewer: AuthUser, window?: string) {
     const scopedTeamIds = await this.getScopedTeamIds(viewer);
-    if (scopedTeamIds) {
+    if (!this.teamScopeService.isPlatformAdmin(viewer.role)) {
       await this.teamScopeService.assertCanReadUserActivity(viewer, userId);
     }
 
@@ -181,7 +181,7 @@ export class IndicatorsService {
 
   async userStats(userId: string, window: string | undefined, viewer: AuthUser) {
     const scopedTeamIds = await this.getScopedTeamIds(viewer);
-    if (scopedTeamIds) {
+    if (!this.teamScopeService.isPlatformAdmin(viewer.role)) {
       await this.teamScopeService.assertCanReadUserActivity(viewer, userId);
     }
 
@@ -789,20 +789,11 @@ export class IndicatorsService {
   }
 
   private async getScopedTeamIds(user: AuthUser): Promise<string[] | null> {
-    if (!this.teamScopeService.isScopedRole(user.role)) {
-      return null;
-    }
-    return this.teamScopeService.getUserTeamIds(user.sub);
+    return this.teamScopeService.getAccessibleTeamIds(user);
   }
 
   private async assertProductVisible(user: AuthUser, productId: string) {
-    const accessibleProducts = await this.teamScopeService.getAccessibleProductIds(user);
-    if (accessibleProducts === null) {
-      return;
-    }
-    if (!accessibleProducts.includes(productId)) {
-      throw new ForbiddenException("Insufficient team scope");
-    }
+    await this.teamScopeService.assertProductReadable(user, productId);
   }
 
   private async assertTeamVisible(user: AuthUser, teamId: string) {

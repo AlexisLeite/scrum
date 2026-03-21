@@ -16,6 +16,16 @@ import { TaskUpsertionDrawer } from "../ui/drawers/product-workspace/TaskUpserti
 import { KanbanBoard } from "../ui/kanban";
 import { buildAxisTheme, buildLegendTheme, buildTooltipTheme, useEChartsTheme } from "../ui/charts/echarts-theme";
 import { ProductMetricsPanel } from "./product-workspace/ProductMetricsPanel";
+import {
+  canCommentOnVisibleTask,
+  canCreateTasks,
+  canCreateTaskFromMessage,
+  canEditStories,
+  canEditTaskFields,
+  canManageSprints,
+  canMoveVisibleTask,
+  canRankStories
+} from "../lib/permissions";
 
 type StoryStatus = "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
 type SprintStatus = "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
@@ -152,6 +162,9 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const { productId } = useParams<{ productId: string }>();
+  const role = store.session.user?.role;
+  const canManageStories = role === "platform_admin" || role === "scrum_master";
+  const canRankStories = role === "platform_admin" || role === "scrum_master" || role === "product_owner";
   const [orderedStories, setOrderedStories] = React.useState<StoryItem[]>([]);
   const [draggedStoryId, setDraggedStoryId] = React.useState("");
   const [reorderError, setReorderError] = React.useState("");
@@ -213,9 +226,11 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
       <section className="card">
         <div className="section-head">
           <h2>Backlog del producto</h2>
-          <button type="button" className="btn btn-primary btn-icon" onClick={() => openStoryDrawer()} aria-label="Crear historia">
-            +
-          </button>
+          {canManageStories ? (
+            <button type="button" className="btn btn-primary btn-icon" onClick={() => openStoryDrawer()} aria-label="Crear historia">
+              +
+            </button>
+          ) : null}
         </div>
         <p className="muted">Arrastra las historias para priorizarlas. El orden se guarda automaticamente al soltar.</p>
         {reorderError ? <p className="error-text">{reorderError}</p> : null}
@@ -228,13 +243,17 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
             <article
               key={story.id}
               className={`story-card ${draggedStoryId === story.id ? "is-dragging" : ""}`}
-              draggable={!reordering}
-              onDragStart={() => setDraggedStoryId(story.id)}
+              draggable={canRankStories && !reordering}
+              onDragStart={() => {
+                if (canRankStories) {
+                  setDraggedStoryId(story.id);
+                }
+              }}
               onDragEnd={() => setDraggedStoryId("")}
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {
                 event.preventDefault();
-                if (!draggedStoryId || draggedStoryId === story.id) return;
+                if (!canRankStories || !draggedStoryId || draggedStoryId === story.id) return;
                 void moveStory(draggedStoryId, index);
               }}
             >
@@ -245,7 +264,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
                     className="btn btn-secondary"
                     type="button"
                     aria-label={`Mover ${story.title} hacia arriba`}
-                    disabled={index === 0 || reordering}
+                    disabled={!canRankStories || index === 0 || reordering}
                     onClick={() => void moveStory(story.id, index - 1)}
                   >
                     Subir
@@ -254,7 +273,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
                     className="btn btn-secondary"
                     type="button"
                     aria-label={`Mover ${story.title} hacia abajo`}
-                    disabled={index === orderedStories.length - 1 || reordering}
+                    disabled={!canRankStories || index === orderedStories.length - 1 || reordering}
                     onClick={() => void moveStory(story.id, index + 1)}
                   >
                     Bajar
@@ -278,6 +297,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
                     {story.status === "DRAFT" || story.status === "READY" ? (
                       <select
                         value={story.status}
+                        disabled={!canManageStories}
                         onChange={(event) =>
                           void controller.updateStory(story.id, {
                             status: event.target.value as "DRAFT" | "READY"
@@ -295,9 +315,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
                     )}
                   </label>
                   <div className="row-actions compact">
-                    <button className="btn btn-secondary" onClick={() => openStoryDrawer(story)}>
-                      Editar
-                    </button>
+                    {canManageStories ? <button className="btn btn-secondary" onClick={() => openStoryDrawer(story)}>Editar</button> : null}
                     <NavLink to={productStoryTasksPath(productId, story.id)} className="btn btn-secondary">
                       Gestionar tareas
                     </NavLink>
@@ -318,6 +336,8 @@ export const StoryTasksView = observer(function StoryTasksView() {
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const teamController = React.useMemo(() => new TeamController(store), [store]);
   const { productId, storyId } = useParams<{ productId: string; storyId: string }>();
+  const user = store.session.user;
+  const canManageTasks = canCreateTasks(user?.role);
   const [formError, setFormError] = React.useState("");
   const [updatingTaskId, setUpdatingTaskId] = React.useState("");
   const [completionRequest, setCompletionRequest] = React.useState<{ taskId: string; title: string } | null>(null);
@@ -369,6 +389,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
   };
 
   const openTaskDrawer = (task?: TaskItem) => {
+    const canEditTask = canEditTaskFields(user?.role);
     store.drawers.add(
       new TaskUpsertionDrawer({
         controller,
@@ -377,6 +398,10 @@ export const StoryTasksView = observer(function StoryTasksView() {
         sprints,
         assignees: assignableUsers,
         statusOptions,
+        readOnly: !canEditTask,
+        definitionReadOnly: !canEditTask,
+        allowTaskCreation: canCreateTaskFromMessage(user?.role),
+        allowMessageCreation: task ? canCommentOnVisibleTask(user?.role, task, user?.id) : true,
         task,
         defaultStoryId: storyId,
         onDone: reloadStoryTasks
@@ -392,9 +417,11 @@ export const StoryTasksView = observer(function StoryTasksView() {
             <p className="workspace-context">Historia actual</p>
             <h2>{currentStory?.title ?? "Tareas de historia"}</h2>
           </div>
-          <button type="button" className="btn btn-primary btn-icon" onClick={() => openTaskDrawer()} aria-label="Crear tarea">
-            +
-          </button>
+          {canManageTasks ? (
+            <button type="button" className="btn btn-primary btn-icon" onClick={() => openTaskDrawer()} aria-label="Crear tarea">
+              +
+            </button>
+          ) : null}
         </div>
         <div className="story-detail-strip">
           {currentStory ? <span className={statusClass(currentStory.status)}>{currentStory.status}</span> : null}
@@ -429,6 +456,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
                 <td>
                   <select
                     value={task.status}
+                    disabled={!canManageTasks || updatingTaskId === task.id}
                     onChange={(event) => {
                       const nextStatus = event.target.value;
                       if (nextStatus === "Done" && task.status !== "Done" && task.actualHours == null) {
@@ -437,7 +465,6 @@ export const StoryTasksView = observer(function StoryTasksView() {
                       }
                       void updateTaskStatus(task, nextStatus, task.actualHours ?? undefined);
                     }}
-                    disabled={updatingTaskId === task.id}
                   >
                     {statusOptions.map((option) => (
                       <option key={option} value={option}>
@@ -455,7 +482,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
                 </td>
                 <td>
                   <button className="btn btn-secondary" onClick={() => openTaskDrawer(task)}>
-                    Editar
+                    {canManageTasks ? "Editar" : "Abrir"}
                   </button>
                 </td>
               </tr>
@@ -489,6 +516,8 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
   const teamController = React.useMemo(() => new TeamController(store), [store]);
   const productController = React.useMemo(() => new ProductController(store), [store]);
   const { productId } = useParams<{ productId: string }>();
+  const role = store.session.user?.role;
+  const canManageSprints = role === "platform_admin" || role === "scrum_master";
 
   React.useEffect(() => {
     void teamController.loadTeams();
@@ -519,9 +548,11 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
       <section className="card">
         <div className="section-head">
           <h2>Planificacion de sprint</h2>
-          <button type="button" className="btn btn-primary btn-icon" onClick={() => openSprintDrawer()} aria-label="Crear sprint">
-            +
-          </button>
+          {canManageSprints ? (
+            <button type="button" className="btn btn-primary btn-icon" onClick={() => openSprintDrawer()} aria-label="Crear sprint">
+              +
+            </button>
+          ) : null}
         </div>
         <p className="muted">La alta y edicion de sprints se realiza desde drawers reutilizables.</p>
       </section>
@@ -539,31 +570,33 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
               <p className="muted">Inicio: {fmtDate(sprint.startDate)} | Fin: {fmtDate(sprint.endDate)}</p>
               <p className="muted">Completar sprint: cierra el ciclo y evita nuevos cambios de planificacion.</p>
               <div className="row-actions compact">
-                <button className="btn btn-secondary" onClick={() => openSprintDrawer(sprint)}>
-                  Editar
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  disabled={sprint.status !== "PLANNED"}
-                  onClick={async () => {
-                    await productController.startSprint(sprint.id);
-                    await productController.loadSprints(productId);
-                  }}
-                >
-                  Start
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  disabled={sprint.status !== "ACTIVE"}
-                  onClick={async () => {
-                    if (window.confirm("Completar este sprint lo cerrara para planificacion y ejecucion. Deseas continuar?")) {
-                      await productController.completeSprint(sprint.id);
+                {canManageSprints ? <button className="btn btn-secondary" onClick={() => openSprintDrawer(sprint)}>Editar</button> : null}
+                {canManageSprints ? (
+                  <button
+                    className="btn btn-secondary"
+                    disabled={sprint.status !== "PLANNED"}
+                    onClick={async () => {
+                      await productController.startSprint(sprint.id);
                       await productController.loadSprints(productId);
-                    }
-                  }}
-                >
-                  Completar sprint
-                </button>
+                    }}
+                  >
+                    Start
+                  </button>
+                ) : null}
+                {canManageSprints ? (
+                  <button
+                    className="btn btn-secondary"
+                    disabled={sprint.status !== "ACTIVE"}
+                    onClick={async () => {
+                      if (window.confirm("Completar este sprint lo cerrara para planificacion y ejecucion. Deseas continuar?")) {
+                        await productController.completeSprint(sprint.id);
+                        await productController.loadSprints(productId);
+                      }
+                    }}
+                  >
+                    Completar sprint
+                  </button>
+                ) : null}
                 <NavLink to={productBoardPath(productId, sprint.id)} className="btn btn-primary btn-execute">
                   Ejecutar sprint
                 </NavLink>
@@ -583,6 +616,8 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const teamController = React.useMemo(() => new TeamController(store), [store]);
   const chartTheme = useEChartsTheme();
   const { productId, sprintId } = useParams<{ productId: string; sprintId: string }>();
+  const user = store.session.user;
+  const canManageSprintBoard = canManageSprints(user?.role);
   const [boardError, setBoardError] = React.useState("");
   const [pendingTaskIds, setPendingTaskIds] = React.useState<Record<string, boolean>>({});
 
@@ -609,7 +644,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const sprints = store.sprints.items as SprintItem[];
   const teams = store.teams.items as TeamItem[];
   const currentSprint = sprints.find((sprint) => sprint.id === sprintId);
-  const boardReadOnly = currentSprint?.status !== "ACTIVE";
+  const boardReadOnly = currentSprint?.status !== "ACTIVE" || !canManageSprintBoard;
   const assignees = buildAssignableUsers(teams);
   const boardAssignees = currentSprint
     ? buildAssignableUsers(teams.filter((team) => team.id === currentSprint.teamId))
@@ -619,6 +654,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
 
   const openBoardTaskDrawer = (options: { task?: BoardTask; defaultStatus?: string }) => {
     const { task, defaultStatus } = options;
+    const readOnly = !canEditTaskFields(user?.role);
     store.drawers.add(
       new TaskUpsertionDrawer({
         controller,
@@ -627,6 +663,10 @@ export const SprintBoardView = observer(function SprintBoardView() {
         sprints,
         assignees: boardAssignees,
         statusOptions,
+        readOnly,
+        definitionReadOnly: readOnly,
+        allowTaskCreation: canCreateTaskFromMessage(user?.role),
+        allowMessageCreation: task ? canCommentOnVisibleTask(user?.role, task, user?.id) : true,
         defaultStatus,
         task: task
           ? {
@@ -675,7 +715,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
     setBoardError("");
     setPendingTaskIds((previous) => ({ ...previous, [taskId]: true }));
     try {
-      await controller.updateTask(taskId, { assigneeId });
+      await controller.assignTask(taskId, { assigneeId });
       await reloadBoardData();
       await controller.loadStories(productId);
     } catch (assignError) {
@@ -712,17 +752,19 @@ export const SprintBoardView = observer(function SprintBoardView() {
       <section className="card">
         <div className="section-head">
           <h2>Ejecucion del sprint {currentSprint ? `"${currentSprint.name}"` : ""}</h2>
-          <button
-            className="btn btn-secondary"
-            onClick={async () => {
-              if (window.confirm("Completar este sprint cerrara su ejecucion. Deseas continuar?")) {
-                await controller.completeSprint(sprintId);
-                await controller.loadSprints(productId);
-              }
-            }}
-          >
-            Completar sprint
-          </button>
+          {canManageSprintBoard ? (
+            <button
+              className="btn btn-secondary"
+              onClick={async () => {
+                if (window.confirm("Completar este sprint cerrara su ejecucion. Deseas continuar?")) {
+                  await controller.completeSprint(sprintId);
+                  await controller.loadSprints(productId);
+                }
+              }}
+            >
+              Completar sprint
+            </button>
+          ) : null}
         </div>
         <div className="row-actions compact">
           {currentSprint ? <span className={statusClass(currentSprint.status)}>{currentSprint.status}</span> : null}
@@ -741,6 +783,12 @@ export const SprintBoardView = observer(function SprintBoardView() {
           assignees={boardAssignees}
           statusOptions={statusOptions}
           readOnly={boardReadOnly}
+          allowCreateTask={canManageSprintBoard}
+          editActionLabel={canEditTaskFields(user?.role) ? "Editar" : "Abrir"}
+          canCreateTask={() => canManageSprintBoard}
+          canEditTask={() => true}
+          canChangeAssignee={() => canManageSprintBoard}
+          canChangeStatus={(task) => canMoveVisibleTask(user?.role, task, user?.id)}
           isTaskPending={(taskId) => Boolean(pendingTaskIds[taskId])}
           onCreateTask={(defaultStatus) => openBoardTaskDrawer({ defaultStatus })}
           onEditTask={(task) => openBoardTaskDrawer({ task: task as BoardTask })}

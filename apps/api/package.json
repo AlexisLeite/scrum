@@ -5,12 +5,15 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
+    "build:vercel": "node ../../scripts/with-vercel-postgres-env.mjs prisma generate && node ../../scripts/with-vercel-postgres-env.mjs prisma db push --skip-generate && nest build",
+    "vercel-build": "pnpm build:vercel",
     "start": "node dist/src/main.js",
     "lint": "echo api lint",
     "test": "echo api test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "node ../../scripts/with-vercel-postgres-env.mjs prisma migrate deploy",
     "prisma:push": "prisma db push --skip-generate",
     "prisma:seed": "node prisma/seed.mjs"
   },
@@ -26,16 +29,19 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "cookie-parser": "^1.4.7",
+    "express": "^4.21.2",
     "passport": "^0.7.0",
     "passport-gitlab2": "^5.0.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "serverless-http": "^3.2.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.9",
     "@nestjs/schematics": "^10.1.4",
     "@nestjs/testing": "^10.4.15",
+    "@vercel/node": "^5.3.24",
     "@types/cookie-parser": "^1.4.9",
     "@types/express": "^5.0.1",
     "@types/node": "^22.14.0",

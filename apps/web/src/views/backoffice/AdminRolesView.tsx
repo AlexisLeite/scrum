@@ -32,8 +32,7 @@ const roleOptions: Role[] = [
   "platform_admin",
   "product_owner",
   "scrum_master",
-  "team_member",
-  "viewer"
+  "team_member"
 ];
 
 const statsWindows = ["week", "month", "semester", "year"] as const;
@@ -98,8 +97,10 @@ export const AdminRolesView = observer(function AdminRolesView() {
 
   const users = store.users.items as UserItem[];
   const teams = store.teams.items as TeamLite[];
+  const canEditUsers = store.session.user?.role === "platform_admin";
 
   const openTeamEditor = React.useCallback(async (user: UserItem) => {
+    if (!canEditUsers) return;
     setSelectedUserForTeams(user);
     setSaveTeamsError("");
     try {
@@ -108,7 +109,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
     } catch (error) {
       setSaveTeamsError(error instanceof Error ? error.message : "No se pudo cargar equipos del usuario.");
     }
-  }, []);
+  }, [canEditUsers]);
 
   const saveUserTeams = React.useCallback(async () => {
     if (!selectedUserForTeams) return;
@@ -153,7 +154,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
   return (
     <div className="stack-lg">
       <section className="card">
-        <h2>Administracion de roles</h2>
+        <h2>Usuarios</h2>
         <table className="table">
           <thead>
             <tr>
@@ -175,17 +176,23 @@ export const AdminRolesView = observer(function AdminRolesView() {
                 <td>{(user.teams ?? []).map((team) => team.name).join(", ") || "-"}</td>
                 <td>
                   <div className="row-actions compact">
-                    <select
-                      value={user.role}
-                      onChange={(event) => void admin.setRole(user.id, event.target.value as Role)}
-                    >
-                      {roleOptions.map((roleOption) => (
-                        <option key={roleOption} value={roleOption}>{roleOption}</option>
-                      ))}
-                    </select>
-                    <button className="btn btn-secondary" onClick={() => void openTeamEditor(user)}>
-                      Equipos
-                    </button>
+                    {canEditUsers ? (
+                      <select
+                        value={user.role}
+                        onChange={(event) => void admin.setRole(user.id, event.target.value as Role)}
+                      >
+                        {roleOptions.map((roleOption) => (
+                          <option key={roleOption} value={roleOption}>{roleOption}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className={statusClass(user.role)}>{user.role}</span>
+                    )}
+                    {canEditUsers ? (
+                      <button className="btn btn-secondary" onClick={() => void openTeamEditor(user)}>
+                        Equipos
+                      </button>
+                    ) : null}
                     <button
                       className="btn btn-secondary"
                       onClick={() => {
@@ -203,52 +210,54 @@ export const AdminRolesView = observer(function AdminRolesView() {
         </table>
       </section>
 
-      <section className="card">
-        <h3>Crear usuario</h3>
-        <div className="form-grid two-columns">
-          <label>
-            Nombre
-            <input value={createName} onChange={(event) => setCreateName(event.target.value)} />
-          </label>
-          <label>
-            Email
-            <input value={createEmail} onChange={(event) => setCreateEmail(event.target.value)} />
-          </label>
-        </div>
-        <div className="form-grid two-columns">
-          <label>
-            Password
-            <input type="password" value={createPassword} onChange={(event) => setCreatePassword(event.target.value)} />
-          </label>
-          <label>
-            Rol
-            <select value={createRole} onChange={(event) => setCreateRole(event.target.value as Role)}>
-              {roleOptions.map((roleOption) => (
-                <option key={roleOption} value={roleOption}>{roleOption}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <label>Equipos iniciales</label>
-        <div className="metrics-grid">
-          {teams.map((team) => (
-            <label key={team.id} className="check-option">
-              <input
-                type="checkbox"
-                checked={createTeamIds.includes(team.id)}
-                onChange={() => toggleCreateTeamId(team.id)}
-              />
-              {team.name}
+      {canEditUsers ? (
+        <section className="card">
+          <h3>Crear usuario</h3>
+          <div className="form-grid two-columns">
+            <label>
+              Nombre
+              <input value={createName} onChange={(event) => setCreateName(event.target.value)} />
             </label>
-          ))}
-        </div>
-        <div className="row-actions">
-          <button className="btn btn-primary" onClick={() => void createUser()}>Crear usuario</button>
-        </div>
-        {createError ? <p className="error-text">{createError}</p> : null}
-      </section>
+            <label>
+              Email
+              <input value={createEmail} onChange={(event) => setCreateEmail(event.target.value)} />
+            </label>
+          </div>
+          <div className="form-grid two-columns">
+            <label>
+              Password
+              <input type="password" value={createPassword} onChange={(event) => setCreatePassword(event.target.value)} />
+            </label>
+            <label>
+              Rol
+              <select value={createRole} onChange={(event) => setCreateRole(event.target.value as Role)}>
+                {roleOptions.map((roleOption) => (
+                  <option key={roleOption} value={roleOption}>{roleOption}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label>Equipos iniciales</label>
+          <div className="metrics-grid">
+            {teams.map((team) => (
+              <label key={team.id} className="check-option">
+                <input
+                  type="checkbox"
+                  checked={createTeamIds.includes(team.id)}
+                  onChange={() => toggleCreateTeamId(team.id)}
+                />
+                {team.name}
+              </label>
+            ))}
+          </div>
+          <div className="row-actions">
+            <button className="btn btn-primary" onClick={() => void createUser()}>Crear usuario</button>
+          </div>
+          {createError ? <p className="error-text">{createError}</p> : null}
+        </section>
+      ) : null}
 
-      {selectedUserForTeams ? (
+      {canEditUsers && selectedUserForTeams ? (
         <section className="card">
           <h3>Equipos de {selectedUserForTeams.name}</h3>
           <div className="metrics-grid">

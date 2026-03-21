@@ -7,3 +7,4 @@ dist
 .turbo
 apps/api/node_modules
 apps/web/node_modules
+.vercel

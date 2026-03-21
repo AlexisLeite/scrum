@@ -11,6 +11,7 @@ export class ActivityController {
   constructor(private readonly activityService: ActivityService) {}
 
   @Get("entities/:entityType/:entityId")
+  @Roles("platform_admin", "product_owner", "scrum_master", "team_member")
   listByEntity(
     @CurrentUser() user: AuthUser,
     @Param("entityType") entityType: string,
@@ -21,6 +22,7 @@ export class ActivityController {
   }
 
   @Get("users/:userId")
+  @Roles("platform_admin", "scrum_master", "team_member")
   listByUser(
     @CurrentUser() user: AuthUser,
     @Param("userId") userId: string,
@@ -30,6 +32,7 @@ export class ActivityController {
   }
 
   @Get("users/:userId/stats")
+  @Roles("platform_admin", "scrum_master", "team_member")
   getUserStats(
     @CurrentUser() user: AuthUser,
     @Param("userId") userId: string,

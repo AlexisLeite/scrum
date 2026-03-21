@@ -18,8 +18,12 @@ export class SprintsService {
 
   async listByProduct(productId: string, user: AuthUser) {
     const scopedTeamIds = await this.getScopedTeamIds(user);
-    const accessibleProducts = await this.teamScopeService.getAccessibleProductIds(user);
-    if (accessibleProducts !== null && !accessibleProducts.includes(productId)) {
+    try {
+      await this.teamScopeService.assertProductReadable(user, productId);
+    } catch {
+      return [];
+    }
+    if (this.teamScopeService.isTeamMember(user.role)) {
       return [];
     }
 
@@ -273,7 +277,17 @@ export class SprintsService {
     await this.assertSprintAccess(user, sprint);
 
     const tasks = await this.prisma.task.findMany({
-      where: { sprintId: id },
+      where: {
+        sprintId: id,
+        ...(this.teamScopeService.isTeamMember(user.role)
+          ? {
+              OR: [
+                { assigneeId: user.sub },
+                { assigneeId: null }
+              ]
+            }
+          : {})
+      },
       include: {
         assignee: true,
         story: true,
@@ -307,9 +321,19 @@ export class SprintsService {
 
     const columns = sprint.product.workflow.map((column) => {
       const activeTasks = tasks
+        .filter((task) =>
+          user.role === "team_member"
+            ? task.assigneeId === user.sub || task.assigneeId === null
+            : true
+        )
         .filter((task) => task.status === column.name)
         .map((task) => this.serializeSprintBoardTask(task));
       const historicalTasks = unfinishedTasks
+        .filter((task) =>
+          user.role === "team_member"
+            ? task.assigneeId === user.sub || task.assigneeId === null
+            : true
+        )
         .filter((task) => task.status === column.name)
         .map((task) => this.serializeUnfinishedSprintTask(task));
 
@@ -335,6 +359,9 @@ export class SprintsService {
   async pendingTasks(id: string, user: AuthUser) {
     const sprint = await this.getSprintOrThrow(id);
     await this.assertSprintAccess(user, sprint);
+    if (this.teamScopeService.isTeamMember(user.role)) {
+      return [];
+    }
 
     const tasks = await this.prisma.task.findMany({
       where: {
@@ -365,7 +392,13 @@ export class SprintsService {
       },
       orderBy: { createdAt: "asc" }
     });
-    return tasks.map((task) => this.serializeSprintBoardTask(task));
+    return tasks
+      .filter((task) =>
+        user.role === "team_member"
+          ? task.assigneeId === user.sub || task.assigneeId === null
+          : true
+      )
+      .map((task) => this.serializeSprintBoardTask(task));
   }
 
   async createTask(id: string, dto: CreateSprintTaskDto, user: AuthUser) {
@@ -502,6 +535,10 @@ export class SprintsService {
     if (task.sprintId !== id) {
       throw new BadRequestException("Task is not assigned to this sprint");
     }
+    this.assertCanOperateTaskOnBoard(user, {
+      assigneeId: task.assigneeId,
+      sprintId: task.sprintId
+    });
 
     const sourceTasks = await this.prisma.task.findMany({
       where: { sprintId: id, status: task.status },
@@ -668,13 +705,7 @@ export class SprintsService {
   }
 
   private async assertProductAccess(user: AuthUser, productId: string) {
-    const accessibleProducts = await this.teamScopeService.getAccessibleProductIds(user);
-    if (accessibleProducts === null) {
-      return;
-    }
-    if (!accessibleProducts.includes(productId)) {
-      throw new ForbiddenException("Insufficient team scope");
-    }
+    await this.teamScopeService.assertProductReadable(user, productId);
   }
 
   private async assertSprintAccess(user: AuthUser, sprint: { productId: string; teamId: string }) {
@@ -720,6 +751,18 @@ export class SprintsService {
   private assertSprintIsMutable(status: SprintStatus) {
     if (status === SprintStatus.COMPLETED || status === SprintStatus.CANCELLED) {
       throw new BadRequestException("This sprint is closed and can no longer be modified");
+    }
+  }
+
+  private assertCanOperateTaskOnBoard(
+    user: AuthUser,
+    task: { assigneeId: string | null; sprintId: string | null }
+  ) {
+    if (!this.teamScopeService.isTeamMember(user.role)) {
+      return;
+    }
+    if (!task.sprintId || task.assigneeId !== user.sub) {
+      throw new ForbiddenException("Team members can only move their own tasks on active boards");
     }
   }
 }

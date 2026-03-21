@@ -15,8 +15,12 @@ export class StoriesService {
   ) {}
 
   async listByProduct(productId: string, user: AuthUser, status?: string) {
-    const accessibleProducts = await this.teamScopeService.getAccessibleProductIds(user);
-    if (accessibleProducts !== null && !accessibleProducts.includes(productId)) {
+    try {
+      await this.teamScopeService.assertProductReadable(user, productId);
+    } catch {
+      return [];
+    }
+    if (this.teamScopeService.isTeamMember(user.role)) {
       return [];
     }
 
@@ -151,13 +155,7 @@ export class StoriesService {
   }
 
   private async assertProductAccess(user: AuthUser, productId: string) {
-    const accessibleProducts = await this.teamScopeService.getAccessibleProductIds(user);
-    if (accessibleProducts === null) {
-      return;
-    }
-    if (!accessibleProducts.includes(productId)) {
-      throw new ForbiddenException("Insufficient team scope");
-    }
+    await this.teamScopeService.assertProductReadable(user, productId);
   }
 
   private getStoryChangedFields(

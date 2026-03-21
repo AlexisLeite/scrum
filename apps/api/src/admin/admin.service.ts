@@ -1,7 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { ActivityEntityType, Prisma, Role } from "@prisma/client";
 import * as argon2 from "argon2";
 import { ActivityService } from "../activity/activity.service";
+import { AuthUser } from "../common/current-user.decorator";
+import { TeamScopeService } from "../common/team-scope.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateAdminUserDto } from "./dto";
 
@@ -9,11 +11,14 @@ import { CreateAdminUserDto } from "./dto";
 export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly activityService: ActivityService
+    private readonly activityService: ActivityService,
+    private readonly teamScopeService: TeamScopeService
   ) {}
 
-  listUsers() {
+  async listUsers(viewer: AuthUser) {
+    const where = await this.buildScopedUserWhere(viewer);
     return this.prisma.user.findMany({
+      where,
       include: {
         teamMembers: {
           include: {
@@ -124,7 +129,18 @@ export class AdminService {
     return updated;
   }
 
-  async listUserTeams(userId: string) {
+  async listUserTeams(userId: string, viewer?: AuthUser) {
+    if (viewer) {
+      const where = await this.buildScopedUserWhere(viewer, userId);
+      const allowed = await this.prisma.user.findFirst({
+        where,
+        select: { id: true }
+      });
+      if (!allowed) {
+        throw new ForbiddenException("Insufficient team scope");
+      }
+    }
+
     const memberships = await this.prisma.teamMember.findMany({
       where: { userId },
       include: {
@@ -202,6 +218,31 @@ export class AdminService {
 
   private uniqueIds(ids: string[]): string[] {
     return Array.from(new Set(ids.filter((id) => id && id.trim().length > 0)));
+  }
+
+  private async buildScopedUserWhere(viewer: AuthUser, userId?: string): Promise<Prisma.UserWhereInput | undefined> {
+    if (this.teamScopeService.isPlatformAdmin(viewer.role)) {
+      return userId ? { id: userId } : undefined;
+    }
+
+    if (!this.teamScopeService.isScrumMaster(viewer.role)) {
+      throw new ForbiddenException("Insufficient role");
+    }
+
+    const teamIds = await this.teamScopeService.getUserTeamIds(viewer.sub);
+    if (teamIds.length === 0) {
+      return userId ? { id: "__no_access__", teamMembers: { some: { teamId: "__no_access__" } } } : { id: "__no_access__" };
+    }
+
+    const scopedWhere: Prisma.UserWhereInput = {
+      teamMembers: {
+        some: {
+          teamId: { in: teamIds }
+        }
+      }
+    };
+
+    return userId ? { AND: [{ id: userId }, scopedWhere] } : scopedWhere;
   }
 
   private mapUser(user: Prisma.UserGetPayload<{

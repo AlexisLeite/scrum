@@ -47,6 +47,17 @@ type KanbanBoardProps = {
   assignees: KanbanAssignee[];
   statusOptions: string[];
   readOnly?: boolean;
+  allowCreateTask?: boolean;
+  allowEditTask?: boolean;
+  allowAssigneeChange?: boolean;
+  allowStatusChange?: boolean;
+  canCreateTask?: (columnName: string) => boolean;
+  canEditTask?: (task: KanbanTask) => boolean;
+  canChangeAssignee?: (task: KanbanTask) => boolean;
+  canChangeStatus?: (task: KanbanTask) => boolean;
+  canMoveTask?: (task: KanbanTask) => boolean;
+  getTaskAssignees?: (task: KanbanTask, assignees: KanbanAssignee[]) => KanbanAssignee[];
+  editActionLabel?: string | ((task: KanbanTask) => string);
   isTaskPending?: (taskId: string) => boolean;
   onCreateTask: (defaultStatus: string) => void;
   onEditTask: (task: KanbanTask) => void;
@@ -161,12 +172,30 @@ function TaskCardContent(props: {
   statusOptions: string[];
   pending: boolean;
   dragDisabled: boolean;
+  allowAssigneeChange: boolean;
+  allowEditTask: boolean;
+  allowStatusChange: boolean;
+  editActionLabel: string;
   dragHandleProps?: Record<string, unknown>;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
   onStatusChange: (task: KanbanTask, status: string) => Promise<void>;
   onEditTask: (task: KanbanTask) => void;
 }) {
-  const { task, assignees, statusOptions, pending, dragDisabled, dragHandleProps, onAssigneeChange, onStatusChange, onEditTask } = props;
+  const {
+    task,
+    assignees,
+    statusOptions,
+    pending,
+    dragDisabled,
+    allowAssigneeChange,
+    allowEditTask,
+    allowStatusChange,
+    editActionLabel,
+    dragHandleProps,
+    onAssigneeChange,
+    onStatusChange,
+    onEditTask
+  } = props;
   const description = previewText(task.description);
   const taskStatusOptions = statusOptions.includes(task.status) ? statusOptions : [task.status, ...statusOptions];
 
@@ -191,38 +220,46 @@ function TaskCardContent(props: {
       </div>
 
       <div className="kb-control-row">
-        <select
-          value={task.assigneeId ?? ""}
-          aria-label={`Asignado de ${task.title}`}
-          disabled={pending}
-          onChange={(event) => void onAssigneeChange(task.id, event.target.value ? event.target.value : null)}
-        >
-          <option value="">Sin asignar</option>
-          {assignees.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={task.status}
-          aria-label={`Estado de ${task.title}`}
-          disabled={pending}
-          onChange={(event) => void onStatusChange(task, event.target.value)}
-        >
-          {taskStatusOptions.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
+        {allowAssigneeChange ? (
+          <select
+            value={task.assigneeId ?? ""}
+            aria-label={`Asignado de ${task.title}`}
+            disabled={pending}
+            onChange={(event) => void onAssigneeChange(task.id, event.target.value ? event.target.value : null)}
+          >
+            <option value="">Sin asignar</option>
+            {assignees.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="pill">{task.assignee?.name ?? "Sin asignar"}</span>
+        )}
+        {allowStatusChange ? (
+          <select
+            value={task.status}
+            aria-label={`Estado de ${task.title}`}
+            disabled={pending}
+            onChange={(event) => void onStatusChange(task, event.target.value)}
+          >
+            {taskStatusOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="pill">{task.status}</span>
+        )}
         <button
           type="button"
           className="btn btn-secondary kb-edit-btn"
           onClick={() => onEditTask(task)}
-          disabled={pending || dragDisabled}
+          disabled={pending}
         >
-          Editar
+          {editActionLabel}
         </button>
       </div>
 
@@ -248,11 +285,28 @@ function SortableTaskCard(props: {
   statusOptions: string[];
   pending: boolean;
   dragDisabled: boolean;
+  allowAssigneeChange: boolean;
+  allowEditTask: boolean;
+  allowStatusChange: boolean;
+  editActionLabel: string;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
   onStatusChange: (task: KanbanTask, status: string) => Promise<void>;
   onEditTask: (task: KanbanTask) => void;
 }) {
-  const { task, assignees, statusOptions, pending, dragDisabled, onAssigneeChange, onStatusChange, onEditTask } = props;
+  const {
+    task,
+    assignees,
+    statusOptions,
+    pending,
+    dragDisabled,
+    allowAssigneeChange,
+    allowEditTask,
+    allowStatusChange,
+    editActionLabel,
+    onAssigneeChange,
+    onStatusChange,
+    onEditTask
+  } = props;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     disabled: dragDisabled
@@ -277,6 +331,10 @@ function SortableTaskCard(props: {
         statusOptions={statusOptions}
         pending={pending}
         dragDisabled={dragDisabled}
+        allowAssigneeChange={allowAssigneeChange}
+        allowEditTask={allowEditTask}
+        allowStatusChange={allowStatusChange}
+        editActionLabel={editActionLabel}
         dragHandleProps={{ ...attributes, ...listeners }}
         onAssigneeChange={onAssigneeChange}
         onStatusChange={onStatusChange}
@@ -292,13 +350,40 @@ function KanbanColumnView(props: {
   statusOptions: string[];
   readOnly: boolean;
   canReorder: boolean;
+  allowCreateTask: boolean;
+  canMoveTask: (task: KanbanTask) => boolean;
+  getEditActionLabel: (task: KanbanTask) => string;
   isTaskPending?: (taskId: string) => boolean;
+  canCreateTask: (columnName: string) => boolean;
+  canChangeAssignee: (task: KanbanTask) => boolean;
+  canEditTask: (task: KanbanTask) => boolean;
+  canChangeStatus: (task: KanbanTask) => boolean;
+  getTaskAssignees: (task: KanbanTask, assignees: KanbanAssignee[]) => KanbanAssignee[];
   onCreateTask: (defaultStatus: string) => void;
   onEditTask: (task: KanbanTask) => void;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
   onStatusChange: (task: KanbanTask, status: string) => Promise<void>;
 }) {
-  const { column, assignees, statusOptions, readOnly, canReorder, isTaskPending, onCreateTask, onEditTask, onAssigneeChange, onStatusChange } = props;
+  const {
+    column,
+    assignees,
+    statusOptions,
+    readOnly,
+    canReorder,
+    allowCreateTask,
+    canMoveTask,
+    getEditActionLabel,
+    isTaskPending,
+    canCreateTask,
+    canChangeAssignee,
+    canEditTask,
+    canChangeStatus,
+    getTaskAssignees,
+    onCreateTask,
+    onEditTask,
+    onAssigneeChange,
+    onStatusChange
+  } = props;
   const { setNodeRef, isOver } = useDroppable({ id: column.name, disabled: !canReorder });
 
   return (
@@ -307,15 +392,17 @@ function KanbanColumnView(props: {
         <h4>{column.name}</h4>
         <div className="row-actions compact">
           <span className="pill">{column.tasks.length}</span>
-          <button
-            type="button"
-            className="btn btn-secondary btn-icon"
-            onClick={() => onCreateTask(column.name)}
-            aria-label={`Crear tarea en ${column.name}`}
-            disabled={readOnly}
-          >
-            +
-          </button>
+          {allowCreateTask && canCreateTask(column.name) ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-icon"
+              onClick={() => onCreateTask(column.name)}
+              aria-label={`Crear tarea en ${column.name}`}
+              disabled={readOnly}
+            >
+              +
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -323,14 +410,19 @@ function KanbanColumnView(props: {
         <div className="kb-task-list">
           {column.tasks.map((task) => {
             const pending = isTaskPending ? isTaskPending(task.id) : false;
+            const taskAllowsStatus = canChangeStatus(task);
             return (
               <SortableTaskCard
                 key={task.id}
                 task={task}
-                assignees={assignees}
+                assignees={getTaskAssignees(task, assignees)}
                 statusOptions={statusOptions}
-                pending={readOnly || pending}
-                dragDisabled={readOnly || pending || !canReorder}
+                pending={pending}
+                dragDisabled={readOnly || pending || !canReorder || !canMoveTask(task)}
+                allowAssigneeChange={canChangeAssignee(task)}
+                allowEditTask={canEditTask(task)}
+                allowStatusChange={taskAllowsStatus}
+                editActionLabel={getEditActionLabel(task)}
                 onAssigneeChange={onAssigneeChange}
                 onStatusChange={onStatusChange}
                 onEditTask={onEditTask}
@@ -375,7 +467,18 @@ export function KanbanBoard({
   assignees,
   statusOptions,
   readOnly = false,
+  allowCreateTask = true,
+  allowEditTask = true,
+  allowAssigneeChange = true,
+  allowStatusChange = true,
   isTaskPending,
+  canCreateTask = () => true,
+  canEditTask = () => allowEditTask,
+  canChangeAssignee = () => allowAssigneeChange,
+  canChangeStatus = () => allowStatusChange,
+  canMoveTask = () => allowStatusChange,
+  getTaskAssignees = (_, entries) => entries,
+  editActionLabel = "Editar",
   onCreateTask,
   onEditTask,
   onStatusChange,
@@ -422,7 +525,11 @@ export function KanbanBoard({
     () => localColumns.reduce((acc, column) => acc + column.tasks.length, 0),
     [localColumns]
   );
-  const canReorder = !readOnly && !search.trim() && assigneeFilter === "all";
+  const canReorder = !readOnly && allowStatusChange && !search.trim() && assigneeFilter === "all";
+  const resolveEditActionLabel = React.useCallback(
+    (task: KanbanTask) => typeof editActionLabel === "function" ? editActionLabel(task) : editActionLabel,
+    [editActionLabel]
+  );
 
   const persistMove = React.useCallback(
     async (task: KanbanTask, fromColumn: string, targetColumn: string, targetIndex: number, actualHours?: number) => {
@@ -467,7 +574,7 @@ export function KanbanBoard({
     const taskId = String(event.active.id);
     const fromColumn = findTaskColumn(localColumns, taskId);
     const task = findTask(localColumns, taskId);
-    if (!fromColumn || !task) {
+    if (!fromColumn || !task || !canMoveTask(task)) {
       return;
     }
     setActiveDrag({
@@ -624,7 +731,15 @@ export function KanbanBoard({
                 statusOptions={statusOptions}
                 readOnly={readOnly}
                 canReorder={canReorder}
+                allowCreateTask={allowCreateTask}
+                canMoveTask={canMoveTask}
+                getEditActionLabel={resolveEditActionLabel}
                 isTaskPending={isTaskPending}
+                canCreateTask={canCreateTask}
+                canChangeAssignee={canChangeAssignee}
+                canEditTask={canEditTask}
+                canChangeStatus={canChangeStatus}
+                getTaskAssignees={getTaskAssignees}
                 onCreateTask={onCreateTask}
                 onEditTask={onEditTask}
                 onAssigneeChange={onAssigneeChange}

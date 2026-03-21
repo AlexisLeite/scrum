@@ -2,6 +2,15 @@
   "name": "scrum-platform",
   "private": true,
   "packageManager": "pnpm@10.0.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "argon2",
+      "esbuild",
+      "prisma"
+    ]
+  },
   "scripts": {
     "dev": "pnpm db:push && pnpm db:generate && pnpm db:seed && turbo run dev --parallel",
     "build": "turbo run build",

@@ -14,6 +14,8 @@ type ProductItem = { id: string; name: string; key: string; description: string 
 export const ProductsBackofficeView = observer(function ProductsBackofficeView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
+  const role = store.session.user?.role;
+  const canManageProducts = role === "platform_admin" || role === "product_owner";
 
   React.useEffect(() => { void controller.loadProducts(); }, [controller]);
   const products = store.products.items as ProductItem[];
@@ -49,7 +51,7 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
       <section className="card">
         <div className="section-head">
           <h2>Gestion de productos</h2>
-          <button className="btn btn-primary" onClick={openCreate}>+ Producto</button>
+          {canManageProducts ? <button className="btn btn-primary" onClick={openCreate}>+ Producto</button> : null}
         </div>
         <p className="muted">Administra el catalogo y abre el workspace desde una sola entrada clara.</p>
       </section>
@@ -72,9 +74,9 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
                 <td><MarkdownPreview markdown={product.description} compact emptyLabel="-" /></td>
                 <td>
                   <div className="row-actions compact">
-                    <button className="btn btn-secondary" onClick={() => openEdit(product)}>Editar</button>
+                    {canManageProducts ? <button className="btn btn-secondary" onClick={() => openEdit(product)}>Editar</button> : null}
                     <NavLink to={productOverviewPath(product.id)} className="btn btn-primary">Abrir workspace</NavLink>
-                    <button className="btn btn-secondary" onClick={() => void removeProduct(product)}>Eliminar</button>
+                    {canManageProducts ? <button className="btn btn-secondary" onClick={() => void removeProduct(product)}>Eliminar</button> : null}
                   </div>
                 </td>
               </tr>

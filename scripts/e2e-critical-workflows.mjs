@@ -150,7 +150,7 @@ async function main() {
     const memberRecord = usersBefore.find((user) => user.email === "member@scrum.local");
     assert.ok(memberRecord, "member user missing in admin users list");
 
-    await admin.request("PATCH", `/admin/users/${memberRecord.id}/role`, { role: "viewer" }, [200]);
+    await admin.request("PATCH", `/admin/users/${memberRecord.id}/role`, { role: "scrum_master" }, [200]);
     await admin.request("PATCH", `/admin/users/${memberRecord.id}/role`, { role: "team_member" }, [200]);
 
     const usersAfter = await admin.request("GET", "/admin/users", undefined, [200]);

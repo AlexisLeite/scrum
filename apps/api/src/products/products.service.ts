@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Role } from "@prisma/client";
+import { AuthUser } from "../common/current-user.decorator";
+import { TeamScopeService } from "../common/team-scope.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   CreateProductDto,
@@ -9,10 +11,15 @@ import {
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly teamScopeService: TeamScopeService
+  ) {}
 
-  list() {
+  async list(user: AuthUser) {
+    const accessibleProductIds = await this.teamScopeService.getAccessibleProductIds(user);
     return this.prisma.product.findMany({
+      where: accessibleProductIds === null ? undefined : { id: { in: accessibleProductIds } },
       include: { members: true, owner: true },
       orderBy: { name: "asc" }
     });
@@ -44,7 +51,8 @@ export class ProductsService {
     });
   }
 
-  async update(id: string, dto: UpdateProductDto) {
+  async update(id: string, dto: UpdateProductDto, user: AuthUser) {
+    await this.teamScopeService.assertCanManageProduct(user, id);
     const existing = await this.prisma.product.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException("Product not found");
@@ -52,7 +60,8 @@ export class ProductsService {
     return this.prisma.product.update({ where: { id }, data: dto });
   }
 
-  async remove(id: string) {
+  async remove(id: string, user: AuthUser) {
+    await this.teamScopeService.assertCanManageProduct(user, id);
     const existing = await this.prisma.product.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException("Product not found");
@@ -61,7 +70,8 @@ export class ProductsService {
     return { ok: true };
   }
 
-  addMember(productId: string, userId: string, role: Role) {
+  async addMember(productId: string, userId: string, role: Role, actor: AuthUser) {
+    await this.teamScopeService.assertCanManageProduct(actor, productId);
     return this.prisma.productMember.upsert({
       where: { productId_userId: { productId, userId } },
       update: { role },
@@ -69,14 +79,16 @@ export class ProductsService {
     });
   }
 
-  getWorkflow(productId: string) {
+  async getWorkflow(productId: string, user: AuthUser) {
+    await this.teamScopeService.assertProductReadable(user, productId);
     return this.prisma.workflowColumn.findMany({
       where: { productId },
       orderBy: { sortOrder: "asc" }
     });
   }
 
-  upsertWorkflow(productId: string, dto: UpsertWorkflowColumnDto) {
+  async upsertWorkflow(productId: string, dto: UpsertWorkflowColumnDto, user: AuthUser) {
+    await this.teamScopeService.assertProductReadable(user, productId);
     if (dto.id) {
       return this.prisma.workflowColumn.update({
         where: { id: dto.id },

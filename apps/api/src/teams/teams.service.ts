@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { ActivityEntityType } from "@prisma/client";
 import { ActivityService } from "../activity/activity.service";
 import { AuthUser } from "../common/current-user.decorator";
@@ -15,11 +15,9 @@ export class TeamsService {
   ) {}
 
   async list(user: AuthUser) {
-    const where = this.teamScopeService.isScopedRole(user.role)
-      ? { members: { some: { userId: user.sub } } }
-      : undefined;
+    const accessibleTeamIds = await this.teamScopeService.getAccessibleTeamIds(user);
     return this.prisma.team.findMany({
-      where,
+      where: accessibleTeamIds === null ? undefined : { id: { in: accessibleTeamIds } },
       include: {
         members: {
           include: {
@@ -37,10 +35,18 @@ export class TeamsService {
     });
   }
 
-  async create(dto: CreateTeamDto, actorUserId: string) {
+  async create(dto: CreateTeamDto, actor: AuthUser) {
     const created = await this.prisma.team.create({ data: dto });
+    if (actor.role === "product_owner") {
+      await this.prisma.teamMember.create({
+        data: {
+          teamId: created.id,
+          userId: actor.sub
+        }
+      });
+    }
     await this.activityService.record({
-      actorUserId,
+      actorUserId: actor.sub,
       entityType: ActivityEntityType.TEAM,
       entityId: created.id,
       action: "team.create",
@@ -49,14 +55,15 @@ export class TeamsService {
     return created;
   }
 
-  async update(id: string, dto: UpdateTeamDto, actorUserId: string) {
+  async update(id: string, dto: UpdateTeamDto, actor: AuthUser) {
+    await this.teamScopeService.assertCanManageTeam(actor, id);
     const before = await this.prisma.team.findUnique({ where: { id } });
     if (!before) {
       throw new NotFoundException("Team not found");
     }
     const updated = await this.prisma.team.update({ where: { id }, data: dto });
     await this.activityService.record({
-      actorUserId,
+      actorUserId: actor.sub,
       entityType: ActivityEntityType.TEAM,
       entityId: id,
       action: "team.update",
@@ -66,14 +73,15 @@ export class TeamsService {
     return updated;
   }
 
-  async remove(id: string, actorUserId: string) {
+  async remove(id: string, actor: AuthUser) {
+    await this.teamScopeService.assertCanManageTeam(actor, id);
     const before = await this.prisma.team.findUnique({ where: { id } });
     if (!before) {
       throw new NotFoundException("Team not found");
     }
     await this.prisma.team.delete({ where: { id } });
     await this.activityService.record({
-      actorUserId,
+      actorUserId: actor.sub,
       entityType: ActivityEntityType.TEAM,
       entityId: id,
       action: "team.delete",
@@ -82,14 +90,15 @@ export class TeamsService {
     return { ok: true };
   }
 
-  async addMember(teamId: string, userId: string, actorUserId: string) {
+  async addMember(teamId: string, userId: string, actor: AuthUser) {
+    await this.teamScopeService.assertCanManageTeam(actor, teamId);
     const membership = await this.prisma.teamMember.upsert({
       where: { teamId_userId: { teamId, userId } },
       update: {},
       create: { teamId, userId }
     });
     await this.activityService.record({
-      actorUserId,
+      actorUserId: actor.sub,
       teamId,
       entityType: ActivityEntityType.TEAM,
       entityId: teamId,
@@ -99,10 +108,11 @@ export class TeamsService {
     return membership;
   }
 
-  async removeMember(teamId: string, userId: string, actorUserId: string) {
+  async removeMember(teamId: string, userId: string, actor: AuthUser) {
+    await this.teamScopeService.assertCanManageTeam(actor, teamId);
     await this.prisma.teamMember.delete({ where: { teamId_userId: { teamId, userId } } });
     await this.activityService.record({
-      actorUserId,
+      actorUserId: actor.sub,
       teamId,
       entityType: ActivityEntityType.TEAM,
       entityId: teamId,
@@ -113,11 +123,8 @@ export class TeamsService {
   }
 
   async listProducts(teamId: string, user?: AuthUser) {
-    if (user && this.teamScopeService.isScopedRole(user.role)) {
-      const allowedTeamIds = await this.teamScopeService.getUserTeamIds(user.sub);
-      if (!allowedTeamIds.includes(teamId)) {
-        throw new ForbiddenException("Insufficient team scope");
-      }
+    if (user) {
+      await this.teamScopeService.assertTeamReadable(user, teamId);
     }
 
     const links = await this.prisma.productTeam.findMany({
@@ -139,7 +146,8 @@ export class TeamsService {
     return links.map((entry) => entry.product);
   }
 
-  async setProducts(teamId: string, productIds: string[], actorUserId: string) {
+  async setProducts(teamId: string, productIds: string[], actor: AuthUser) {
+    await this.teamScopeService.assertCanManageTeam(actor, teamId);
     const uniqueProductIds = Array.from(
       new Set(productIds.filter((productId) => productId && productId.trim().length > 0))
     );
@@ -157,7 +165,7 @@ export class TeamsService {
 
     const after = await this.listProducts(teamId);
     await this.activityService.record({
-      actorUserId,
+      actorUserId: actor.sub,
       teamId,
       entityType: ActivityEntityType.TEAM,
       entityId: teamId,

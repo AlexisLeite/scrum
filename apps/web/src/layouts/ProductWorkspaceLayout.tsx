@@ -36,6 +36,7 @@ export const ProductWorkspaceLayout = observer(function ProductWorkspaceLayout()
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const { productId, storyId, sprintId, taskId } = useParams<{ productId: string; storyId?: string; sprintId?: string; taskId?: string }>();
   const location = useLocation();
+  const user = store.session.user;
 
   React.useEffect(() => {
     if (!productId) return;
@@ -46,6 +47,9 @@ export const ProductWorkspaceLayout = observer(function ProductWorkspaceLayout()
   }, [controller, productId, store.products.items]);
 
   if (!productId) return <Navigate to="/products" replace />;
+  if (user?.role === "team_member" && !location.pathname.includes("/tasks/")) {
+    return <Navigate to="/focused" replace />;
+  }
 
   const product = (store.products.items as Array<{ id: string; name: string; key: string }>).find((entry) => entry.id === productId);
   const sectionLabel = getWorkspaceSectionLabel(location.pathname);
@@ -70,7 +74,7 @@ export const ProductWorkspaceLayout = observer(function ProductWorkspaceLayout()
             <span className="workspace-meta-text">{detailLabel}</span>
           </div>
         </div>
-        <ProductTabs productId={productId} />
+        {user?.role !== "team_member" ? <ProductTabs productId={productId} /> : null}
       </section>
       <Outlet />
     </div>

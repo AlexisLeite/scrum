@@ -56,7 +56,6 @@ Los roles disponibles en la aplicación son:
 - `product_owner`
 - `scrum_master`
 - `team_member`
-- `viewer`
 
 ### Regla especial de alta inicial
 
@@ -69,7 +68,7 @@ Un usuario con rol `team_member` debe tener al menos un equipo asignado. Esa val
 
 ### Alcance por equipos
 
-Los roles `team_member` y `viewer` trabajan con alcance restringido por equipos.
+El rol `team_member` trabaja con alcance restringido por equipos.
 
 Eso significa:
 
@@ -87,123 +86,50 @@ La fuente de verdad de permisos es el backend. Algunas pantallas pueden ser nave
 
 ### 4.1 Resumen ejecutivo
 
-| Área / acción | platform_admin | product_owner | scrum_master | team_member | viewer |
-|---|---|---|---|---|---|
-| Ver productos | Sí | Sí | Sí | Sí | Sí |
-| Crear / editar / eliminar productos | Sí | Sí | No | No | No |
-| Configurar workflow del producto | Sí | Sí | Sí | No | No |
-| Ver equipos | Sí | Sí | Sí | Sí, sólo propios | Sí, sólo propios |
-| Crear / editar equipos | Sí | No | Sí | No | No |
-| Eliminar equipos | Sí | No | No | No | No |
-| Asignar miembros a equipos | Sí | No | Sí | No | No |
-| Vincular productos a equipos | Sí | Sí | Sí | No | No |
-| Ver backlog / historias | Sí | Sí | Sí | Sí, con alcance | Sí, con alcance |
-| Crear / editar historias | Sí | Sí | Sí | Sí, con alcance | No |
-| Eliminar / rankear historias | Sí | Sí | Sí | No | No |
-| Ver tareas | Sí | Sí | Sí | Sí, con alcance | Sí, con alcance |
-| Crear / editar tareas | Sí | Sí | Sí | Sí, con alcance | No |
-| Eliminar tareas | Sí | Sí | Sí | No | No |
-| Cambiar estado de tareas | Sí | Sí | Sí | Sí, con alcance | No |
-| Asignar tarea / moverla de sprint administrativamente | Sí | Sí | Sí | No | No |
-| Escribir mensajes en tareas | Sí | Sí | Sí | Sí, con alcance | No |
-| Crear tarea desde mensaje | Sí | Sí | Sí | Sí, con alcance | No |
-| Crear / editar / iniciar / completar sprint | Sí | Sí | Sí | No | No |
-| Ver board del sprint | Sí | Sí | Sí | Sí, con alcance | Sí, con alcance |
-| Crear tareas desde board del sprint | Sí | Sí | Sí | Sí, con alcance | No |
-| Reordenar / mover tarjetas en board | Sí | Sí | Sí | Sí, con alcance | No |
-| Ver métricas | Sí | Sí | Sí | Sí, con alcance | Sí, con alcance |
-| Administrar usuarios, roles y equipos de usuario | Sí | No | No | No | No |
-| Ver actividad por usuario desde Admin | Sí | No | No | No | No |
+| Area / accion | platform_admin | product_owner | scrum_master | team_member |
+|---|---|---|---|---|
+| Ver productos | Si | Si | Si | Solo propios |
+| Crear / editar / eliminar productos | Si | Si | No | No |
+| Ver equipos | Si | Si | Si | Solo propios |
+| Crear / editar equipos | Si | Si | Si | No |
+| Eliminar equipos | Si | Si | Si | No |
+| Asignar miembros a equipos | Si | Si | Si | No |
+| Vincular productos a equipos | Si | Si | Si | No |
+| Ver backlog / historias | Si | Si | Si | Solo kanban |
+| Crear / editar historias | Si | No | Si | No |
+| Eliminar historias | Si | No | Si | No |
+| Rankear historias | Si | Si | Si | No |
+| Ver tareas | Si | Si | Si | Solo kanban |
+| Crear / editar tareas | Si | No | Si | No |
+| Eliminar tareas | Si | No | Si | No |
+| Cambiar estado de tareas | Si | No | Si | Solo propias y en kanban |
+| Asignar tarea / moverla de sprint administrativamente | Si | No | Si | No |
+| Escribir mensajes en tareas | Si | Si | Si | Solo propias y en kanban |
+| Crear tarea desde mensaje | Si | No | Si | No |
+| Crear / editar / iniciar / completar sprint | Si | No | Si | No |
+| Ver board del sprint | Si | Si | Si | Solo propias y en kanban |
+| Crear tareas desde board del sprint | Si | No | Si | No |
+| Reordenar / mover tarjetas en board | Si | No | Si | Solo propias |
+| Ver metricas | Si | Si | Si | Solo propias |
+| Ver actividad por usuario desde Admin | Si | No | Si | No |
 
-### 4.2 Qué puede hacer cada rol
+### 4.2 Que puede hacer cada rol
 
 #### `platform_admin`
 
-Es el rol de control total. Puede:
-
-- administrar usuarios, roles y equipos
-- crear, editar y eliminar productos
-- crear, editar y eliminar equipos
-- operar backlog, tareas y sprints
-- ver y consultar actividad y métricas
+Es el rol de control total. Puede operar toda la administracion, productos, equipos, backlog, tareas, sprints, metricas y usuarios.
 
 #### `product_owner`
 
-Está orientado a producto. Puede:
-
-- crear, editar y eliminar productos
-- configurar workflow del producto
-- refinar backlog
-- crear, editar y eliminar historias
-- crear, editar y eliminar tareas
-- crear, editar, iniciar y completar sprints
-- consultar métricas
-- vincular productos a equipos
-
-No puede:
-
-- administrar usuarios globales
-- crear o editar equipos directamente
-- eliminar equipos
+Gestiona sus productos y equipos. Puede ver backlog y comentar, rankear historias, consultar metricas y administrar el contexto de producto, pero no modifica historias, tareas ni sprints.
 
 #### `scrum_master`
 
-Está orientado a ejecución y coordinación operativa. Puede:
-
-- crear y editar equipos
-- asignar o quitar miembros de equipos
-- vincular productos a equipos
-- configurar workflow del producto
-- crear, editar y eliminar historias
-- crear, editar y eliminar tareas
-- crear, editar, iniciar y completar sprints
-- operar el board Kanban
-- consultar métricas
-
-No puede:
-
-- crear o eliminar productos
-- administrar usuarios globales
-- eliminar equipos
+Es el rol operativo con mas capacidad dentro de los equipos y productos asignados. Puede crear equipos, vincular productos, operar backlog, crear historias y tareas, asignarlas, administrar sprints y consultar metricas. No puede crear usuarios ni productos globales.
 
 #### `team_member`
 
-Está orientado a ejecución dentro de su alcance. Puede:
-
-- ver equipos donde participa
-- ver backlog, tareas, sprints, board y métricas dentro del alcance de sus equipos
-- crear y editar historias dentro de productos accesibles
-- crear y editar tareas
-- cambiar estado de tareas
-- crear tareas desde sprint board
-- mover tarjetas en el board
-- participar en la conversación de tareas
-- crear subtareas o tareas desde mensajes
-
-No puede:
-
-- eliminar historias
-- rankear backlog
-- eliminar tareas
-- administrar productos
-- administrar equipos
-- crear o cerrar sprints
-- reasignar administrativamente tareas con los endpoints reservados a roles de coordinación
-
-#### `viewer`
-
-Es un rol de consulta. Puede:
-
-- ver equipos propios
-- ver historias, tareas, sprints, board, actividad visible y métricas dentro de su alcance
-
-No puede:
-
-- crear
-- editar
-- eliminar
-- cambiar estados
-- publicar mensajes
+No tiene acceso a administracion. Trabaja en la vista `Focused`, puede tomar tareas no asignadas, mover solo sus tarjetas en kanban, cambiar estado de tareas propias, abrir tareas en modo lectura y escribir mensajes en el contexto permitido.
 
 ---
 
@@ -753,16 +679,9 @@ con membresía por defecto para:
 
 ### Para `team_member`
 
-- trabaja principalmente en:
-  - `Backlog` si participa del refinamiento
-  - `Tareas de historia`
-  - `Board del sprint`
-  - `Definición de tarea`
-- usa la conversación de tarea para registrar decisiones y dudas
-
-### Para `viewer`
-
-- usa `Resumen`, `Backlog`, `Sprints`, `Board` y `Metricas` sólo como consulta
+- trabaja principalmente en `Focused`
+- toma tareas sin asignar o gestiona las propias en el kanban
+- abre la definición de tarea en modo lectura y usa la conversación para registrar decisiones y dudas
 
 ---
 

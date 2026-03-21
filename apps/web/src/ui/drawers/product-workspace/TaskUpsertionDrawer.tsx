@@ -46,12 +46,23 @@ type TaskUpsertionDrawerOptions = {
   defaultStoryId?: string;
   fixedSprintId?: string;
   allowSprintChange?: boolean;
+  readOnly?: boolean;
+  allowTaskCreation?: boolean;
+  allowMessageCreation?: boolean;
+  definitionReadOnly?: boolean;
   onDone?: () => Promise<void> | void;
 };
 
 export class TaskUpsertionDrawer extends Drawer {
   constructor(private readonly options: TaskUpsertionDrawerOptions) {
-    super(options.task ? "Editar tarea" : "Nueva tarea", { size: "lg" });
+    super(
+      options.task
+        ? options.readOnly
+          ? "Detalle de tarea"
+          : "Editar tarea"
+        : "Nueva tarea",
+      { size: "lg" }
+    );
   }
 
   render(context: DrawerRenderContext): React.ReactNode {
@@ -122,6 +133,10 @@ export function TaskUpsertionForm(props: {
     defaultStoryId,
     fixedSprintId,
     allowSprintChange = true,
+    readOnly = false,
+    allowTaskCreation = !readOnly,
+    allowMessageCreation = true,
+    definitionReadOnly = readOnly,
     onDone
   } = options;
 
@@ -169,6 +184,9 @@ export function TaskUpsertionForm(props: {
   }, [task, defaultStoryId, fixedSprintId, defaultStatus, statusOptions]);
 
   const persistTask = async (actualHoursOverride?: number) => {
+    if (readOnly) {
+      return;
+    }
     setError("");
 
     const payload = {
@@ -266,11 +284,11 @@ export function TaskUpsertionForm(props: {
         <div className="form-grid two-columns">
           <label>
             Titulo
-            <input value={title} onChange={(event) => setTitle(event.target.value)} />
+            <input value={title} onChange={(event) => setTitle(event.target.value)} disabled={readOnly} />
           </label>
           <label>
             Estado
-            <select value={status} onChange={(event) => handleStatusChange(event.target.value)}>
+            <select value={status} onChange={(event) => handleStatusChange(event.target.value)} disabled={readOnly}>
               {statusOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -286,7 +304,7 @@ export function TaskUpsertionForm(props: {
             <select
               value={defaultStoryId ? defaultStoryId : storyId}
               onChange={(event) => setStoryId(event.target.value)}
-              disabled={storySelectionLocked}
+              disabled={storySelectionLocked || readOnly}
             >
               <option value="">Seleccionar historia</option>
               {stories.map((story) => (
@@ -298,7 +316,7 @@ export function TaskUpsertionForm(props: {
           </label>
         ) : null}
 
-        <RichDescriptionField label="Descripcion" value={description} onChange={setDescription} />
+        <RichDescriptionField label="Descripcion" value={description} onChange={setDescription} disabled={readOnly} />
 
         <div className="form-grid three-columns">
           <label>
@@ -306,7 +324,7 @@ export function TaskUpsertionForm(props: {
             <select
               value={canChangeSprint ? sprintId : fixedSprintId ?? sprintId}
               onChange={(event) => setSprintId(event.target.value)}
-              disabled={!canChangeSprint}
+              disabled={!canChangeSprint || readOnly}
             >
               <option value="">Sin asignar</option>
               {sprints.map((sprint) => (
@@ -318,7 +336,7 @@ export function TaskUpsertionForm(props: {
           </label>
           <label>
             Asignado a
-            <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)}>
+            <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} disabled={readOnly}>
               <option value="">Sin asignar</option>
               {assignees.map((assignee) => (
                 <option key={assignee.id} value={assignee.id}>
@@ -340,6 +358,7 @@ export function TaskUpsertionForm(props: {
                     onClick={() => setEffortPoints(String(value))}
                     aria-pressed={isSelected}
                     aria-label={`${value} puntos`}
+                    disabled={readOnly}
                   >
                     <span className="task-point-dot" />
                     <span>{value}</span>
@@ -366,6 +385,7 @@ export function TaskUpsertionForm(props: {
                       setCustomEstimatedHours("");
                     }}
                     aria-pressed={isSelected}
+                    disabled={readOnly}
                   >
                     {preset}
                   </button>
@@ -379,6 +399,7 @@ export function TaskUpsertionForm(props: {
                   window.setTimeout(() => customHoursInputRef.current?.focus(), 0);
                 }}
                 aria-pressed={selectedEstimatedPreset === null}
+                disabled={readOnly}
               >
                 <span>Input</span>
                 <input
@@ -393,6 +414,7 @@ export function TaskUpsertionForm(props: {
                     setCustomEstimatedHours(event.target.value);
                   }}
                   placeholder="Horas"
+                  disabled={readOnly}
                 />
               </button>
             </div>
@@ -413,6 +435,7 @@ export function TaskUpsertionForm(props: {
                   value={actualHours}
                   onChange={(event) => setActualHours(event.target.value)}
                   placeholder="Se completan al cerrar"
+                  disabled={readOnly}
                 />
               </label>
             ) : (
@@ -424,16 +447,18 @@ export function TaskUpsertionForm(props: {
         </div>
 
         <div className="row-actions compact">
-          <button type="button" className="btn btn-primary" onClick={() => void persistTask()} disabled={saving}>
-            {task ? "Guardar tarea" : "Crear tarea"}
-          </button>
+          {!readOnly ? (
+            <button type="button" className="btn btn-primary" onClick={() => void persistTask()} disabled={saving}>
+              {task ? "Guardar tarea" : "Crear tarea"}
+            </button>
+          ) : null}
           {task && definitionHref ? (
             <button
               type="button"
               className="btn btn-secondary"
               onClick={() => {
                 close();
-                navigate(definitionHref);
+                navigate(definitionReadOnly ? `${definitionHref}?mode=readonly` : definitionHref);
               }}
               disabled={saving}
             >
@@ -441,7 +466,7 @@ export function TaskUpsertionForm(props: {
             </button>
           ) : null}
           <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>
-            {closeLabel}
+            {readOnly ? "Cerrar" : closeLabel}
           </button>
         </div>
         {task ? <ActivityTimeline controller={controller} entityType="TASK" entityId={task.id} /> : null}
@@ -454,6 +479,9 @@ export function TaskUpsertionForm(props: {
             sprints={sprints}
             assignees={assignees}
             statusOptions={statusOptions}
+            readOnly={readOnly}
+            allowTaskCreation={allowTaskCreation}
+            allowMessageCreation={allowMessageCreation}
             onChanged={onDone}
           />
         ) : null}

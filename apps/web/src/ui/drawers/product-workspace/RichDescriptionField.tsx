@@ -31,6 +31,7 @@ type RichDescriptionFieldProps = {
   value: string;
   onChange: (value: string) => void;
   rows?: number;
+  disabled?: boolean;
 };
 
 const CODE_BLOCK_LANGUAGES: Record<string, string> = {
@@ -50,7 +51,7 @@ const CODE_BLOCK_LANGUAGES: Record<string, string> = {
 };
 
 export function RichDescriptionField(props: RichDescriptionFieldProps) {
-  const { label, value, onChange, rows = 6 } = props;
+  const { label, value, onChange, rows = 6, disabled = false } = props;
   const minHeight = Math.max(rows, 4) * 24;
   const editorRef = React.useRef<MDXEditorMethods | null>(null);
   const fieldRef = React.useRef<HTMLDivElement | null>(null);
@@ -159,6 +160,7 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
         }}
         className="rich-description-editor"
         contentEditableClassName="rich-description-content"
+        readOnly={disabled}
         plugins={[
           headingsPlugin(),
           quotePlugin(),

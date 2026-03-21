@@ -47,6 +47,9 @@ export class TasksService {
       throw new BadRequestException("Story not found");
     }
     await this.assertProductAccess(user, story.productId);
+    if (this.teamScopeService.isTeamMember(user.role)) {
+      return [];
+    }
 
     const tasks = await this.prisma.task.findMany({
       where: { storyId },
@@ -60,6 +63,81 @@ export class TasksService {
       orderBy: { createdAt: "asc" }
     });
     return tasks.map((task) => this.withUnfinishedSprintCount(task));
+  }
+
+  async listFocused(user: AuthUser) {
+    const accessibleProducts = await this.teamScopeService.getAccessibleProductIds(user);
+    if (accessibleProducts !== null && accessibleProducts.length === 0) {
+      return { sprint: null, columns: [] };
+    }
+
+    const tasks = await this.prisma.task.findMany({
+      where: {
+        status: { not: "Done" },
+        sprint: {
+          status: SprintStatus.ACTIVE
+        },
+        ...(accessibleProducts !== null ? { productId: { in: accessibleProducts } } : {}),
+        OR: [
+          { assigneeId: user.sub },
+          { assigneeId: null }
+        ]
+      },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        story: {
+          select: {
+            id: true,
+            title: true,
+            status: true
+          }
+        },
+        sprint: {
+          select: {
+            id: true,
+            name: true,
+            teamId: true,
+            status: true
+          }
+        },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            key: true
+          }
+        },
+        _count: {
+          select: {
+            unfinishedSprintSnapshots: true
+          }
+        }
+      },
+      orderBy: [{ status: "asc" }, { boardOrder: "asc" }, { createdAt: "asc" }]
+    });
+
+    const defaultStatusOrder = ["Todo", "In Progress", "Blocked", "Done"];
+    const discoveredStatuses = Array.from(new Set(tasks.map((task) => task.status)));
+    const columnNames = [
+      ...defaultStatusOrder,
+      ...discoveredStatuses.filter((status) => !defaultStatusOrder.includes(status)).sort((left, right) => left.localeCompare(right))
+    ];
+
+    return {
+      sprint: null,
+      columns: columnNames.map((name) => ({
+        name,
+        tasks: tasks
+          .filter((task) => task.status === name)
+          .map((task) => this.withUnfinishedSprintCount(task))
+      }))
+    };
   }
 
   async getDetail(id: string, user: AuthUser) {
@@ -114,7 +192,16 @@ export class TasksService {
     });
   }
 
-  async update(id: string, dto: UpdateTaskDto, user: AuthUser, action: string = "TASK_UPDATED") {
+  async update(
+    id: string,
+    dto: UpdateTaskDto,
+    user: AuthUser,
+    action: string = "TASK_UPDATED",
+    options?: {
+      allowTeamMemberSelfKanbanOnly?: boolean;
+      allowTeamMemberAssignment?: boolean;
+    }
+  ) {
     const current = await this.prisma.task.findUnique({
       where: { id },
       select: {
@@ -141,6 +228,19 @@ export class TasksService {
     const hasStatus = dto.status !== undefined;
     const hasAssigneeId = dto.assigneeId !== undefined;
     const hasSprintId = dto.sprintId !== undefined;
+
+    this.assertCanTeamMemberMutateTask(
+      user,
+      {
+        assigneeId: hasAssigneeId ? dto.assigneeId ?? current.assigneeId : current.assigneeId,
+        sprintId: hasSprintId ? dto.sprintId ?? null : current.sprintId
+      },
+      {
+        ...options,
+        changingAssignee: hasAssigneeId,
+        changingSprint: hasSprintId
+      }
+    );
 
     if (hasStatus && typeof dto.status !== "string") {
       throw new BadRequestException("Task status must be a string");
@@ -268,10 +368,15 @@ export class TasksService {
   }
 
   updateStatus(id: string, status: string, user: AuthUser, actualHours?: number) {
-    return this.update(id, { status, actualHours }, user, "TASK_STATUS_UPDATED");
+    return this.update(id, { status, actualHours }, user, "TASK_STATUS_UPDATED", {
+      allowTeamMemberSelfKanbanOnly: true
+    });
   }
 
   assign(id: string, assigneeId: string | null | undefined, sprintId: string | null | undefined, user: AuthUser) {
+    if (this.teamScopeService.isTeamMember(user.role)) {
+      return this.takeTask(id, assigneeId, sprintId, user);
+    }
     const payload: UpdateTaskDto = {};
     if (assigneeId !== undefined) {
       payload.assigneeId = assigneeId;
@@ -285,6 +390,7 @@ export class TasksService {
   async addMessage(taskId: string, dto: CreateTaskMessageDto, user: AuthUser) {
     const task = await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
     await this.assertSprintIsMutable(task.sprintId);
+    this.assertCanTeamMemberCollaborate(user, task);
     if (dto.parentMessageId) {
       const parentMessage = await this.prisma.taskMessage.findUnique({
         where: { id: dto.parentMessageId },
@@ -685,6 +791,7 @@ export class TasksService {
     }
 
     await this.assertProductAccess(user, task.productId);
+    this.assertCanReadTask(user, task);
     return task;
   }
 
@@ -774,13 +881,7 @@ export class TasksService {
   }
 
   private async assertProductAccess(user: AuthUser, productId: string) {
-    const accessibleProducts = await this.teamScopeService.getAccessibleProductIds(user);
-    if (accessibleProducts === null) {
-      return;
-    }
-    if (!accessibleProducts.includes(productId)) {
-      throw new ForbiddenException("Insufficient team scope");
-    }
+    await this.teamScopeService.assertProductReadable(user, productId);
   }
 
   async getNextBoardOrder(
@@ -871,6 +972,90 @@ export class TasksService {
   private assertSprintStatusAllowsChanges(status: SprintStatus | null | undefined) {
     if (status === SprintStatus.COMPLETED || status === SprintStatus.CANCELLED) {
       throw new BadRequestException("This sprint is closed and its tasks can no longer be modified");
+    }
+  }
+
+  private async takeTask(id: string, assigneeId: string | null | undefined, sprintId: string | null | undefined, user: AuthUser) {
+    if (sprintId !== undefined) {
+      throw new ForbiddenException("Team members cannot move tasks between sprints");
+    }
+    if (assigneeId !== user.sub) {
+      throw new ForbiddenException("Team members can only take tasks for themselves");
+    }
+
+    const current = await this.prisma.task.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        productId: true,
+        sprintId: true,
+        assigneeId: true
+      }
+    });
+    if (!current) {
+      throw new BadRequestException("Task not found");
+    }
+    await this.assertProductAccess(user, current.productId);
+    if (!current.sprintId || current.assigneeId) {
+      throw new ForbiddenException("Only unassigned tasks in active kanban can be taken");
+    }
+
+    return this.update(id, { assigneeId: user.sub }, user, "TASK_TAKEN", {
+      allowTeamMemberSelfKanbanOnly: true,
+      allowTeamMemberAssignment: true
+    });
+  }
+
+  private assertCanTeamMemberCollaborate(
+    user: AuthUser,
+    task: { assigneeId: string | null; sprintId: string | null }
+  ) {
+    if (!this.teamScopeService.isTeamMember(user.role)) {
+      return;
+    }
+    if (!task.sprintId || (task.assigneeId !== user.sub && task.assigneeId !== null)) {
+      throw new ForbiddenException("Team members can only collaborate on visible kanban tasks");
+    }
+  }
+
+  private assertCanTeamMemberMutateTask(
+    user: AuthUser,
+    task: { assigneeId: string | null; sprintId: string | null },
+    options?: {
+      allowTeamMemberSelfKanbanOnly?: boolean;
+      allowTeamMemberAssignment?: boolean;
+      changingAssignee?: boolean;
+      changingSprint?: boolean;
+    }
+  ) {
+    if (!this.teamScopeService.isTeamMember(user.role)) {
+      return;
+    }
+
+    if (!options?.allowTeamMemberSelfKanbanOnly) {
+      throw new ForbiddenException("Team members cannot modify tasks administratively");
+    }
+    if (options.changingSprint) {
+      throw new ForbiddenException("Team members cannot move tasks between sprints");
+    }
+    if (options.changingAssignee && !options.allowTeamMemberAssignment) {
+      throw new ForbiddenException("Team members cannot assign tasks administratively");
+    }
+    if (!task.sprintId || task.assigneeId !== user.sub) {
+      throw new ForbiddenException("Team members can only update their own tasks in kanban");
+    }
+  }
+
+  private assertCanReadTask(
+    user: AuthUser,
+    task: { assigneeId?: string | null; sprintId?: string | null }
+  ) {
+    if (!this.teamScopeService.isTeamMember(user.role)) {
+      return;
+    }
+
+    if (!task.sprintId || (task.assigneeId !== user.sub && task.assigneeId !== null)) {
+      throw new ForbiddenException("Team members can only read visible kanban tasks");
     }
   }
 }

@@ -2,8 +2,7 @@ export type Role =
   | "platform_admin"
   | "product_owner"
   | "scrum_master"
-  | "team_member"
-  | "viewer";
+  | "team_member";
 
 export type SprintStatus = "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
 

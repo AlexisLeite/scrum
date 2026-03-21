@@ -14,6 +14,7 @@ export const TeamDefinitionView = observer(function TeamDefinitionView() {
   const teamController = React.useMemo(() => new TeamController(store), [store]);
   const adminController = React.useMemo(() => new AdminController(store), [store]);
   const { teamId } = useParams<{ teamId: string }>();
+  const readOnly = store.session.user?.role === "scrum_master";
   const navigate = useNavigate();
 
   React.useEffect(() => {
@@ -22,7 +23,7 @@ export const TeamDefinitionView = observer(function TeamDefinitionView() {
   }, [adminController, teamController]);
 
   if (!teamId) {
-    return <Navigate to="/teams" replace />;
+    return <Navigate to="/administration/teams" replace />;
   }
 
   const teams = store.teams.items as TeamItem[];
@@ -43,8 +44,8 @@ export const TeamDefinitionView = observer(function TeamDefinitionView() {
       <section className="card page-state">
         <h2>Equipo no encontrado</h2>
         <p>No existe un equipo con la referencia solicitada.</p>
-        <NavLink className="btn btn-secondary" to="/teams">
-          Volver a equipos
+        <NavLink className="btn btn-secondary" to="/administration/teams">
+          Volver a administracion
         </NavLink>
       </section>
     );
@@ -64,8 +65,8 @@ export const TeamDefinitionView = observer(function TeamDefinitionView() {
           </div>
         </div>
         <div className="row-actions compact">
-          <NavLink className="btn btn-secondary" to="/teams">
-            Volver a equipos
+          <NavLink className="btn btn-secondary" to="/administration/teams">
+            Volver a administracion
           </NavLink>
         </div>
       </section>
@@ -78,9 +79,10 @@ export const TeamDefinitionView = observer(function TeamDefinitionView() {
           onSaved={async () => {
             await teamController.loadTeams();
           }}
-          close={() => navigate("/teams")}
-          closeLabel="Volver a equipos"
+          close={() => navigate("/administration/teams")}
+          closeLabel="Volver a administracion"
           closeOnSubmit={false}
+          readOnly={readOnly}
         />
       </section>
     </div>

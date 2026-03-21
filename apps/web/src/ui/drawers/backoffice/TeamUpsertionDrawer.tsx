@@ -57,6 +57,7 @@ export function TeamUpsertionForm(props: {
   closeLabel?: string;
   definitionHref?: string;
   closeOnSubmit?: boolean;
+  readOnly?: boolean;
 }) {
   const {
     controller,
@@ -66,7 +67,8 @@ export function TeamUpsertionForm(props: {
     close,
     closeLabel = "Cancelar",
     definitionHref,
-    closeOnSubmit = true
+    closeOnSubmit = true,
+    readOnly = false
   } = props;
   const navigate = useNavigate();
   const isEditing = Boolean(team);
@@ -88,7 +90,7 @@ export function TeamUpsertionForm(props: {
   }, [controller, onSaved]);
 
   const submit = React.useCallback(async () => {
-    if (saving) return;
+    if (saving || readOnly) return;
     setSaving(true);
     setError("");
     try {
@@ -106,10 +108,10 @@ export function TeamUpsertionForm(props: {
     } finally {
       setSaving(false);
     }
-  }, [close, controller, description, name, refresh, saving, team]);
+  }, [close, controller, description, name, readOnly, refresh, saving, team]);
 
   const addMember = React.useCallback(async () => {
-    if (!team || !newMemberId) return;
+    if (!team || !newMemberId || readOnly) return;
     setSaving(true);
     setError("");
     try {
@@ -128,10 +130,10 @@ export function TeamUpsertionForm(props: {
     } finally {
       setSaving(false);
     }
-  }, [controller, newMemberId, refresh, team, users]);
+  }, [controller, newMemberId, readOnly, refresh, team, users]);
 
   const removeMember = React.useCallback(async (memberId: string) => {
-    if (!team) return;
+    if (!team || readOnly) return;
     setSaving(true);
     setError("");
     try {
@@ -143,7 +145,7 @@ export function TeamUpsertionForm(props: {
     } finally {
       setSaving(false);
     }
-  }, [refresh, team]);
+  }, [readOnly, refresh, team]);
 
   React.useEffect(() => {
     if (!team) return;
@@ -193,7 +195,7 @@ export function TeamUpsertionForm(props: {
   }, []);
 
   const saveProducts = React.useCallback(async () => {
-    if (!team) return;
+    if (!team || readOnly) return;
     setSaving(true);
     setProductsError("");
     try {
@@ -204,7 +206,7 @@ export function TeamUpsertionForm(props: {
     } finally {
       setSaving(false);
     }
-  }, [linkedProductIds, refresh, team]);
+  }, [linkedProductIds, readOnly, refresh, team]);
 
   const memberIds = new Set(members.map((member) => member.userId));
   const availableUsers = users.filter((user) => !memberIds.has(user.id));
@@ -213,16 +215,16 @@ export function TeamUpsertionForm(props: {
     <div className="form-grid">
       <label>
         Nombre
-        <input value={name} onChange={(event) => setName(event.target.value)} />
+        <input value={name} onChange={(event) => setName(event.target.value)} disabled={readOnly} />
       </label>
-      <RichDescriptionField label="Descripcion" value={description} onChange={setDescription} rows={4} />
+      <RichDescriptionField label="Descripcion" value={description} onChange={setDescription} rows={4} disabled={readOnly} />
       {isEditing && team ? (
         <section className="card">
           <h4>Miembros</h4>
           <div className="form-grid two-columns">
             <label>
               Agregar usuario
-              <select value={newMemberId} onChange={(event) => setNewMemberId(event.target.value)}>
+              <select value={newMemberId} onChange={(event) => setNewMemberId(event.target.value)} disabled={readOnly}>
                 <option value="">Seleccionar usuario</option>
                 {availableUsers.map((user) => (
                   <option key={user.id} value={user.id}>
@@ -232,7 +234,7 @@ export function TeamUpsertionForm(props: {
               </select>
             </label>
             <div className="end-field">
-              <button className="btn btn-secondary" disabled={!newMemberId || saving} onClick={() => void addMember()}>
+              <button className="btn btn-secondary" disabled={!newMemberId || saving || readOnly} onClick={() => void addMember()}>
                 Agregar miembro
               </button>
             </div>
@@ -242,7 +244,7 @@ export function TeamUpsertionForm(props: {
               <li key={member.userId}>
                 <div className="section-head">
                   <span>{member.user?.name ?? member.userId}</span>
-                  <button className="btn btn-ghost" disabled={saving} onClick={() => void removeMember(member.userId)}>
+                  <button className="btn btn-ghost" disabled={saving || readOnly} onClick={() => void removeMember(member.userId)}>
                     Quitar
                   </button>
                 </div>
@@ -262,6 +264,7 @@ export function TeamUpsertionForm(props: {
                   type="checkbox"
                   checked={linkedProductIds.includes(product.id)}
                   onChange={() => toggleLinkedProduct(product.id)}
+                  disabled={readOnly}
                 />
                 {product.key} - {product.name}
               </label>
@@ -269,7 +272,7 @@ export function TeamUpsertionForm(props: {
             {products.length === 0 ? <p className="muted">No hay productos disponibles.</p> : null}
           </div>
           <div className="row-actions">
-            <button className="btn btn-secondary" disabled={saving} onClick={() => void saveProducts()}>
+            <button className="btn btn-secondary" disabled={saving || readOnly} onClick={() => void saveProducts()}>
               Guardar productos
             </button>
           </div>
@@ -284,9 +287,11 @@ export function TeamUpsertionForm(props: {
         </section>
       ) : null}
       <div className="row-actions">
-        <button className="btn btn-primary" disabled={saving} onClick={() => void submit()}>
-          {isEditing ? "Guardar cambios" : "Crear equipo"}
-        </button>
+        {!readOnly ? (
+          <button className="btn btn-primary" disabled={saving} onClick={() => void submit()}>
+            {isEditing ? "Guardar cambios" : "Crear equipo"}
+          </button>
+        ) : null}
         {isEditing && definitionHref ? (
           <button
             className="btn btn-secondary"

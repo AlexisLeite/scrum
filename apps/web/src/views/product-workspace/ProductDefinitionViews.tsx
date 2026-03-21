@@ -1,6 +1,6 @@
 ﻿import React from "react";
 import { observer } from "mobx-react-lite";
-import { NavLink, Navigate, useNavigate, useParams } from "react-router-dom";
+import { NavLink, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ProductController, TeamController } from "../../controllers";
 import {
   productBacklogPath,
@@ -15,6 +15,7 @@ import { SprintUpsertionForm } from "../../ui/drawers/product-workspace/SprintUp
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
 import { TaskUpsertionDrawer, TaskUpsertionForm } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { RichDescriptionField } from "../../ui/drawers/product-workspace/RichDescriptionField";
+import { canCommentOnVisibleTask, canCreateTaskFromMessage, canEditTaskFields } from "../../lib/permissions";
 
 type ProductItem = {
   id: string;
@@ -387,9 +388,11 @@ function TaskMessageThread(props: {
   onReply: (message: TaskMessageNode) => void;
   onCreateTask: (message: TaskMessageNode) => void;
   onOpenDerivedTask: (taskId: string) => void;
+  allowTaskCreation: boolean;
+  allowMessageCreation: boolean;
   depth?: number;
 }) {
-  const { nodes, onReply, onCreateTask, onOpenDerivedTask, depth = 0 } = props;
+  const { nodes, onReply, onCreateTask, onOpenDerivedTask, allowTaskCreation, allowMessageCreation, depth = 0 } = props;
 
   return (
     <div className="task-thread">
@@ -401,12 +404,16 @@ function TaskMessageThread(props: {
               <span className="muted"> · {formatDateTime(message.createdAt)}</span>
             </div>
             <div className="row-actions compact">
-              <button type="button" className="btn btn-secondary" onClick={() => onReply(message)}>
-                Responder
-              </button>
-              <button type="button" className="btn btn-secondary" onClick={() => onCreateTask(message)}>
-                Crear tarea
-              </button>
+              {allowMessageCreation ? (
+                <button type="button" className="btn btn-secondary" onClick={() => onReply(message)}>
+                  Responder
+                </button>
+              ) : null}
+              {allowTaskCreation ? (
+                <button type="button" className="btn btn-secondary" onClick={() => onCreateTask(message)}>
+                  Crear tarea
+                </button>
+              ) : null}
             </div>
           </div>
           <MarkdownPreview markdown={message.body} className="task-message-body markdown-preview-card" />
@@ -433,6 +440,8 @@ function TaskMessageThread(props: {
               onReply={onReply}
               onCreateTask={onCreateTask}
               onOpenDerivedTask={onOpenDerivedTask}
+              allowTaskCreation={allowTaskCreation}
+              allowMessageCreation={allowMessageCreation}
               depth={depth + 1}
             />
           ) : null}
@@ -447,7 +456,9 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const teamController = React.useMemo(() => new TeamController(store), [store]);
   const { productId, taskId } = useParams<{ productId: string; taskId: string }>();
+  const user = store.session.user;
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [taskDetail, setTaskDetail] = React.useState<DetailTask | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -504,14 +515,26 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
       ),
     [store.board?.columns, taskDetail?.status]
   );
+  const forcedReadonly = searchParams.get("mode") === "readonly";
+  const canEditTask = !forcedReadonly && canEditTaskFields(user?.role);
+  const canCreateLinkedTask = !forcedReadonly && canCreateTaskFromMessage(user?.role);
+  const canWriteMessages = taskDetail ? canCommentOnVisibleTask(user?.role, taskDetail, user?.id) : false;
+  const readOnlyTask = !canEditTask;
 
   if (!productId || !taskId) {
     return <Navigate to="/products" replace />;
   }
 
-  const backHref = taskDetail?.sprint?.id
-    ? productBoardPath(productId, taskDetail.sprint.id)
-    : productBacklogPath(productId);
+  const backHref = user?.role === "team_member"
+    ? "/focused"
+    : taskDetail?.sprint?.id
+      ? productBoardPath(productId, taskDetail.sprint.id)
+      : productBacklogPath(productId);
+  const backLabel = user?.role === "team_member"
+    ? "Volver a Focused"
+    : taskDetail?.sprint?.id
+      ? "Volver al sprint"
+      : "Volver al backlog";
 
   const openTaskDrawerFromDetail = React.useCallback(
     (detail: DetailTask) => {
@@ -523,6 +546,10 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
           sprints,
           assignees,
           statusOptions,
+          readOnly: readOnlyTask,
+          definitionReadOnly: readOnlyTask,
+          allowTaskCreation: canCreateLinkedTask,
+          allowMessageCreation: canCommentOnVisibleTask(user?.role, detail, user?.id),
           task: {
             id: detail.id,
             title: detail.title,
@@ -540,7 +567,20 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
         })
       );
     },
-    [assignees, controller, loadTaskDetail, productId, sprints, statusOptions, stories, store.drawers]
+    [
+      assignees,
+      canCreateLinkedTask,
+      controller,
+      loadTaskDetail,
+      productId,
+      readOnlyTask,
+      sprints,
+      statusOptions,
+      stories,
+      store.drawers,
+      user?.id,
+      user?.role
+    ]
   );
 
   const openRelatedTaskDrawer = React.useCallback(
@@ -571,6 +611,10 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
         defaultParentTaskLabel: taskDetail.title,
         defaultSourceMessageId: message.id,
         defaultSourceMessagePreview: message.body,
+        readOnly: readOnlyTask,
+        definitionReadOnly: readOnlyTask,
+        allowTaskCreation: canCreateLinkedTask,
+        allowMessageCreation: canWriteMessages,
         onDone: loadTaskDetail
       })
     );
@@ -594,13 +638,17 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
         fixedSprintId: taskDetail.sprint?.id ?? undefined,
         defaultParentTaskId: taskDetail.id,
         defaultParentTaskLabel: taskDetail.title,
+        readOnly: readOnlyTask,
+        definitionReadOnly: readOnlyTask,
+        allowTaskCreation: canCreateLinkedTask,
+        allowMessageCreation: canWriteMessages,
         onDone: loadTaskDetail
       })
     );
   };
 
   const submitMessage = async () => {
-    if (!taskDetail || !messageBody.trim()) {
+    if (!taskDetail || !canWriteMessages || !messageBody.trim()) {
       return;
     }
     setSubmittingMessage(true);
@@ -647,7 +695,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
         eyebrow="Definicion de tarea"
         title={taskDetail.title}
         description="Edicion integral, conversacion y trazabilidad de hijos en una sola pantalla."
-        backLabel={taskDetail.sprint?.id ? "Volver al sprint" : "Volver al backlog"}
+        backLabel={backLabel}
         backHref={backHref}
         context={
           <>
@@ -680,10 +728,14 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
                 actualHours: taskDetail.actualHours,
                 unfinishedSprintCount: taskDetail.unfinishedSprintCount ?? 0
               },
+              readOnly: readOnlyTask,
+              definitionReadOnly: readOnlyTask,
+              allowTaskCreation: canCreateLinkedTask,
+              allowMessageCreation: canWriteMessages,
               onDone: loadTaskDetail
             }}
             close={() => navigate(backHref)}
-            closeLabel={taskDetail.sprint?.id ? "Volver al sprint" : "Volver al backlog"}
+            closeLabel={backLabel}
             closeOnSubmit={false}
             showCollaboration={false}
           />
@@ -756,9 +808,11 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
                   {taskDetail.childSummary.completed} de {taskDetail.childSummary.total} completados
                 </p>
               </div>
-              <button type="button" className="btn btn-primary" onClick={openNewChildDrawer}>
-                Crear subtarea
-              </button>
+              {canCreateLinkedTask ? (
+                <button type="button" className="btn btn-primary" onClick={openNewChildDrawer}>
+                  Crear subtarea
+                </button>
+              ) : null}
             </div>
             <div className="task-child-list">
               {taskDetail.childTasks.length === 0 ? (
@@ -809,17 +863,21 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
                 />
               </div>
             ) : null}
-            <RichDescriptionField label="Nuevo mensaje" value={messageBody} onChange={setMessageBody} rows={8} />
-            <div className="row-actions compact">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => void submitMessage()}
-                disabled={submittingMessage || !messageBody.trim()}
-              >
-                Publicar mensaje
-              </button>
-            </div>
+            {canWriteMessages ? (
+              <>
+                <RichDescriptionField label="Nuevo mensaje" value={messageBody} onChange={setMessageBody} rows={8} />
+                <div className="row-actions compact">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void submitMessage()}
+                    disabled={submittingMessage || !messageBody.trim()}
+                  >
+                    Publicar mensaje
+                  </button>
+                </div>
+              </>
+            ) : null}
             {taskDetail.conversation.length === 0 ? (
               <p className="muted">Aun no hay mensajes en esta tarea.</p>
             ) : (
@@ -828,6 +886,8 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
                 onReply={(message) => setReplyTarget(message)}
                 onCreateTask={openDerivedTaskDrawer}
                 onOpenDerivedTask={(derivedTaskId) => void openRelatedTaskDrawer(derivedTaskId)}
+                allowTaskCreation={canCreateLinkedTask}
+                allowMessageCreation={canWriteMessages}
               />
             )}
           </section>

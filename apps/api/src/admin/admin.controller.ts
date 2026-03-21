@@ -7,21 +7,23 @@ import { AdminService } from "./admin.service";
 
 @Controller("admin")
 @UseGuards(JwtAuthGuard)
-@Roles("platform_admin")
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
   @Get("users")
-  listUsers() {
-    return this.adminService.listUsers();
+  @Roles("platform_admin", "scrum_master")
+  listUsers(@CurrentUser() user: AuthUser) {
+    return this.adminService.listUsers(user);
   }
 
   @Get("users/:id/teams")
-  listUserTeams(@Param("id") id: string) {
-    return this.adminService.listUserTeams(id);
+  @Roles("platform_admin", "scrum_master")
+  listUserTeams(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.adminService.listUserTeams(id, user);
   }
 
   @Patch("users/:id/teams")
+  @Roles("platform_admin")
   setUserTeams(
     @CurrentUser() user: AuthUser,
     @Param("id") id: string,
@@ -31,6 +33,7 @@ export class AdminController {
   }
 
   @Post("users")
+  @Roles("platform_admin")
   createUser(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateAdminUserDto
@@ -39,6 +42,7 @@ export class AdminController {
   }
 
   @Patch("users/:id/role")
+  @Roles("platform_admin")
   updateRole(
     @CurrentUser() user: AuthUser,
     @Param("id") id: string,

@@ -1,22 +1,30 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { AuthController, ProductController } from "./controllers";
+import {
+  NavLink,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useSearchParams
+} from "react-router-dom";
+import { Role } from "@scrum/contracts";
+import { AuthController } from "./controllers";
 import { ProductWorkspaceLayout } from "./layouts/ProductWorkspaceLayout";
-import { ThemeToggle } from "./components/ThemeToggle";
 import {
   LegacyExecuteSprintRedirect,
   LegacyIndicatorsRedirect,
   LegacySprintsManageRedirect,
   LegacyStoryTasksRedirect,
-  productBacklogPath,
-  productOverviewPath,
-  productRoutes,
-  productSprintsPath
+  productRoutes
 } from "./routes/product-routes";
 import { useRootStore } from "./stores/root-store";
 import { DrawerHost } from "./ui/drawers/DrawerHost";
-import { MarkdownPreview } from "./ui/drawers/product-workspace/MarkdownPreview";
+import { FocusedView } from "./views/FocusedView";
+import { administrationDefaultPath, AdministrationView } from "./views/AdministrationView";
+import { SettingsView } from "./views/SettingsView";
 import {
   ProductBacklogView,
   ProductMetricsView,
@@ -35,12 +43,20 @@ import { AdminRolesView } from "./views/backoffice/AdminRolesView";
 import { ProductsBackofficeView } from "./views/backoffice/ProductsBackofficeView";
 import { TeamDefinitionView } from "./views/backoffice/TeamDefinitionView";
 import { TeamsBackofficeView } from "./views/backoffice/TeamsBackofficeView";
-
-type ProductItem = { id: string; name: string; key: string; description: string | null; };
+import { ThemeToggle } from "./components/ThemeToggle";
+import {
+  ADMINISTRATION_ROLES,
+  PRODUCT_MANAGERS,
+  PRODUCT_WORKSPACE_ROLES,
+  USER_ADMIN_ROLES,
+  canAccessAdministration,
+  getUserInitials
+} from "./lib/permissions";
 
 export const App = observer(function App() {
   const store = useRootStore();
   const auth = React.useMemo(() => new AuthController(store), [store]);
+  const location = useLocation();
 
   React.useEffect(() => {
     let active = true;
@@ -58,62 +74,132 @@ export const App = observer(function App() {
   }, [auth, store.session]);
 
   const user = store.session.user;
-  const isAuthed = Boolean(user);
-  const showGuestNavigation = store.session.hydrated && !isAuthed;
+  const showMinimalShell = location.pathname === "/login" || location.pathname.startsWith("/auth/gitlab/callback");
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-badge">SP</span>
-          <div><h1>ScrumPilot</h1><p>Sprint delivery workspace</p></div>
-        </div>
-        <nav className="topnav">
-          <NavLink to="/" className={({ isActive }) => isActive ? "topnav-link active" : "topnav-link"}>Inicio</NavLink>
-          {isAuthed ? (
-            <>
-              <NavLink to="/products" className={({ isActive }) => isActive ? "topnav-link active" : "topnav-link"}>Productos</NavLink>
-              <NavLink to="/teams" className={({ isActive }) => isActive ? "topnav-link active" : "topnav-link"}>Equipos</NavLink>
-              <NavLink to="/profile" className={({ isActive }) => isActive ? "topnav-link active" : "topnav-link"}>Perfil</NavLink>
-              {user?.role === "platform_admin" ? <NavLink to="/admin" className={({ isActive }) => isActive ? "topnav-link active" : "topnav-link"}>Admin</NavLink> : null}
-            </>
-          ) : showGuestNavigation ? (
-            <>
-              <NavLink to="/login" className={({ isActive }) => isActive ? "topnav-link active" : "topnav-link"}>Login</NavLink>
-              <NavLink to="/signup" className={({ isActive }) => isActive ? "topnav-link active" : "topnav-link"}>Registro</NavLink>
-            </>
-          ) : null}
-        </nav>
-        <div className="topbar-right">
-          {isAuthed ? <span className="pill">{user?.name}</span> : null}
-          <ThemeToggle />
-          {isAuthed ? <button className="btn btn-ghost" onClick={() => void auth.logout()}>Sign out</button> : null}
-        </div>
-      </header>
-
-      <main className="page-wrap">
+    <div className={showMinimalShell ? "auth-app-shell" : "app-shell"}>
+      {!showMinimalShell ? <AuthenticatedHeader /> : null}
+      <main className={showMinimalShell ? "auth-page-wrap" : "page-wrap"}>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<LoginView />} />
-          <Route path="/signup" element={<SignupView />} />
+          <Route path="/signup" element={<Navigate to="/login" replace />} />
+          <Route path="/profile" element={<Navigate to="/settings" replace />} />
+          <Route path="/settings" element={<Protected><SettingsView /></Protected>} />
+          <Route path="/focused" element={<Protected><FocusedView /></Protected>} />
           <Route path="/auth/gitlab/callback" element={<GitlabCallbackView />} />
-          <Route path="/profile" element={<Protected><ProfileView /></Protected>} />
-          <Route path="/admin" element={<Protected><AdminRolesView /></Protected>} />
-          <Route path="/teams/:teamId/definition" element={<Protected><TeamDefinitionView /></Protected>} />
-          <Route path="/teams" element={<Protected><TeamsBackofficeView /></Protected>} />
-          <Route path="/products" element={<Protected><ProductsBackofficeView /></Protected>} />
+
+          <Route
+            path="/administration"
+            element={
+              <ProtectedRoles roles={ADMINISTRATION_ROLES}>
+                <AdministrationShell />
+              </ProtectedRoles>
+            }
+          >
+            <Route index element={<AdministrationIndexRedirect />} />
+            <Route path="products" element={<ProductsBackofficeView />} />
+            <Route path="teams" element={<TeamsBackofficeView />} />
+            <Route
+              path="users"
+              element={
+                <ProtectedRoles roles={USER_ADMIN_ROLES}>
+                  <AdminRolesView />
+                </ProtectedRoles>
+              }
+            />
+          </Route>
+
+          <Route
+            path="/teams/:teamId/definition"
+            element={
+              <ProtectedRoles roles={["platform_admin", "product_owner", "scrum_master"]}>
+                <TeamDefinitionView />
+              </ProtectedRoles>
+            }
+          />
 
           <Route path="/products/:productId" element={<Protected><ProductWorkspaceLayout /></Protected>}>
-            <Route index element={<Navigate to={productRoutes.overview} replace />} />
-            <Route path={productRoutes.rootDefinition} element={<ProductDefinitionView />} />
-            <Route path={productRoutes.overview} element={<ProductOverviewView />} />
-            <Route path={productRoutes.backlog} element={<ProductBacklogView />} />
-            <Route path={productRoutes.storyTasks} element={<StoryTasksView />} />
-            <Route path={productRoutes.storyDefinition} element={<StoryDefinitionView />} />
-            <Route path={productRoutes.sprints} element={<SprintPlanningView />} />
-            <Route path={productRoutes.sprintDefinition} element={<SprintDefinitionView />} />
-            <Route path={productRoutes.board} element={<SprintBoardView />} />
-            <Route path={productRoutes.metrics} element={<ProductMetricsView />} />
+            <Route
+              index
+              element={
+                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                  <Navigate to={productRoutes.overview} replace />
+                </ProtectedRoles>
+              }
+            />
+            <Route
+              path={productRoutes.rootDefinition}
+              element={
+                <ProtectedRoles roles={PRODUCT_MANAGERS}>
+                  <ProductDefinitionView />
+                </ProtectedRoles>
+              }
+            />
+            <Route
+              path={productRoutes.overview}
+              element={
+                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                  <ProductOverviewView />
+                </ProtectedRoles>
+              }
+            />
+            <Route
+              path={productRoutes.backlog}
+              element={
+                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                  <ProductBacklogView />
+                </ProtectedRoles>
+              }
+            />
+            <Route
+              path={productRoutes.storyTasks}
+              element={
+                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                  <StoryTasksView />
+                </ProtectedRoles>
+              }
+            />
+            <Route
+              path={productRoutes.storyDefinition}
+              element={
+                <ProtectedRoles roles={["platform_admin", "scrum_master"]}>
+                  <StoryDefinitionView />
+                </ProtectedRoles>
+              }
+            />
+            <Route
+              path={productRoutes.sprints}
+              element={
+                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                  <SprintPlanningView />
+                </ProtectedRoles>
+              }
+            />
+            <Route
+              path={productRoutes.sprintDefinition}
+              element={
+                <ProtectedRoles roles={["platform_admin", "scrum_master"]}>
+                  <SprintDefinitionView />
+                </ProtectedRoles>
+              }
+            />
+            <Route
+              path={productRoutes.board}
+              element={
+                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                  <SprintBoardView />
+                </ProtectedRoles>
+              }
+            />
+            <Route
+              path={productRoutes.metrics}
+              element={
+                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                  <ProductMetricsView />
+                </ProtectedRoles>
+              }
+            />
             <Route path={productRoutes.taskDefinition} element={<TaskDefinitionView />} />
           </Route>
 
@@ -121,8 +207,10 @@ export const App = observer(function App() {
           <Route path="/products/:productId/sprints/manage" element={<Protected><LegacySprintsManageRedirect /></Protected>} />
           <Route path="/products/:productId/sprints/:sprintId/execute" element={<Protected><LegacyExecuteSprintRedirect /></Protected>} />
           <Route path="/products/:productId/indicators" element={<Protected><LegacyIndicatorsRedirect /></Protected>} />
-
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/products" element={<Navigate to="/administration/products" replace />} />
+          <Route path="/teams" element={<Navigate to="/administration/teams" replace />} />
+          <Route path="/admin" element={<Navigate to="/administration" replace />} />
+          <Route path="*" element={<RootRedirect />} />
         </Routes>
       </main>
 
@@ -131,51 +219,71 @@ export const App = observer(function App() {
   );
 });
 
-const Home = observer(function Home() {
+const AuthenticatedHeader = observer(function AuthenticatedHeader() {
   const store = useRootStore();
-  const controller = React.useMemo(() => new ProductController(store), [store]);
-  const isAuthed = Boolean(store.session.user);
+  const auth = React.useMemo(() => new AuthController(store), [store]);
+  const user = store.session.user;
+  const [open, setOpen] = React.useState(false);
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
 
-  React.useEffect(() => { if (isAuthed) void controller.loadProducts(); }, [controller, isAuthed]);
+  React.useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => window.removeEventListener("mousedown", handlePointerDown);
+  }, []);
 
-  const products = store.products.items as ProductItem[];
-
-  if (!isAuthed) {
-    return (
-      <section className="card hero">
-        <h2>Gestion Scrum con foco en entrega</h2>
-        <p>Planifica backlog, ejecuta sprints y controla avance en tablero Kanban desde una experiencia unificada.</p>
-        <div className="hero-actions"><NavLink to="/login" className="btn btn-primary">Entrar</NavLink><NavLink to="/signup" className="btn btn-secondary">Crear cuenta</NavLink></div>
-      </section>
-    );
+  if (!user) {
+    return null;
   }
 
   return (
-    <div className="stack-lg">
-      <section className="card">
-        <h2>Panel principal</h2>
-        <p>Flujo recomendado: Backlog refinado, Sprint planning, Ejecucion Kanban e Indicadores.</p>
-        <div className="metrics-grid">
-          <article className="metric"><h3>{products.length}</h3><p>Productos</p></article>
-          <article className="metric"><h3>{products.filter((item) => item.description).length}</h3><p>Con definicion funcional</p></article>
-          <article className="metric"><h3>{products.filter((item) => item.key).length}</h3><p>Con key de trazabilidad</p></article>
+    <header className="focused-topbar">
+      <div>
+        <p className="workspace-context">Focused workspace</p>
+      </div>
+      <div className="focused-topbar-right">
+        <ThemeToggle />
+        <div className="user-menu" ref={menuRef}>
+          <button type="button" className="user-menu-trigger" onClick={() => setOpen((current) => !current)}>
+            {user.avatarUrl ? <img src={user.avatarUrl} alt={user.name} className="user-menu-avatar" /> : null}
+            <span className="user-menu-fallback">{getUserInitials(user.name)}</span>
+          </button>
+          {open ? (
+            <div className="user-menu-popover">
+              <div className="user-menu-summary">
+                <strong>{user.name}</strong>
+                <span className="muted">{user.email}</span>
+              </div>
+              <NavLink to="/focused" className="user-menu-link" onClick={() => setOpen(false)}>
+                Focused
+              </NavLink>
+              <NavLink to="/settings" className="user-menu-link" onClick={() => setOpen(false)}>
+                Settings
+              </NavLink>
+              {canAccessAdministration(user.role) ? (
+                <NavLink to="/administration" className="user-menu-link" onClick={() => setOpen(false)}>
+                  Administración
+                </NavLink>
+              ) : null}
+              <button
+                type="button"
+                className="user-menu-link user-menu-action"
+                onClick={() => {
+                  setOpen(false);
+                  void auth.logout();
+                }}
+              >
+                Logout
+              </button>
+            </div>
+          ) : null}
         </div>
-      </section>
-      <section className="card">
-        <div className="section-head"><h3>Acceso rapido a productos</h3><NavLink to="/products" className="btn btn-secondary">Administrar productos</NavLink></div>
-        <div className="product-grid">
-          {products.map((product) => (
-            <article key={product.id} className="product-tile">
-              <p className="product-key">{product.key}</p>
-              <h4>{product.name}</h4>
-              <MarkdownPreview markdown={product.description} compact emptyLabel="Sin descripcion" />
-              <div className="tile-actions"><NavLink to={productOverviewPath(product.id)} className="btn btn-primary">Workspace</NavLink><NavLink to={productSprintsPath(product.id)} className="btn btn-secondary">Sprints</NavLink></div>
-            </article>
-          ))}
-          {products.length === 0 ? <p className="muted">Crea un producto para iniciar el flujo Scrum completo.</p> : null}
-        </div>
-      </section>
-    </div>
+      </div>
+    </header>
   );
 });
 
@@ -186,8 +294,8 @@ function Protected({ children }: { children: React.ReactNode }) {
   if (!store.session.hydrated || store.session.loading) {
     return (
       <section className="card page-state">
-        <h2>Restaurando sesion</h2>
-        <p>Verificando credenciales antes de resolver la navegacion actual.</p>
+        <h2>Restaurando sesión</h2>
+        <p>Verificando credenciales antes de resolver la navegación actual.</p>
       </section>
     );
   }
@@ -196,7 +304,60 @@ function Protected({ children }: { children: React.ReactNode }) {
     const from = `${location.pathname}${location.search}${location.hash}`;
     return <Navigate to={`/login?from=${encodeURIComponent(from)}`} replace />;
   }
+
   return <>{children}</>;
+}
+
+function ProtectedRoles({ roles, children }: { roles: Role[]; children: React.ReactNode }) {
+  const store = useRootStore();
+  const user = store.session.user;
+
+  if (!user) {
+    return <Protected>{children}</Protected>;
+  }
+
+  if (!roles.includes(user.role)) {
+    return <Navigate to={user.role === "team_member" ? "/focused" : "/administration"} replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function RootRedirect() {
+  const store = useRootStore();
+
+  if (!store.session.hydrated || store.session.loading) {
+    return (
+      <section className="card page-state">
+        <h2>Restaurando sesión</h2>
+        <p>Verificando credenciales antes de resolver la navegación actual.</p>
+      </section>
+    );
+  }
+
+  return <Navigate to={store.session.user ? "/focused" : "/login"} replace />;
+}
+
+function AdministrationShell() {
+  const store = useRootStore();
+  const user = store.session.user;
+
+  if (!user) {
+    return null;
+  }
+
+  return <AdministrationView role={user.role} />;
+}
+
+function AdministrationIndexRedirect() {
+  const store = useRootStore();
+  const user = store.session.user;
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Navigate to={administrationDefaultPath(user.role)} replace />;
 }
 
 const LoginView = observer(function LoginView() {
@@ -209,32 +370,54 @@ const LoginView = observer(function LoginView() {
   const [password, setPassword] = React.useState("");
   const returnTo = resolveReturnTo(searchParams.get("from"), location.state);
 
-  return (
-    <section className="card narrow">
-      <h2>Iniciar sesion</h2>
-      <div className="form-grid"><label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label></div>
-      <div className="row-actions"><button className="btn btn-primary" onClick={async () => { try { await auth.login({ email, password }); navigate(returnTo, { replace: true }); } catch { return; } }}>Entrar</button><button className="btn btn-secondary" onClick={() => void auth.getGitLabRedirect()}>Entrar con GitLab</button></div>
-      {store.session.error ? <p className="error-text">{store.session.error}</p> : null}
-    </section>
-  );
-});
-
-const SignupView = observer(function SignupView() {
-  const store = useRootStore();
-  const auth = React.useMemo(() => new AuthController(store), [store]);
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [searchParams] = useSearchParams();
-  const [email, setEmail] = React.useState("");
-  const [name, setName] = React.useState("");
-  const [password, setPassword] = React.useState("");
-  const returnTo = resolveReturnTo(searchParams.get("from"), location.state);
+  React.useEffect(() => {
+    if (store.session.user) {
+      navigate("/focused", { replace: true });
+    }
+  }, [navigate, store.session.user]);
 
   return (
-    <section className="card narrow">
-      <h2>Crear cuenta</h2>
-      <div className="form-grid"><label>Nombre<input value={name} onChange={(event) => setName(event.target.value)} /></label><label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label></div>
-      <button className="btn btn-primary" onClick={async () => { try { await auth.signup({ email, name, password }); navigate(returnTo, { replace: true }); } catch { return; } }}>Crear cuenta</button>
+    <section className="auth-card">
+      <div className="auth-card-header">
+        <span className="brand-badge">SP</span>
+        <div>
+          <h1>ScrumPilot</h1>
+          <p>Entra directo a tu vista Focused.</p>
+        </div>
+      </div>
+      <div className="form-grid">
+        <label>
+          Email
+          <input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" />
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+          />
+        </label>
+      </div>
+      <div className="row-actions">
+        <button
+          className="btn btn-primary"
+          onClick={async () => {
+            try {
+              await auth.login({ email, password });
+              navigate(returnTo, { replace: true });
+            } catch {
+              return;
+            }
+          }}
+        >
+          Entrar
+        </button>
+        <button className="btn btn-secondary" onClick={() => void auth.getGitLabRedirect()}>
+          Entrar con GitLab
+        </button>
+      </div>
       {store.session.error ? <p className="error-text">{store.session.error}</p> : null}
     </section>
   );
@@ -245,26 +428,30 @@ const GitlabCallbackView = observer(function GitlabCallbackView() {
   const auth = React.useMemo(() => new AuthController(store), [store]);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [message, setMessage] = React.useState("Finalizando autenticacion con GitLab...");
+  const [message, setMessage] = React.useState("Finalizando autenticación con GitLab...");
 
   React.useEffect(() => {
     const status = searchParams.get("status");
     const reason = searchParams.get("reason");
     if (status === "error") {
-      setMessage(reason ? `GitLab login fallo: ${decodeURIComponent(reason)}` : "GitLab login fallo.");
+      setMessage(reason ? `GitLab login falló: ${decodeURIComponent(reason)}` : "GitLab login falló.");
       void auth.logout();
       const timeout = window.setTimeout(() => navigate("/login", { replace: true }), 1800);
       return () => window.clearTimeout(timeout);
     }
     void (async () => {
       await auth.refreshMe();
-      if (store.session.user) navigate("/", { replace: true });
-      else { setMessage("No se pudo completar el login."); navigate("/login", { replace: true }); }
+      if (store.session.user) {
+        navigate("/focused", { replace: true });
+      } else {
+        setMessage("No se pudo completar el login.");
+        navigate("/login", { replace: true });
+      }
     })();
     return undefined;
   }, [auth, navigate, searchParams, store.session.user]);
 
-  return <section className="card narrow"><p>{message}</p></section>;
+  return <section className="auth-card"><p>{message}</p></section>;
 });
 
 function resolveReturnTo(rawFrom: string | null, state: unknown): string {
@@ -275,31 +462,11 @@ function resolveReturnTo(rawFrom: string | null, state: unknown): string {
   const statePath = fromState?.pathname
     ? `${fromState.pathname}${fromState.search ?? ""}${fromState.hash ?? ""}`
     : "";
-  const candidate = rawFrom || statePath || "/";
+  const candidate = rawFrom || statePath || "/focused";
 
   if (!candidate.startsWith("/") || candidate.startsWith("//") || candidate.startsWith("/login")) {
-    return "/";
+    return "/focused";
   }
 
   return candidate;
 }
-
-const ProfileView = observer(function ProfileView() {
-  const store = useRootStore();
-  const auth = React.useMemo(() => new AuthController(store), [store]);
-  const user = store.session.user;
-  const [name, setName] = React.useState(user?.name ?? "");
-  const [avatarUrl, setAvatarUrl] = React.useState(user?.avatarUrl ?? "");
-
-  if (!user) return null;
-
-  return (
-    <section className="card narrow">
-      <h2>Perfil</h2>
-      <p><strong>Email:</strong> {user.email}</p>
-      <p><strong>Rol:</strong> {user.role}</p>
-      <div className="form-grid"><label>Nombre<input value={name} onChange={(event) => setName(event.target.value)} /></label><label>Avatar URL<input value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} /></label></div>
-      <button className="btn btn-primary" onClick={() => void auth.updateProfile({ name, avatarUrl })}>Guardar perfil</button>
-    </section>
-  );
-});

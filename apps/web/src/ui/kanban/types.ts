@@ -5,6 +5,8 @@ export type KanbanAssignee = {
 
 export type KanbanTask = {
   id: string;
+  productId?: string | null;
+  sprintId?: string | null;
   title: string;
   description?: string | null;
   status: string;
@@ -19,6 +21,8 @@ export type KanbanTask = {
   isHistoricalUnfinished?: boolean;
   assignee?: { id: string; name: string } | null;
   story?: { id: string; title: string } | null;
+  product?: { id: string; key?: string | null; name: string } | null;
+  sprint?: { id: string; name: string } | null;
 };
 
 export type KanbanColumn = {

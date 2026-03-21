@@ -1,6 +1,8 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
+import { NavLink } from "react-router-dom";
 import { AdminController, TeamController } from "../../controllers";
+import { teamDefinitionPath } from "../../routes/backoffice-routes";
 import { useRootStore } from "../../stores/root-store";
 import { TeamUpsertionDrawer } from "../../ui/drawers/backoffice/TeamUpsertionDrawer";
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
@@ -13,6 +15,9 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
   const store = useRootStore();
   const teamsController = React.useMemo(() => new TeamController(store), [store]);
   const adminController = React.useMemo(() => new AdminController(store), [store]);
+  const role = store.session.user?.role;
+  const canCreateTeam = role === "platform_admin" || role === "product_owner";
+  const canManageTeam = role === "platform_admin" || role === "product_owner";
 
   React.useEffect(() => {
     void teamsController.loadTeams();
@@ -55,7 +60,7 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
       <section className="card">
         <div className="section-head">
           <h2>Gestion de equipos</h2>
-          <button className="btn btn-primary" onClick={openCreate}>+ Equipo</button>
+          {canCreateTeam ? <button className="btn btn-primary" onClick={openCreate}>+ Equipo</button> : null}
         </div>
         <p className="muted">Cada equipo concentra miembros, alcance de productos y actividad operacional.</p>
       </section>
@@ -67,8 +72,9 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
               <div className="section-head">
                 <h4>{team.name}</h4>
                 <div className="row-actions compact">
-                  <button className="btn btn-secondary" onClick={() => openEdit(team)}>Editar</button>
-                  <button className="btn btn-secondary" onClick={() => void removeTeam(team)}>Eliminar</button>
+                  {canManageTeam ? <button className="btn btn-secondary" onClick={() => openEdit(team)}>Editar</button> : null}
+                  {canManageTeam ? <button className="btn btn-secondary" onClick={() => void removeTeam(team)}>Eliminar</button> : null}
+                  {!canManageTeam ? <NavLink className="btn btn-secondary" to={teamDefinitionPath(team.id)}>Ver detalle</NavLink> : null}
                 </div>
               </div>
               <MarkdownPreview markdown={team.description} compact emptyLabel="Sin descripcion" />

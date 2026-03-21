@@ -255,6 +255,12 @@ export class ProductController {
     return board;
   }
 
+  async loadFocusedBoard() {
+    const board = await apiClient.get<any>("/tasks/focused-board");
+    this.store.setBoard({ sprint: null, columns: board.columns ?? [] });
+    return board;
+  }
+
   async moveBoardTask(sprintId: string, taskId: string, payload: { status: string; position: number; actualHours?: number }) {
     const task = await apiClient.patch<any>(`/sprints/${sprintId}/tasks/${taskId}/move`, payload);
     this.store.tasks.upsert(task);
@@ -327,6 +333,14 @@ export class ProductController {
     );
     this.store.setUserVelocity(points);
     return points;
+  }
+
+  async loadUserStatsByWindow(userId: string, window: "week" | "month" | "semester" | "year") {
+    try {
+      return await apiClient.get<any>(`/indicators/users/${userId}/stats?window=${window}`);
+    } catch {
+      return null;
+    }
   }
 
   async loadProductStatsByWindow(productId: string, window: "week" | "month" | "semester" | "year") {

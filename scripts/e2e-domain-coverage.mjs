@@ -200,15 +200,6 @@ async function main() {
     const memberTeamsByAdmin = await admin.request("GET", `/admin/users/${memberRecord.id}/teams`, undefined, [200]);
     assert.ok(memberTeamsByAdmin.some((entry) => entry.id === teamA.id));
 
-    const createdViewer = await admin.request("POST", "/admin/users", {
-      email: `viewer.${ts}@scrum.local`,
-      name: `Viewer ${ts}`,
-      password: "viewer1234",
-      role: "viewer",
-      teamIds: [teamA.id]
-    }, [201]);
-    assert.equal(createdViewer.role, "viewer");
-
     await admin.expectStatus("POST", "/admin/users", {
       email: `badmember.${ts}@scrum.local`,
       name: "Bad Member",
@@ -829,37 +820,34 @@ async function main() {
       action: "manual.member.record"
     }, 403);
 
-    const viewer = new Session("viewer");
-    await viewer.login(`viewer.${ts}@scrum.local`, "viewer1234");
+    const memberVisibleStories = await member.request("GET", `/products/${productA.id}/stories`, undefined, [200]);
+    assert.deepEqual(memberVisibleStories, [], "team_member should not read backlog stories directly");
 
-    const viewerVisibleStories = await viewer.request("GET", `/products/${productA.id}/stories`, undefined, [200]);
-    assert.ok(Array.isArray(viewerVisibleStories), "viewer should read visible product stories");
+    const memberHiddenStories = await member.request("GET", `/products/${productB.id}/stories`, undefined, [200]);
+    assert.deepEqual(memberHiddenStories, []);
 
-    const viewerHiddenStories = await viewer.request("GET", `/products/${productB.id}/stories`, undefined, [200]);
-    assert.deepEqual(viewerHiddenStories, []);
-
-    await viewer.expectStatus("POST", `/products/${productA.id}/stories`, {
-      title: "viewer no create",
+    await member.expectStatus("POST", `/products/${productA.id}/stories`, {
+      title: "team member no create",
       storyPoints: 1,
       status: "DRAFT"
     }, 403);
 
-    const viewerUserActivityAllowed = await viewer.request(
+    const memberUserActivityAllowed = await member.request(
       "GET",
       `/activity/users/${memberRecord.id}?page=1&pageSize=20`,
       undefined,
       [200]
     );
-    assert.ok(Array.isArray(viewerUserActivityAllowed.items));
+    assert.ok(Array.isArray(memberUserActivityAllowed.items));
 
-    const viewerUserActivityForbidden = await viewer.expectStatus(
+    const memberUserActivityForbidden = await member.expectStatus(
       "GET",
       `/activity/users/${ownerUser.id}?page=1&pageSize=20`,
       undefined,
       403
     );
-    assert.ok(viewerUserActivityForbidden);
-    await viewer.expectStatus("GET", `/sprints/${sprintB1.id}/board`, undefined, 403);
+    assert.ok(memberUserActivityForbidden);
+    await member.expectStatus("GET", `/sprints/${sprintB1.id}/board`, undefined, 403);
 
     const taskDelete = await scrum.request("DELETE", `/tasks/${taskA3.id}`, undefined, [200]);
     assert.equal(taskDelete.ok, true);

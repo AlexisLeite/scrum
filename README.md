@@ -11,7 +11,7 @@ Monorepo implementation of a Scrum sprint management application.
 ## Implemented Features
 - Local auth (`signup`, `login`, `refresh`, `logout`) and profile update endpoints.
 - GitLab OAuth start + callback with account linking by GitLab ID/email.
-- Role-based guards with agile roles (`platform_admin`, `product_owner`, `scrum_master`, `team_member`, `viewer`).
+- Role-based guards with agile roles (`platform_admin`, `product_owner`, `scrum_master`, `team_member`).
 - Teams CRUD + member assignment endpoints.
 - Products CRUD + member assignment + configurable workflow columns.
 - Product backlog stories CRUD + ranking endpoint.

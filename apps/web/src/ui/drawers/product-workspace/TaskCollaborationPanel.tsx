@@ -1,5 +1,6 @@
 ﻿import React from "react";
 import { ProductController } from "../../../controllers";
+import { canCommentOnVisibleTask, canEditTaskFields } from "../../../lib/permissions";
 import { useRootStore } from "../../../stores/root-store";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import { MarkdownPreview } from "./MarkdownPreview";
@@ -82,9 +83,11 @@ function TaskMessageThread(props: {
   onReply: (message: TaskMessageNode) => void;
   onCreateTask: (message: TaskMessageNode) => void;
   onOpenDerivedTask: (taskId: string) => void;
+  allowTaskCreation: boolean;
+  allowMessageCreation: boolean;
   depth?: number;
 }) {
-  const { nodes, onReply, onCreateTask, onOpenDerivedTask, depth = 0 } = props;
+  const { nodes, onReply, onCreateTask, onOpenDerivedTask, allowTaskCreation, allowMessageCreation, depth = 0 } = props;
 
   return (
     <div className="task-thread">
@@ -96,12 +99,16 @@ function TaskMessageThread(props: {
               <span className="muted"> · {formatDateTime(message.createdAt)}</span>
             </div>
             <div className="row-actions compact">
-              <button type="button" className="btn btn-secondary" onClick={() => onReply(message)}>
-                Responder
-              </button>
-              <button type="button" className="btn btn-secondary" onClick={() => onCreateTask(message)}>
-                Crear tarea
-              </button>
+              {allowMessageCreation ? (
+                <button type="button" className="btn btn-secondary" onClick={() => onReply(message)}>
+                  Responder
+                </button>
+              ) : null}
+              {allowTaskCreation ? (
+                <button type="button" className="btn btn-secondary" onClick={() => onCreateTask(message)}>
+                  Crear tarea
+                </button>
+              ) : null}
             </div>
           </div>
           <MarkdownPreview markdown={message.body} className="task-message-body markdown-preview-card" />
@@ -128,6 +135,8 @@ function TaskMessageThread(props: {
               onReply={onReply}
               onCreateTask={onCreateTask}
               onOpenDerivedTask={onOpenDerivedTask}
+              allowTaskCreation={allowTaskCreation}
+              allowMessageCreation={allowMessageCreation}
               depth={depth + 1}
             />
           ) : null}
@@ -146,6 +155,9 @@ export function TaskCollaborationPanel(props: {
   assignees: AssigneeOption[];
   statusOptions: string[];
   title?: string;
+  readOnly?: boolean;
+  allowTaskCreation?: boolean;
+  allowMessageCreation?: boolean;
   onChanged?: () => Promise<void> | void;
 }) {
   const {
@@ -157,9 +169,13 @@ export function TaskCollaborationPanel(props: {
     assignees,
     statusOptions,
     title = "Actividad colaborativa",
+    readOnly = false,
+    allowTaskCreation = true,
+    allowMessageCreation = true,
     onChanged
   } = props;
   const store = useRootStore();
+  const viewer = store.session.user;
   const [detail, setDetail] = React.useState<TaskDetail | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -193,6 +209,8 @@ export function TaskCollaborationPanel(props: {
 
   const openTaskDrawerFromDetail = React.useCallback(
     (taskDetail: TaskDetail) => {
+      const readOnlyForTarget = !canEditTaskFields(viewer?.role);
+      const allowMessagesForTarget = canCommentOnVisibleTask(viewer?.role, taskDetail, viewer?.id);
       store.drawers.add(
         new TaskUpsertionDrawer({
           controller,
@@ -201,6 +219,10 @@ export function TaskCollaborationPanel(props: {
           sprints,
           assignees,
           statusOptions,
+          readOnly: readOnlyForTarget,
+          definitionReadOnly: readOnlyForTarget,
+          allowTaskCreation,
+          allowMessageCreation: allowMessagesForTarget,
           task: {
             id: taskDetail.id,
             title: taskDetail.title,
@@ -218,7 +240,20 @@ export function TaskCollaborationPanel(props: {
         })
       );
     },
-    [assignees, controller, productId, refresh, sprints, statusOptions, stories, store.drawers]
+    [
+      allowMessageCreation,
+      allowTaskCreation,
+      assignees,
+      controller,
+      productId,
+      refresh,
+      sprints,
+      statusOptions,
+      stories,
+      store.drawers,
+      viewer?.id,
+      viewer?.role
+    ]
   );
 
   const openTaskDrawerById = React.useCallback(
@@ -247,6 +282,10 @@ export function TaskCollaborationPanel(props: {
         fixedSprintId: detail.sprint?.id ?? undefined,
         defaultParentTaskId: detail.id,
         defaultParentTaskLabel: detail.title,
+        readOnly,
+        definitionReadOnly: readOnly,
+        allowTaskCreation,
+        allowMessageCreation,
         onDone: refresh
       })
     );
@@ -272,13 +311,17 @@ export function TaskCollaborationPanel(props: {
         defaultParentTaskLabel: detail.title,
         defaultSourceMessageId: message.id,
         defaultSourceMessagePreview: message.body,
+        readOnly,
+        definitionReadOnly: readOnly,
+        allowTaskCreation,
+        allowMessageCreation,
         onDone: refresh
       })
     );
   };
 
   const submitMessage = async () => {
-    if (!messageBody.trim()) {
+    if (!allowMessageCreation || !messageBody.trim()) {
       return;
     }
     setSubmittingMessage(true);
@@ -305,9 +348,11 @@ export function TaskCollaborationPanel(props: {
           <h4>{title}</h4>
           <p className="muted">Conversacion, replies y tareas hijas sin perder el contexto del sprint.</p>
         </div>
-        <button type="button" className="btn btn-secondary" onClick={openNewChildDrawer} disabled={!detail?.story?.id}>
-          Crear subtarea
-        </button>
+        {allowTaskCreation ? (
+          <button type="button" className="btn btn-secondary" onClick={openNewChildDrawer} disabled={!detail?.story?.id}>
+            Crear subtarea
+          </button>
+        ) : null}
       </div>
       {detail?.sourceMessage ? (
         <div className="definition-note">
@@ -378,17 +423,21 @@ export function TaskCollaborationPanel(props: {
           </div>
         </div>
       ) : null}
-      <RichDescriptionField label="Nuevo mensaje" value={messageBody} onChange={setMessageBody} rows={7} />
-      <div className="row-actions compact">
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => void submitMessage()}
-          disabled={submittingMessage || !messageBody.trim()}
-        >
-          Publicar mensaje
-        </button>
-      </div>
+      {allowMessageCreation ? (
+        <>
+          <RichDescriptionField label="Nuevo mensaje" value={messageBody} onChange={setMessageBody} rows={7} />
+          <div className="row-actions compact">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void submitMessage()}
+              disabled={submittingMessage || !messageBody.trim()}
+            >
+              Publicar mensaje
+            </button>
+          </div>
+        </>
+      ) : null}
       {!loading && detail && detail.conversation.length === 0 ? <p className="muted">Aun no hay mensajes.</p> : null}
       {detail ? (
         <TaskMessageThread
@@ -396,6 +445,8 @@ export function TaskCollaborationPanel(props: {
           onReply={(message) => setReplyTarget(message)}
           onCreateTask={openDerivedTaskDrawer}
           onOpenDerivedTask={(derivedTaskId) => void openTaskDrawerById(derivedTaskId)}
+          allowTaskCreation={allowTaskCreation}
+          allowMessageCreation={allowMessageCreation}
         />
       ) : null}
       {error ? <p className="error-text">{error}</p> : null}

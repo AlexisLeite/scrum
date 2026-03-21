@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.app.json && vite build",
+    "vercel-build": "pnpm build",
     "preview": "vite preview",
     "lint": "echo web lint",
     "test": "echo web test",
