@@ -717,7 +717,7 @@ export function KanbanBoard({
     const movedTask = findTask(snapshot, taskId) ?? activeDrag.task;
 
     if (targetColumn === "Done" && movedTask.status !== "Done" && movedTask.actualHours == null) {
-      setLocalColumns(snapshot);
+      setLocalColumns(nextColumns);
       setCompletionRequest({
         mode: "move",
         task: movedTask,
@@ -840,6 +840,8 @@ export function KanbanBoard({
           }
           setCompletionRequest(null);
         }}
+        dismissible={completionRequest?.mode !== "move"}
+        showCancel={completionRequest?.mode !== "move"}
         onConfirm={(hours) => {
           const request = completionRequest;
           setCompletionRequest(null);

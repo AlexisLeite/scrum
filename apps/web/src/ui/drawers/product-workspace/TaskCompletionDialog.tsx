@@ -7,12 +7,22 @@ type TaskCompletionDialogProps = {
   initialHours?: string;
   onConfirm: (hours: number) => void;
   onCancel: () => void;
+  dismissible?: boolean;
+  showCancel?: boolean;
 };
 
 const QUICK_HOURS = [4, 8, 16, 24] as const;
 
 export function TaskCompletionDialog(props: TaskCompletionDialogProps) {
-  const { open, taskTitle, initialHours = "", onConfirm, onCancel } = props;
+  const {
+    open,
+    taskTitle,
+    initialHours = "",
+    onConfirm,
+    onCancel,
+    dismissible = true,
+    showCancel = true
+  } = props;
   const [hours, setHours] = React.useState(initialHours);
 
   React.useEffect(() => {
@@ -29,7 +39,7 @@ export function TaskCompletionDialog(props: TaskCompletionDialogProps) {
   const canConfirm = hours.trim() !== "" && !Number.isNaN(parsed) && parsed >= 0;
 
   return (
-    <div className="task-completion-dialog-backdrop" onMouseDown={onCancel}>
+    <div className="task-completion-dialog-backdrop" onMouseDown={dismissible ? onCancel : undefined}>
       <div
         className="task-completion-dialog"
         role="dialog"
@@ -48,7 +58,12 @@ export function TaskCompletionDialog(props: TaskCompletionDialogProps) {
         </p>
         <div className="task-completion-dialog-presets" role="group" aria-label="Horas rapidas">
           {QUICK_HOURS.map((value) => (
-            <button key={value} type="button" className="btn btn-secondary" onClick={() => setHours(String(value))}>
+            <button
+              key={value}
+              type="button"
+              className={`task-option-button task-option-button-compact ${hours === String(value) ? "is-selected" : ""}`}
+              onClick={() => setHours(String(value))}
+            >
               {value}h
             </button>
           ))}
@@ -69,9 +84,11 @@ export function TaskCompletionDialog(props: TaskCompletionDialogProps) {
           <button type="button" className="btn btn-primary" disabled={!canConfirm} onClick={() => onConfirm(parsed)}>
             Confirmar cierre
           </button>
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>
-            Cancelar
-          </button>
+          {showCancel ? (
+            <button type="button" className="btn btn-secondary" onClick={onCancel}>
+              Cancelar
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
