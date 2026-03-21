@@ -13,6 +13,7 @@ type ProductItem = {
   key: string;
   description: string | null;
 };
+type TeamOption = { id: string; name: string; description: string | null };
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
@@ -77,6 +78,9 @@ export function ProductUpsertionForm(props: {
   const [error, setError] = React.useState("");
   const [activity, setActivity] = React.useState<ActivityItem[]>([]);
   const [activityError, setActivityError] = React.useState("");
+  const [teams, setTeams] = React.useState<TeamOption[]>([]);
+  const [linkedTeamIds, setLinkedTeamIds] = React.useState<string[]>([]);
+  const [teamsError, setTeamsError] = React.useState("");
 
   React.useEffect(() => {
     if (!product) return;
@@ -92,6 +96,27 @@ export function ProductUpsertionForm(props: {
       } catch (loadError) {
         if (!active) return;
         setActivityError(errorMessage(loadError));
+      }
+    })();
+    return () => { active = false; };
+  }, [product]);
+
+  React.useEffect(() => {
+    if (!product) return;
+    let active = true;
+    void (async () => {
+      try {
+        const [allTeams, productTeams] = await Promise.all([
+          apiClient.get<TeamOption[]>("/teams"),
+          apiClient.get<TeamOption[]>(`/products/${product.id}/teams`)
+        ]);
+        if (!active) return;
+        setTeams(allTeams);
+        setLinkedTeamIds(productTeams.map((team) => team.id));
+        setTeamsError("");
+      } catch (loadError) {
+        if (!active) return;
+        setTeamsError(errorMessage(loadError));
       }
     })();
     return () => { active = false; };
@@ -127,6 +152,27 @@ export function ProductUpsertionForm(props: {
     }
   }, [close, controller, description, isEditing, key, name, onSaved, product, saving]);
 
+  const toggleLinkedTeam = React.useCallback((teamId: string) => {
+    setLinkedTeamIds((prev) => prev.includes(teamId)
+      ? prev.filter((id) => id !== teamId)
+      : [...prev, teamId]
+    );
+  }, []);
+
+  const saveTeams = React.useCallback(async () => {
+    if (!product || saving) return;
+    setSaving(true);
+    setTeamsError("");
+    try {
+      await apiClient.patch(`/products/${product.id}/teams`, { teamIds: linkedTeamIds });
+      if (onSaved) await onSaved();
+    } catch (saveError) {
+      setTeamsError(errorMessage(saveError));
+    } finally {
+      setSaving(false);
+    }
+  }, [linkedTeamIds, onSaved, product, saving]);
+
   return (
     <div className="form-grid">
       <label>
@@ -142,6 +188,36 @@ export function ProductUpsertionForm(props: {
         />
       </label>
       <RichDescriptionField label="Descripcion" value={description} onChange={setDescription} rows={4} />
+      {isEditing && product ? (
+        <section className="card">
+          <div className="section-head">
+            <div>
+              <h4>Equipos vinculados</h4>
+              <p className="muted">Este vinculo define que equipos pueden operar el producto y ver sus tareas en Focused.</p>
+            </div>
+          </div>
+          <div className="metrics-grid">
+            {teams.map((team) => (
+              <label key={team.id} className="check-option">
+                <input
+                  type="checkbox"
+                  checked={linkedTeamIds.includes(team.id)}
+                  onChange={() => toggleLinkedTeam(team.id)}
+                  disabled={saving}
+                />
+                {team.name}
+              </label>
+            ))}
+            {teams.length === 0 ? <p className="muted">No hay equipos disponibles.</p> : null}
+          </div>
+          <div className="row-actions">
+            <button className="btn btn-secondary" disabled={saving} onClick={() => void saveTeams()}>
+              Guardar equipos
+            </button>
+          </div>
+          {teamsError ? <p className="error-text">{teamsError}</p> : null}
+        </section>
+      ) : null}
       {isEditing && product ? (
         <section className="card">
           <h4>Historial de actividad</h4>

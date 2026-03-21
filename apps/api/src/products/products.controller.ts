@@ -14,6 +14,7 @@ import { Roles } from "../common/roles.decorator";
 import {
   AddProductMemberDto,
   CreateProductDto,
+  SetProductTeamsDto,
   UpdateProductDto,
   UpsertWorkflowColumnDto
 } from "./products.dto";
@@ -51,6 +52,17 @@ export class ProductsController {
   @Roles("platform_admin", "product_owner")
   addMember(@CurrentUser() user: AuthUser, @Param("id") productId: string, @Body() dto: AddProductMemberDto) {
     return this.productsService.addMember(productId, dto.userId, dto.role, user);
+  }
+
+  @Get(":id/teams")
+  listTeams(@CurrentUser() user: AuthUser, @Param("id") productId: string) {
+    return this.productsService.listTeams(productId, user);
+  }
+
+  @Patch(":id/teams")
+  @Roles("platform_admin", "product_owner")
+  setTeams(@CurrentUser() user: AuthUser, @Param("id") productId: string, @Body() dto: SetProductTeamsDto) {
+    return this.productsService.setTeams(productId, dto.teamIds, user);
   }
 
   @Get(":id/workflow")

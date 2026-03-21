@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Role } from "@prisma/client";
 import { AuthUser } from "../common/current-user.decorator";
 import { TeamScopeService } from "../common/team-scope.service";
@@ -79,6 +79,60 @@ export class ProductsService {
     });
   }
 
+  async listTeams(productId: string, user?: AuthUser) {
+    await this.getProductOrThrow(productId);
+    if (user) {
+      await this.teamScopeService.assertProductReadable(user, productId);
+    }
+
+    const links = await this.prisma.productTeam.findMany({
+      where: { productId },
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true,
+            description: true
+          }
+        }
+      },
+      orderBy: {
+        team: { name: "asc" }
+      }
+    });
+    return links.map((entry) => entry.team);
+  }
+
+  async setTeams(productId: string, teamIds: string[], actor: AuthUser) {
+    await this.teamScopeService.assertCanManageProduct(actor, productId);
+    await this.getProductOrThrow(productId);
+
+    const uniqueTeamIds = Array.from(new Set(teamIds.filter((teamId) => teamId && teamId.trim().length > 0)));
+    if (uniqueTeamIds.length > 0) {
+      const found = await this.prisma.team.findMany({
+        where: { id: { in: uniqueTeamIds } },
+        select: { id: true }
+      });
+      if (found.length !== uniqueTeamIds.length) {
+        const foundIds = new Set(found.map((team) => team.id));
+        const missing = uniqueTeamIds.filter((teamId) => !foundIds.has(teamId));
+        throw new BadRequestException(`Invalid teamIds: ${missing.join(", ")}`);
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.productTeam.deleteMany({ where: { productId } });
+      if (uniqueTeamIds.length > 0) {
+        await tx.productTeam.createMany({
+          data: uniqueTeamIds.map((teamId) => ({ productId, teamId })),
+          skipDuplicates: true
+        });
+      }
+    });
+
+    return this.listTeams(productId);
+  }
+
   async getWorkflow(productId: string, user: AuthUser) {
     await this.teamScopeService.assertProductReadable(user, productId);
     return this.prisma.workflowColumn.findMany({
@@ -110,5 +164,13 @@ export class ProductsService {
         isBlocked: dto.isBlocked
       }
     });
+  }
+
+  private async getProductOrThrow(productId: string) {
+    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    if (!product) {
+      throw new NotFoundException("Product not found");
+    }
+    return product;
   }
 }

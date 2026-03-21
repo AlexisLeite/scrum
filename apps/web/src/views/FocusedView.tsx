@@ -114,6 +114,15 @@ export const FocusedView = observer(function FocusedView() {
   const canAssignOthers = canAssignFocusedTaskToOthers(user?.role);
   const canEditTasks = canEditTaskFields(user?.role);
   const editLabel = canEditTasks ? "Editar" : "Abrir";
+  const focusedSummary = user?.role === "team_member"
+    ? "Ves solo tareas propias o sin asignar. Las tarjetas sin responsable pueden ser tomadas desde aqui sin salir del flujo."
+    : "Ves todas las tareas pendientes visibles en kanban. Desde aqui puedes abrirlas y operar segun los permisos de tu rol.";
+  const unassignedSummary = user?.role === "team_member"
+    ? "Tarjetas que puedes tomar desde Focused."
+    : "Tarjetas visibles que aun no tienen responsable.";
+  const kanbanSummary = user?.role === "team_member"
+    ? "Abre cada tarea en drawer, conversa desde ahi y opera solo lo que tu rol permite."
+    : "Abre cada tarea en drawer, revisa toda la carga visible y opera segun tu rol.";
   const statusOptions = board.columns.length > 0
     ? board.columns.map((column) => column.name)
     : ["Todo", "In Progress", "Blocked", "Done"];
@@ -216,9 +225,7 @@ export const FocusedView = observer(function FocusedView() {
           <p className="workspace-context">Focused</p>
           <h2>Trabajo en curso</h2>
         </div>
-        <p className="muted">
-          Ves solo tareas propias o sin asignar. Las tarjetas sin responsable pueden ser tomadas desde aqui sin salir del flujo.
-        </p>
+        <p className="muted">{focusedSummary}</p>
         {error ? <p className="error-text">{error}</p> : null}
       </section>
 
@@ -236,7 +243,7 @@ export const FocusedView = observer(function FocusedView() {
         <article className="metric metric-kpi">
           <span className="metric-kpi-label">Sin responsable</span>
           <strong>{unassignedTaskCount}</strong>
-          <small>Tarjetas que pueden ser tomadas desde Focused.</small>
+          <small>{unassignedSummary}</small>
         </article>
         <article className="metric metric-kpi">
           <span className="metric-kpi-label">Bloqueadas</span>
@@ -249,7 +256,7 @@ export const FocusedView = observer(function FocusedView() {
         <div className="section-head">
           <div>
             <h3>Kanban pendiente</h3>
-            <p className="muted">Abre cada tarea en drawer, conversa desde ahi y opera solo lo que tu rol permite.</p>
+            <p className="muted">{kanbanSummary}</p>
           </div>
           <div className="row-actions compact">
             <span className="pill">{board.columns.length} columnas</span>

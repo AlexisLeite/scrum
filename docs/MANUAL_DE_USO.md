@@ -1,722 +1,430 @@
 # Manual de uso de ScrumPilot
 
-## 1. Objetivo de la aplicación
+## 1. Proposito
 
-ScrumPilot es una aplicación para operar productos Scrum desde una única interfaz:
+ScrumPilot concentra trabajo operativo y administracion de productos Scrum en una misma aplicacion, pero ahora separa mucho mejor ambos contextos:
 
-- catálogo de productos
-- gestión de equipos
-- backlog del producto
-- planificación de sprints
-- ejecución Kanban
-- métricas
-- historial de actividad
-- conversación y trazabilidad sobre tareas
+- `Focused` para trabajo diario sobre tareas pendientes
+- `Settings` para datos personales y metricas propias
+- `Administracion` para catalogos y gestion de usuarios segun rol
+- `Workspace de producto` para backlog, sprints, board, metricas y definiciones
 
-El flujo recomendado de trabajo es:
-
-1. Crear o seleccionar un producto.
-2. Refinar el backlog.
-3. Crear un sprint y asociarlo a un equipo.
-4. Mover tareas al sprint.
-5. Ejecutar el sprint en Kanban.
-6. Registrar conversación y derivar subtareas.
-7. Revisar métricas y actividad.
+La fuente de verdad de permisos sigue siendo el backend. Si una vista permite navegar hasta cierto punto, la API valida igual cada operacion sensible.
 
 ---
 
-## 2. Inicio de sesión y sesión de usuario
+## 2. Acceso y shell principal
 
-### Acceso
+### Pantalla de login
 
-La aplicación permite:
+La ruta `/login` usa una shell minima. No muestra catalogos, tabs ni encabezado autenticado.
 
-- login con email y password
-- registro manual
-- login con GitLab si está configurado
+La pantalla contiene:
 
-### Restauración de sesión
+- formulario de `Email` y `Password`
+- boton `Entrar`
+- boton `Entrar con GitLab`
 
-Si ya existe sesión válida, al abrir o refrescar la aplicación se intenta restaurarla automáticamente.
+La ruta `/signup` ya no expone una pantalla separada y redirige a `/login`.
 
-### Perfil
+### Restauracion de sesion
 
-Todo usuario autenticado puede entrar a `Perfil` y editar:
+Al abrir la app, se intenta restaurar la sesion actual antes de resolver la navegacion.
 
-- nombre
-- avatar URL
+- si hay sesion valida, `/` redirige a `/focused`
+- si no hay sesion, `/` redirige a `/login`
+
+### Encabezado autenticado
+
+Fuera del login, la app muestra una barra superior minima con:
+
+- etiqueta discreta `Focused workspace`
+- toggle de tema
+- menu de usuario con avatar o iniciales
+
+El menu de usuario ofrece:
+
+- `Focused`
+- `Settings`
+- `Administracion` si el rol tiene acceso
+- `Logout`
 
 ---
 
-## 3. Roles de usuario
+## 3. Roles y reglas base
 
-Los roles disponibles en la aplicación son:
+### Roles vigentes
+
+Los roles disponibles hoy son:
 
 - `platform_admin`
 - `product_owner`
 - `scrum_master`
 - `team_member`
 
-### Regla especial de alta inicial
+El rol `viewer` fue eliminado del modelo, de la base y de la interfaz.
 
-- El primer usuario registrado en una base vacía pasa a ser `platform_admin`.
-- Los siguientes registros públicos quedan como `team_member`.
+### Reglas especiales
 
-### Regla especial para `team_member`
+- El primer usuario creado en una base vacia pasa a ser `platform_admin`.
+- Un `team_member` debe tener al menos un equipo asignado.
+- La ruta legacy `/profile` redirige a `/settings`.
 
-Un usuario con rol `team_member` debe tener al menos un equipo asignado. Esa validación se aplica al crearlo y también al cambiarle el rol desde administración.
+### Alcance
 
-### Alcance por equipos
+- `platform_admin` tiene alcance global.
+- `product_owner` trabaja sobre productos propios o donde figura como miembro con rol `product_owner`.
+- `scrum_master` y `team_member` trabajan sobre productos vinculados a sus equipos.
 
-El rol `team_member` trabaja con alcance restringido por equipos.
+Para `team_member`, el backend ademas restringe lectura y colaboracion a tareas visibles de kanban:
 
-Eso significa:
-
-- sólo deben operar sobre equipos a los que pertenecen
-- la actividad por usuario se restringe a usuarios con equipos en común
-- historias, tareas, sprints e indicadores se filtran por productos accesibles desde esos equipos
-
-### Nota importante sobre permisos
-
-La fuente de verdad de permisos es el backend. Algunas pantallas pueden ser navegables desde frontend, pero cada operación relevante se valida en API.
+- la tarea debe pertenecer a un sprint
+- la tarea debe estar asignada al usuario o no tener asignado
 
 ---
 
-## 4. Matriz de permisos por rol
+## 4. Mapa de navegacion
 
-### 4.1 Resumen ejecutivo
+### `Focused`
 
-| Area / accion | platform_admin | product_owner | scrum_master | team_member |
-|---|---|---|---|---|
-| Ver productos | Si | Si | Si | Solo propios |
-| Crear / editar / eliminar productos | Si | Si | No | No |
-| Ver equipos | Si | Si | Si | Solo propios |
-| Crear / editar equipos | Si | Si | Si | No |
-| Eliminar equipos | Si | Si | Si | No |
-| Asignar miembros a equipos | Si | Si | Si | No |
-| Vincular productos a equipos | Si | Si | Si | No |
-| Ver backlog / historias | Si | Si | Si | Solo kanban |
-| Crear / editar historias | Si | No | Si | No |
-| Eliminar historias | Si | No | Si | No |
-| Rankear historias | Si | Si | Si | No |
-| Ver tareas | Si | Si | Si | Solo kanban |
-| Crear / editar tareas | Si | No | Si | No |
-| Eliminar tareas | Si | No | Si | No |
-| Cambiar estado de tareas | Si | No | Si | Solo propias y en kanban |
-| Asignar tarea / moverla de sprint administrativamente | Si | No | Si | No |
-| Escribir mensajes en tareas | Si | Si | Si | Solo propias y en kanban |
-| Crear tarea desde mensaje | Si | No | Si | No |
-| Crear / editar / iniciar / completar sprint | Si | No | Si | No |
-| Ver board del sprint | Si | Si | Si | Solo propias y en kanban |
-| Crear tareas desde board del sprint | Si | No | Si | No |
-| Reordenar / mover tarjetas en board | Si | No | Si | Solo propias |
-| Ver metricas | Si | Si | Si | Solo propias |
-| Ver actividad por usuario desde Admin | Si | No | Si | No |
+Es la vista principal despues del login. Todas las sesiones autenticadas aterrizan aqui.
 
-### 4.2 Que puede hacer cada rol
+### `Settings`
 
-#### `platform_admin`
-
-Es el rol de control total. Puede operar toda la administracion, productos, equipos, backlog, tareas, sprints, metricas y usuarios.
-
-#### `product_owner`
-
-Gestiona sus productos y equipos. Puede ver backlog y comentar, rankear historias, consultar metricas y administrar el contexto de producto, pero no modifica historias, tareas ni sprints.
-
-#### `scrum_master`
-
-Es el rol operativo con mas capacidad dentro de los equipos y productos asignados. Puede crear equipos, vincular productos, operar backlog, crear historias y tareas, asignarlas, administrar sprints y consultar metricas. No puede crear usuarios ni productos globales.
-
-#### `team_member`
-
-No tiene acceso a administracion. Trabaja en la vista `Focused`, puede tomar tareas no asignadas, mover solo sus tarjetas en kanban, cambiar estado de tareas propias, abrir tareas en modo lectura y escribir mensajes en el contexto permitido.
-
----
-
-## 5. Secciones globales de la aplicación
-
-## 5.1 Inicio
-
-La pantalla `Inicio` cumple dos funciones:
-
-- si no hay sesión, muestra entrada y registro
-- si hay sesión, muestra un panel principal y accesos rápidos a productos
-
-Contenido principal:
-
-- KPIs básicos del catálogo
-- acceso rápido a `Productos`
-- acceso directo al workspace de cada producto
-
-Uso recomendado:
-
-- entrar aquí para retomar el trabajo diario
-- saltar al workspace del producto activo
-
-## 5.2 Productos
-
-Ruta principal: `Productos`
-
-Función:
-
-- administrar el catálogo de productos
-- abrir el workspace de cada producto
-
-Acciones disponibles desde el catálogo:
-
-- `+ Producto`: abre drawer de creación
-- `Editar`: abre drawer de edición
-- `Abrir workspace`: entra al workspace del producto
-- `Eliminar`: borra el producto
-
-### Importante sobre eliminación
-
-Eliminar un producto dispara borrado en cascada de sus elementos relacionados, incluyendo:
-
-- historias
-- tareas
-- sprints
-
-Uso recomendado:
-
-1. crear el producto
-2. completar key y descripción
-3. abrir workspace
-4. gestionar backlog y sprints desde allí
-
-## 5.3 Equipos
-
-Ruta principal: `Equipos`
-
-Función:
-
-- mantener la estructura operativa de equipos
-- gestionar miembros
-- asociar productos al equipo
-
-Acciones disponibles:
-
-- `+ Equipo`: crea un equipo
-- `Editar`: abre drawer de edición integral
-- `Eliminar`: elimina el equipo si el rol lo permite
-
-Dentro de la edición de equipo se puede gestionar:
-
-- nombre
-- descripción
-- miembros del equipo
-- productos vinculados
-- historial de actividad del equipo
-
-Uso recomendado:
-
-1. crear el equipo
-2. agregar miembros
-3. asociar los productos que ese equipo puede trabajar
-
-## 5.4 Perfil
-
-Ruta principal: `Perfil`
-
-Función:
-
-- permitir que cada usuario actualice su identidad visual
-
-Campos editables:
+Reemplaza al antiguo `Perfil`. Centraliza:
 
 - nombre
 - avatar URL
+- metricas personales
 
-## 5.5 Admin
+### `Administracion`
 
-Ruta principal: `Admin`
+Se accede desde el menu de usuario. Solo esta disponible para:
 
-Visible en la navegación sólo para `platform_admin`.
+- `platform_admin`
+- `product_owner`
+- `scrum_master`
 
-Función:
+### `Workspace de producto`
 
-- administración de usuarios
-- asignación de roles
-- asignación de equipos a usuarios
-- consulta de actividad por usuario
+El shell de producto sigue existiendo, pero ahora se comporta asi:
 
-Operaciones disponibles:
-
-- cambiar rol de un usuario
-- abrir editor de equipos del usuario
-- crear usuario nuevo
-- consultar actividad y estadísticas de un usuario
-
-### Regla crítica
-
-Si se crea un usuario con rol `team_member`, debe salir de administración con al menos un equipo asignado.
+- `platform_admin`, `product_owner` y `scrum_master` usan tabs de `Resumen`, `Backlog`, `Sprints` y `Metricas`
+- `team_member` no entra al workspace general; si intenta abrir `/products/:productId` sin una tarea concreta, es redirigido a `/focused`
+- `team_member` si puede abrir definiciones de tarea puntuales por URL o desde el drawer, siempre dentro de las restricciones de kanban visible
 
 ---
 
-## 6. Workspace de producto
+## 5. Matriz de capacidades reales
 
-Al abrir un producto se ingresa a su workspace. La navegación principal del workspace está organizada en:
+La siguiente matriz describe lo que hoy se puede hacer desde la aplicacion y lo que permite la API actual.
+
+| Area / accion | platform_admin | product_owner | scrum_master | team_member |
+|---|---|---|---|---|
+| Acceder a `Focused` | Si | Si | Si | Si |
+| Acceder a `Settings` | Si | Si | Si | Si |
+| Acceder a `Administracion` | Si | Si | Si | No |
+| Ver tab `Productos` en `Administracion` | Si | Si | Si | No |
+| Ver tab `Equipos` en `Administracion` | Si | Si | Si | No |
+| Ver tab `Usuarios` en `Administracion` | Si | No | Si | No |
+| Crear usuarios | Si | No | No | No |
+| Cambiar rol de usuarios | Si | No | No | No |
+| Asignar equipos a usuarios | Si | No | No | No |
+| Ver catalogo de productos | Si | Si | Si | Sin catalogo; solo contexto de tareas visibles |
+| Crear / editar / eliminar productos | Si | Si | No | No |
+| Abrir workspace de producto | Si | Si | Si | No, salvo definicion de tarea puntual |
+| Ver equipos | Si | Si | Si | Sin vista administrativa de equipos |
+| Crear / editar / eliminar equipos | Si | Si | No | No |
+| Gestionar miembros de equipo | Si | Si | No | No |
+| Vincular productos a equipos | Si | Si | No | No |
+| Ver backlog / historias | Si | Si | Si | No |
+| Crear / editar / eliminar historias | Si | No | Si | No |
+| Rankear historias | Si | Si | Si | No |
+| Ver tareas por historia | Si | Si | Si | No |
+| Crear / editar / eliminar tareas | Si | No | Si | No |
+| Ver lista de sprints | Si | Si | Si | No |
+| Crear / editar / iniciar / completar sprint | Si | No | Si | No |
+| Ver board de sprint | Si | Si | Si | No como vista dedicada |
+| Ver board de `Focused` | Si | Si | Si | Si |
+| Scope de `Focused` | Todas las tareas visibles | Todas las tareas visibles | Todas las tareas visibles | Solo propias o sin asignar |
+| Cambiar estado de tarea | Si | No | Si | Solo propia y en sprint activo |
+| Reordenar / mover tarjetas | Si | No | Si | Solo propias y en sprint activo |
+| Tomar tarea sin asignar | Si | No | Si | Si, solo para si mismo |
+| Reasignar tarea a otra persona | Si | No | Si | No |
+| Mover tarea entre sprints | Si | No | Si | No |
+| Escribir mensajes en tareas | Si | Si | Si | Solo en tareas visibles de kanban |
+| Crear tarea desde mensaje | Si | No | Si | No |
+| Abrir definicion de tarea | Si, editable | Si, readonly | Si, editable | Si, readonly y solo si la tarea es visible |
+| Ver metricas de producto / equipo | Si | Si | Si | No |
+| Ver metricas propias en `Settings` | Si | Si | Si | Si |
+| Consultar actividad por usuario desde `Usuarios` | Si | No | Si | No |
+
+---
+
+## 6. `Focused` en detalle
+
+`Focused` consume el board de tareas pendientes del kanban activo y aplica el filtro segun el rol del usuario actual.
+
+### Que muestra
+
+Siempre aparecen tareas que cumplan todo esto:
+
+- no estan en `Done`
+- pertenecen a un sprint `ACTIVE`
+- pertenecen a un producto accesible para ese usuario
+
+Ademas:
+
+- `platform_admin`, `product_owner` y `scrum_master` ven todas las tareas visibles que cumplan esas reglas
+- `team_member` ve solo tareas propias o sin asignar
+
+La vista incluye:
+
+- hero principal con resumen del contexto
+- tarjetas KPI con conteos de trabajo visible
+- kanban pendiente
+
+El board se refresca automaticamente cada 15 segundos.
+
+### Comportamiento por rol
+
+#### `platform_admin`
+
+- ve todas las tareas visibles del board `Focused`
+- puede abrir el drawer en modo editable
+- puede cambiar estado
+- puede mover tarjetas
+- puede asignar o reasignar a cualquier persona disponible
+- puede comentar y crear tareas derivadas desde mensajes
+
+#### `product_owner`
+
+- ve todas las tareas visibles del board `Focused`
+- puede abrir la tarea, pero en modo readonly
+- puede usar la conversacion de la tarea
+- no puede cambiar estado, asignacion ni campos de la tarea
+- no puede crear tareas derivadas desde mensajes
+
+#### `scrum_master`
+
+- ve todas las tareas visibles del board `Focused`
+- puede abrir el drawer en modo editable
+- puede asignar tareas a otras personas
+- puede cambiar estado y mover tarjetas
+- puede crear tareas hijas y tareas derivadas desde mensajes
+
+#### `team_member`
+
+- ve solo tareas propias o sin asignar
+- puede tomar una tarea sin asignar para si mismo
+- puede cambiar estado solo en tareas propias y dentro de un sprint activo
+- puede mover solo sus tarjetas en kanban
+- no puede reasignar a otra persona
+- no puede mover tareas entre sprints
+- abre la tarea en modo readonly, pero mantiene conversacion si la tarea es visible
+
+---
+
+## 7. `Administracion` en detalle
+
+La vista `Administracion` separa claramente trabajo operativo de gestion administrativa.
+
+### Tabs visibles por rol
+
+- `platform_admin`: `Productos`, `Equipos`, `Usuarios`
+- `product_owner`: `Productos`, `Equipos`
+- `scrum_master`: `Productos`, `Equipos`, `Usuarios`
+
+### `Productos`
+
+La tab muestra el catalogo y permite abrir el workspace de cada producto.
+
+- `platform_admin` y `product_owner` ven botones `+ Producto`, `Editar` y `Eliminar`
+- `scrum_master` ve la lista y el acceso `Abrir workspace`, pero no tiene botones de mutacion
+- al editar un producto, `platform_admin` y `product_owner` tambien pueden guardar los equipos vinculados a ese producto
+
+### `Equipos`
+
+La tab muestra cards con miembros y acciones sobre cada equipo.
+
+- `platform_admin` y `product_owner` pueden crear, editar y eliminar
+- `scrum_master` puede consultar y abrir `Ver detalle`, pero no muta equipos desde esta vista
+
+### `Usuarios`
+
+La tab se llama `Usuarios` y reemplaza al antiguo concepto ambiguo de `Admin`.
+
+- `platform_admin` puede crear usuarios, cambiar roles y editar equipos
+- `scrum_master` puede consultar usuarios y abrir actividad, pero no crear ni modificar usuarios
+
+---
+
+## 8. Workspace de producto y definiciones
+
+### Workspace general
+
+Para roles operativos altos (`platform_admin`, `product_owner`, `scrum_master`), el workspace conserva:
 
 - `Resumen`
 - `Backlog`
 - `Sprints`
 - `Metricas`
 
-Además existen páginas de definición completas para:
+### Definiciones
 
-- historia
-- sprint
-- tarea
+Las definiciones completas quedaron separadas del drawer para poder trabajar a pantalla completa:
 
-## 6.1 Resumen
+- definicion de producto
+- definicion de historia
+- definicion de sprint
+- definicion de tarea
 
-Función:
+### Acceso por rol
 
-- vista ejecutiva del producto
+- definicion de producto: `platform_admin`, `product_owner`
+- definicion de historia: `platform_admin`, `scrum_master`
+- definicion de sprint: `platform_admin`, `scrum_master`
+- definicion de tarea: todos los roles autenticados, con restricciones por rol
 
-Muestra:
+En la definicion de producto tambien queda disponible la gestion de equipos vinculados.
 
-- nombre y descripción del producto
-- cantidad de historias
-- cuántas están `READY`
-- cuántas están `IN_SPRINT`
-- sprint activo
+### Definicion de tarea
 
-Uso recomendado:
+La definicion de tarea es el punto de mayor detalle y trazabilidad.
 
-- revisar salud general del producto antes de entrar al detalle
+Incluye:
 
-## 6.2 Backlog
+- formulario principal de la tarea
+- contexto de historia, sprint, asignado y ultima actualizacion
+- referencia a mensaje origen
+- referencia a tarea padre
+- lista de hijos
+- conversacion con replies
+- apertura de tareas relacionadas y derivadas
 
-Función:
+El modo readonly se activa cuando:
 
-- gestionar historias de usuario y su prioridad
+- el rol no puede editar campos de tarea
+- la URL incluye `?mode=readonly`
 
-Qué muestra:
+Consecuencias del readonly:
 
-- lista priorizada de historias
-- puntos de historia
-- estado visible
-- cantidad de tareas
+- los campos de la tarea no se editan
+- la navegacion entre tarea padre, hijas y derivadas sigue disponible
+- la conversacion puede seguir habilitada si el rol tiene permiso para comentar esa tarea
 
-Acciones principales:
+### Reglas especificas para `team_member`
 
-- `+`: crear historia
-- drag and drop de historias para priorizar
-- `Subir` / `Bajar`: ajuste fino de prioridad
-- `Editar`: abre drawer de historia
-- `Gestionar tareas`: entra a la vista de tareas de esa historia
+`team_member` puede:
 
-### Regla de estados de historia
+- abrir la definicion de una tarea visible desde `Focused`
+- volver desde la definicion a `Focused`
+- navegar a tarea padre, hijas y derivadas si siguen dentro del alcance visible
+- escribir mensajes solo si la tarea pertenece a un sprint y esta asignada a el o no tiene asignado
 
-El estado de historia no es totalmente manual.
+`team_member` no puede:
 
-- `DRAFT` y `READY` sí se pueden elegir manualmente.
-- `IN_SPRINT` y `DONE` son estados derivados.
-
-La lógica funcional es:
-
-- una historia está `IN_SPRINT` cuando alguna de sus tareas está en sprint
-- una historia está `DONE` cuando todas sus tareas están terminadas
-
-## 6.3 Definición de historia
-
-Se accede desde:
-
-- el drawer de historia con `Ir a la definicion`
-- la ruta semántica de definición de historia
-
-Función:
-
-- edición completa de la historia en pantalla completa
-
-Campos principales:
-
-- título
-- story points
-- estado manual (`DRAFT` o `READY`)
-- descripción con editor MDX
-
-Secciones adicionales:
-
-- tareas de la historia agrupadas por backlog o sprint
-- actividad de la historia
-
-## 6.4 Tareas de historia
-
-Función:
-
-- operar el conjunto de tareas de una historia sin salir del producto
-
-Qué se puede hacer:
-
-- crear tarea
-- editar tarea
-- cambiar estado
-- ver sprint asociado
-- ver responsable
-- revisar horas
-
-Uso recomendado:
-
-- refinar el trabajo técnico derivado de una historia
-- preparar el backlog técnico antes de comprometer tareas a sprint
-
-## 6.5 Sprints
-
-Función:
-
-- planificar y operar iteraciones
-
-Qué muestra:
-
-- listado de sprints del producto
-- estado de cada sprint
-- fechas
-- equipo asociado
-
-Acciones principales:
-
-- `+ Sprint`: crear sprint
-- `Editar`: abre drawer de sprint
-- `Iniciar sprint`
-- `Completar sprint`
-- abrir board de ejecución
-
-## 6.6 Definición de sprint
-
-Se accede desde:
-
-- el drawer de sprint con `Ir a la definicion`
-- la ruta semántica de definición de sprint
-
-Campos principales:
-
-- nombre
-- equipo
-- objetivo
-- fecha de inicio
-- fecha de fin
-
-Sección especial:
-
-- gestión de tareas del sprint
-
-Desde esa sección se puede:
-
-- buscar tareas pendientes
-- agregar tareas al sprint
-- filtrar tareas ya agregadas
-- quitar tareas del sprint
-
-Además incluye:
-
-- historial de actividad del sprint
-
-## 6.7 Ejecución del sprint (Kanban)
-
-Función:
-
-- ejecutar el sprint en columnas Kanban
-
-Qué permite:
-
-- ver columnas del workflow del producto
-- mover tareas entre columnas
-- reordenar tareas dentro de la misma columna
-- crear nuevas tareas desde una columna
-- asignar responsable directamente
-- editar tarea
-- buscar tareas
-- filtrar por usuario
-
-Qué muestra cada tarjeta:
-
-- título
-- historia asociada
-- asignado
-- estado
-- descripción resumida
-- fecha de última actualización
-- puntos de esfuerzo
-
-Uso recomendado:
-
-- trabajo diario del sprint
-- seguimiento de bloqueos
-- cierre de tareas con registro de horas reales
-
-## 6.8 Métricas
-
-Función:
-
-- seguimiento cuantitativo del producto, equipo, sprint y usuario
-
-Qué muestra:
-
-- periodo analizado
-- tareas trabajadas
-- tareas completadas
-- puntos entregados
-- burnup / burndown
-- velocidad del equipo
-- velocidad del usuario
-
-Interpretación general:
-
-- `Burnup / Burndown`: evolución diaria del scope, completado y restante del sprint seleccionado
-- `Velocidad del equipo`: puntos completados por sprint
-- `Velocidad del usuario`: puntos completados por persona
+- entrar al backlog
+- entrar a sprints o metricas del producto
+- editar campos de la tarea
+- crear tareas derivadas desde mensajes
 
 ---
 
-## 7. Drawers y páginas de definición
+## 9. `Settings`
 
-La aplicación usa dos niveles de edición:
+`Settings` reemplaza a `Perfil` como punto unico de configuracion personal.
 
-### 7.1 Drawer
+### Datos editables
 
-Se usa para:
+Cada usuario puede cambiar:
 
-- creación rápida
-- edición contextual sin perder la pantalla de fondo
+- `Nombre`
+- `Avatar URL`
 
-Todos los objetos principales se crean desde drawer:
+### Informacion adicional
 
-- producto
-- equipo
-- historia
-- sprint
-- tarea
+La vista muestra:
 
-### 7.2 Página de definición
+- badge con iniciales del usuario
+- email
+- rol actual
+- resumen de cuenta activa
 
-Se usa para:
+### Metricas personales
 
-- edición extensa
-- trabajo prolongado
-- colaboración o navegación entre elementos relacionados
+La misma pantalla concentra metricas y velocidad personales por ventana temporal:
 
-Desde los drawers de historia, sprint y tarea existe el botón `Ir a la definicion`.
+- `week`
+- `month`
+- `semester`
+- `year`
 
----
-
-## 8. Editor de descripciones y mensajes
-
-Las descripciones y mensajes usan `MDXEditor`.
-
-Capacidades disponibles:
-
-- headings
-- párrafos
-- bold / italic / underline
-- listas
-- citas
-- enlaces
-- imágenes
-- tablas
-- bloques de código
-
-### Uso recomendado
-
-- para negrita, itálica y subrayado se puede usar la toolbar o atajos del editor
-- para comentarios y conversaciones, el contenido se renderiza luego como Markdown
+Segun el rol y el dato consultado, algun bloque puede quedar solo en lectura o mostrar mensaje de error si el endpoint correspondiente no aplica a ese usuario.
 
 ---
 
-## 9. Tareas: edición, trazabilidad y colaboración
+## 10. Actividad y metricas
 
-## 9.1 Datos principales de una tarea
+### Actividad por entidad
 
-Una tarea puede incluir:
+La actividad de entidades visibles sigue disponible para todos los roles sobre el trabajo al que tengan acceso.
 
-- título
-- descripción
-- historia
-- sprint
-- responsable
-- estado
-- puntos de esfuerzo
-- horas estimadas
-- horas restantes
-- horas reales
+### Actividad por usuario
 
-### Estimación de esfuerzo
+Actualmente:
 
-#### Puntos
+- `platform_admin` puede consultar actividad de cualquier usuario
+- `scrum_master` puede consultar actividad de usuarios de equipos que comparte
+- `team_member` solo puede consultar su propia actividad
+- `product_owner` no tiene vista administrativa de actividad por usuario
 
-Se seleccionan mediante un control visual de 1 a 5 puntos.
+### Metricas
 
-#### Horas estimadas
-
-Se definen con:
-
-- presets: `4`, `8`, `16`, `24`
-- o un valor manual personalizado
-
-#### Horas reales
-
-Al cerrar una tarea se pide el tiempo real para comparar estimación y ejecución.
-
-## 9.2 Cierre de tarea
-
-Cuando una tarea pasa a `Done`:
-
-- se solicita registrar horas reales
-- las horas restantes pasan a `0`
-
-## 9.3 Actividad de la tarea
-
-Cada tarea muestra historial de actividad con eventos de auditoría.
-
-Ese historial sirve para rastrear:
-
-- cambios de estado
-- cambios de campos
-- asignaciones
-- acciones de sprint
-- mensajes
-
-## 9.4 Conversación de tarea
-
-Cada tarea dispone de una sección colaborativa donde se puede:
-
-- leer mensajes
-- publicar mensajes nuevos
-- responder mensajes
-- crear una nueva tarea a partir de un mensaje
-
-Los mensajes se renderizan como Markdown, no como texto plano.
-
-## 9.5 Tareas hijas y trazabilidad
-
-Una tarea puede tener:
-
-- tarea padre
-- mensaje origen
-- tareas hijas
-
-La vista de tarea muestra:
-
-- referencia a la tarea padre, si existe
-- referencia al mensaje origen, si existe
-- listado de tareas hijas
-- contador de hijos completados
-
-Si una tarea hija está terminada, se marca visualmente como completada.
-
-Al hacer click en una tarea hija se abre su edición.
+- metricas de producto y equipo: `platform_admin`, `product_owner`, `scrum_master`
+- metricas personales en `Settings`: todos los usuarios autenticados, con disponibilidad final sujeta al endpoint correspondiente
 
 ---
 
-## 10. Actividad e historial
+## 11. Resumen practico por rol
 
-La aplicación registra actividad sobre las entidades principales:
+### `platform_admin`
 
-- usuario
-- equipo
-- producto
-- historia
-- tarea
-- sprint
+Usa las tres areas:
 
-### Dónde se consulta
+- `Focused` para seguimiento rapido
+- `Administracion` para catalogos y usuarios
+- `Workspace de producto` para operacion completa
 
-- dentro de drawers y páginas de definición de entidades
-- en `Admin`, en la sección `Actividad por usuario`
+### `product_owner`
 
-### Qué valor aporta
+Se mueve entre:
 
-Permite reconstruir:
+- `Focused` para contexto rapido
+- `Administracion > Productos`
+- `Administracion > Equipos`
+- `Workspace de producto` para backlog, board y metricas en modo mayormente consultivo
 
-- quién hizo el cambio
-- cuándo ocurrió
-- sobre qué entidad
-- qué acción se ejecutó
+### `scrum_master`
 
----
+Trabaja principalmente en:
 
-## 11. Usuarios por defecto en entorno local
+- `Focused`
+- `Administracion` para consulta de productos, equipos y usuarios
+- `Workspace de producto` para backlog, sprints, board, definicion de historias y definicion de tareas
 
-Si la base fue preparada con el seed por defecto, existen estos usuarios:
+### `team_member`
 
-| Rol | Usuario | Password |
-|---|---|---|
-| platform_admin | `admin@scrum.local` | `admin1234` |
-| product_owner | `owner@scrum.local` | `owner1234` |
-| scrum_master | `scrum@scrum.local` | `scrum1234` |
-| team_member | `member@scrum.local` | `member1234` |
+Trabaja principalmente en:
 
-Además el seed crea un equipo inicial:
+- `Focused`
+- `Settings`
+- definicion de tarea abierta desde el kanban
 
-- `Core Team`
+Su flujo esperado es:
 
-con membresía por defecto para:
-
-- `scrum@scrum.local`
-- `member@scrum.local`
-
----
-
-## 12. Recomendaciones operativas
-
-### Para `platform_admin`
-
-- crea equipos antes de incorporar usuarios operativos
-- asigna equipos a cada `team_member`
-- usa `Admin` para controlar actividad por persona
-
-### Para `product_owner`
-
-- concentra el trabajo en `Productos`, `Backlog`, `Sprints` y `Metricas`
-- usa historias para expresar valor y tareas para el trabajo técnico
-
-### Para `scrum_master`
-
-- mantén equipos y vínculos producto-equipo correctos
-- opera el board diariamente
-- controla bloqueos y cierre real de horas
-
-### Para `team_member`
-
-- trabaja principalmente en `Focused`
-- toma tareas sin asignar o gestiona las propias en el kanban
-- abre la definición de tarea en modo lectura y usa la conversación para registrar decisiones y dudas
-
----
-
-## 13. Resumen práctico por navegación
-
-### Barra superior
-
-- `Inicio`: tablero general
-- `Productos`: catálogo y acceso a workspaces
-- `Equipos`: gestión de equipos
-- `Perfil`: datos personales
-- `Admin`: administración global, sólo `platform_admin`
-
-### Dentro de un producto
-
-- `Resumen`: vista ejecutiva
-- `Backlog`: historias y priorización
-- `Sprints`: planificación y acceso a board
-- `Metricas`: indicadores y series
-
-### Edición avanzada
-
-- `Ir a la definicion`: lleva a una vista full-screen para trabajar sin depender del drawer
-
----
-
-## 14. Criterio general de uso
-
-Si la acción es rápida o contextual, usa drawer.
-
-Si la acción requiere:
-
-- navegación entre entidades
-- conversación
-- trazabilidad
-- edición extensa
-
-usa la página de definición.
+1. entrar a `Focused`
+2. tomar una tarea sin asignar o continuar una propia
+3. mover la tarjeta dentro del kanban si corresponde
+4. abrir el drawer o la definicion de tarea en modo readonly
+5. registrar decisiones y dudas en la conversacion

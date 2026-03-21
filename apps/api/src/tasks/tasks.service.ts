@@ -71,6 +71,15 @@ export class TasksService {
       return { sprint: null, columns: [] };
     }
 
+    const assignmentScope = this.teamScopeService.isTeamMember(user.role)
+      ? {
+          OR: [
+            { assigneeId: user.sub },
+            { assigneeId: null }
+          ]
+        }
+      : {};
+
     const tasks = await this.prisma.task.findMany({
       where: {
         status: { not: "Done" },
@@ -78,10 +87,7 @@ export class TasksService {
           status: SprintStatus.ACTIVE
         },
         ...(accessibleProducts !== null ? { productId: { in: accessibleProducts } } : {}),
-        OR: [
-          { assigneeId: user.sub },
-          { assigneeId: null }
-        ]
+        ...assignmentScope
       },
       include: {
         assignee: {

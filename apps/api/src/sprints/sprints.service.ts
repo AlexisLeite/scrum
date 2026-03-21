@@ -43,15 +43,19 @@ export class SprintsService {
       throw new ForbiddenException("Insufficient team scope");
     }
 
-    const sprint = await this.prisma.sprint.create({
-      data: {
-        productId,
-        teamId: dto.teamId,
-        name: dto.name,
-        goal: dto.goal,
-        startDate: dto.startDate ? new Date(dto.startDate) : null,
-        endDate: dto.endDate ? new Date(dto.endDate) : null
-      }
+    const sprint = await this.prisma.$transaction(async (tx) => {
+      const createdSprint = await tx.sprint.create({
+        data: {
+          productId,
+          teamId: dto.teamId,
+          name: dto.name,
+          goal: dto.goal,
+          startDate: dto.startDate ? new Date(dto.startDate) : null,
+          endDate: dto.endDate ? new Date(dto.endDate) : null
+        }
+      });
+      await this.ensureTeamProductLink(productId, dto.teamId, tx);
+      return createdSprint;
     });
     await this.activityService.record({
       actorUserId: user.sub,
@@ -82,16 +86,20 @@ export class SprintsService {
       }
     }
 
-    const updated = await this.prisma.sprint.update({
-      where: { id },
-      data: {
-        name: dto.name,
-        goal: dto.goal,
-        teamId: dto.teamId,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
-        status: dto.status
-      }
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const nextSprint = await tx.sprint.update({
+        where: { id },
+        data: {
+          name: dto.name,
+          goal: dto.goal,
+          teamId: dto.teamId,
+          startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+          endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+          status: dto.status
+        }
+      });
+      await this.ensureTeamProductLink(nextSprint.productId, nextSprint.teamId, tx);
+      return nextSprint;
     });
     await this.activityService.record({
       actorUserId: user.sub,
@@ -126,7 +134,11 @@ export class SprintsService {
       throw new BadRequestException("Another active sprint exists for this product/team");
     }
 
-    const updated = await this.prisma.sprint.update({ where: { id }, data: { status: SprintStatus.ACTIVE } });
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const startedSprint = await tx.sprint.update({ where: { id }, data: { status: SprintStatus.ACTIVE } });
+      await this.ensureTeamProductLink(startedSprint.productId, startedSprint.teamId, tx);
+      return startedSprint;
+    });
     await this.activityService.record({
       actorUserId: user.sub,
       teamId: updated.teamId,
@@ -752,6 +764,17 @@ export class SprintsService {
     if (status === SprintStatus.COMPLETED || status === SprintStatus.CANCELLED) {
       throw new BadRequestException("This sprint is closed and can no longer be modified");
     }
+  }
+
+  private async ensureTeamProductLink(
+    productId: string,
+    teamId: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma
+  ) {
+    await client.productTeam.createMany({
+      data: [{ productId, teamId }],
+      skipDuplicates: true
+    });
   }
 
   private assertCanOperateTaskOnBoard(

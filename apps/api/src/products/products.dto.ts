@@ -1,5 +1,5 @@
 import { Role } from "@prisma/client";
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Min, MinLength } from "class-validator";
+import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Min, MinLength } from "class-validator";
 
 export class CreateProductDto {
   @IsString()
@@ -32,6 +32,12 @@ export class AddProductMemberDto {
 
   @IsEnum(Role)
   role!: Role;
+}
+
+export class SetProductTeamsDto {
+  @IsArray()
+  @IsString({ each: true })
+  teamIds!: string[];
 }
 
 export class UpsertWorkflowColumnDto {

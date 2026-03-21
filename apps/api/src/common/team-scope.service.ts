@@ -64,11 +64,20 @@ export class TeamScopeService {
     if (teamIds.length === 0) {
       return [];
     }
-    const links = await this.prisma.productTeam.findMany({
-      where: { teamId: { in: teamIds } },
-      select: { productId: true }
-    });
-    return Array.from(new Set(links.map((entry) => entry.productId)));
+    const [links, sprints] = await Promise.all([
+      this.prisma.productTeam.findMany({
+        where: { teamId: { in: teamIds } },
+        select: { productId: true }
+      }),
+      this.prisma.sprint.findMany({
+        where: { teamId: { in: teamIds } },
+        select: { productId: true }
+      })
+    ]);
+    return Array.from(new Set([
+      ...links.map((entry) => entry.productId),
+      ...sprints.map((entry) => entry.productId)
+    ]));
   }
 
   async getAccessibleTeamIds(user: ScopedUser): Promise<string[] | null> {
@@ -77,15 +86,19 @@ export class TeamScopeService {
     }
 
     if (this.isProductOwner(user.role)) {
+      const directTeamIds = await this.getUserTeamIds(user.sub);
       const productIds = await this.getAccessibleProductIds(user);
       if (!productIds || productIds.length === 0) {
-        return [];
+        return directTeamIds;
       }
       const links = await this.prisma.productTeam.findMany({
         where: { productId: { in: productIds } },
         select: { teamId: true }
       });
-      return Array.from(new Set(links.map((entry) => entry.teamId)));
+      return Array.from(new Set([
+        ...directTeamIds,
+        ...links.map((entry) => entry.teamId)
+      ]));
     }
 
     return this.getUserTeamIds(user.sub);
