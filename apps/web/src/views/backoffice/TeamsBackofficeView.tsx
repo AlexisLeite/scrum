@@ -58,15 +58,12 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
   return (
     <div className="stack-lg">
       <section className="card">
-        <div className="section-head">
-          <h2>Gestion de equipos</h2>
+        <div className="stack-h pb-4">
+          <h3>Listado de equipos</h3>
           {canCreateTeam ? <button className="btn btn-primary" onClick={openCreate}>+ Equipo</button> : null}
         </div>
-        <p className="muted">Cada equipo concentra miembros, alcance de productos y actividad operacional.</p>
-      </section>
-      <section className="card">
-        <h3>Listado de equipos</h3>
         <div className="team-grid">
+
           {teams.map((team) => (
             <article key={team.id} className="team-tile">
               <div className="section-head">

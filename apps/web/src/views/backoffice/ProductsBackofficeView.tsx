@@ -49,14 +49,11 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
   return (
     <div className="stack-lg">
       <section className="card">
-        <div className="section-head">
-          <h2>Gestion de productos</h2>
+        <div className="stack-h pb-4">
+          <h3>Catalogo</h3>
           {canManageProducts ? <button className="btn btn-primary" onClick={openCreate}>+ Producto</button> : null}
         </div>
-        <p className="muted">Administra el catalogo y abre el workspace desde una sola entrada clara.</p>
-      </section>
-      <section className="card">
-        <h3>Catalogo</h3>
+
         <table className="table">
           <thead>
             <tr>

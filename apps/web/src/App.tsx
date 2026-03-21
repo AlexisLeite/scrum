@@ -2,9 +2,7 @@ import React from "react";
 import { observer } from "mobx-react-lite";
 import {
   NavLink,
-  Navigate,
-  Outlet,
-  Route,
+  Navigate, Route,
   Routes,
   useLocation,
   useNavigate,
@@ -242,11 +240,8 @@ const AuthenticatedHeader = observer(function AuthenticatedHeader() {
 
   return (
     <header className="focused-topbar">
-      <div>
-        <p className="workspace-context">Focused workspace</p>
-      </div>
       <div className="focused-topbar-right">
-        <ThemeToggle />
+
         <div className="user-menu" ref={menuRef}>
           <button type="button" className="user-menu-trigger" onClick={() => setOpen((current) => !current)}>
             {user.avatarUrl ? <img src={user.avatarUrl} alt={user.name} className="user-menu-avatar" /> : null}
@@ -258,6 +253,7 @@ const AuthenticatedHeader = observer(function AuthenticatedHeader() {
                 <strong>{user.name}</strong>
                 <span className="muted">{user.email}</span>
               </div>
+              <ThemeToggle />
               <NavLink to="/focused" className="user-menu-link" onClick={() => setOpen(false)}>
                 Focused
               </NavLink>

@@ -1,4 +1,3 @@
-import React from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { Role } from "@scrum/contracts";
 import { canViewUsersAdministration } from "../lib/permissions";
@@ -24,23 +23,6 @@ export function AdministrationView({ role }: { role: Role }) {
   return (
     <div className="stack-lg">
       <section className="card definition-hero">
-        <div className="section-head">
-          <div>
-            <p className="workspace-context">Administracion</p>
-            <h2>Gestion especializada</h2>
-            <p className="muted">
-              Las vistas disponibles cambian segun tu rol y mantienen separado el trabajo operativo del administrativo.
-            </p>
-          </div>
-          <div className="definition-hero-context">
-            <span className={roleClass}>{role}</span>
-            {visibleAreas.map((area) => (
-              <span key={area} className="pill">
-                {area}
-              </span>
-            ))}
-          </div>
-        </div>
         <div className="tabs">
           {showProducts ? (
             <NavLink to="/administration/products" className={({ isActive }) => isActive ? "tab active" : "tab"}>

@@ -305,14 +305,6 @@ label>small.muted {
   gap: 0.85rem;
 }
 
-.focused-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.65rem 0.15rem 0;
-}
-
 .focused-topbar-right {
   display: flex;
   align-items: center;
@@ -411,11 +403,17 @@ label>small.muted {
 }
 
 .focused-topbar {
+  z-index: 20;
+  margin-bottom: 0.9rem;
+  padding: 0.9rem 1.05rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.35rem 0.2rem 0.9rem;
+  width: max-content;
+  justify-self: end;
+  position: fixed;
+  top: 0.5rem;
 }
 
 .focused-topbar-copy h1 {
@@ -445,8 +443,8 @@ label>small.muted {
 .user-menu-trigger {
   display: inline-grid;
   place-items: center;
-  width: 2.6rem;
-  height: 2.6rem;
+  width: 4rem;
+  height: 4rem;
   padding: 0;
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -603,6 +601,14 @@ label>small.muted {
 .stack-lg {
   display: grid;
   gap: 1rem;
+}
+
+.pb-3 {
+  padding-bottom: 8px;
+}
+
+.pb-4 {
+  padding-bottom: 16px;
 }
 
 .card {
@@ -1721,7 +1727,7 @@ th {
   padding: clamp(0.8rem, 1.4vw, 1.3rem);
 }
 
-.app-shell > main,
+.app-shell>main,
 .auth-page-wrap {
   width: min(100%, var(--page-max));
   margin-inline: auto;
@@ -1784,21 +1790,6 @@ th {
 
 .auth-card .btn {
   min-width: 10.5rem;
-}
-
-.focused-topbar {
-  position: sticky;
-  top: 0.5rem;
-  z-index: 20;
-  margin-bottom: 0.9rem;
-  padding: 0.9rem 1.05rem;
-  border-radius: calc(var(--radius-xl) + 2px);
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
-  box-shadow:
-    0 20px 45px rgba(9, 28, 52, 0.1),
-    0 1px 0 rgba(255, 255, 255, 0.28) inset;
-  backdrop-filter: blur(16px);
 }
 
 .focused-topbar .workspace-context {
@@ -2082,6 +2073,7 @@ th {
     opacity: 0;
     transform: translateY(12px) scale(0.99);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -2138,6 +2130,7 @@ th {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -2146,4 +2139,11 @@ th {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
+}
+
+.stack-h {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
 }
