@@ -13,7 +13,7 @@
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
-          "value": "*"
+          "value": "https://scrum-web-rho.vercel.app"
         },
         {
           "key": "Access-Control-Allow-Methods",
