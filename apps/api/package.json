@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
-    "build:vercel": "node ../../scripts/with-vercel-postgres-env.mjs prisma generate && node ../../scripts/with-vercel-postgres-env.mjs prisma db push --skip-generate && nest build",
+    "build:vercel": "node ../../scripts/with-vercel-postgres-env.mjs prisma generate --schema ./prisma/schema.prisma && node ../../scripts/with-vercel-postgres-env.mjs prisma db push --skip-generate --schema ./prisma/schema.prisma && nest build",
     "vercel-build": "pnpm build:vercel",
     "start": "node dist/src/main.js",
     "lint": "echo api lint",
