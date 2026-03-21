@@ -221,11 +221,7 @@ export const FocusedView = observer(function FocusedView() {
   return (
     <div className="stack-lg">
       <section className="card focused-hero">
-        <div>
-          <p className="workspace-context">Focused</p>
-          <h2>Trabajo en curso</h2>
-        </div>
-        <p className="muted">{focusedSummary}</p>
+        <h2>Trabajo en curso</h2>
         {error ? <p className="error-text">{error}</p> : null}
       </section>
 

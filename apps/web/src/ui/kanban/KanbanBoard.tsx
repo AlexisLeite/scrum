@@ -704,9 +704,6 @@ export function KanbanBoard({
               ))}
             </select>
           </label>
-          <p className="kb-count muted">
-            Mostrando {visibleCount} de {totalCount} tareas
-          </p>
         </div>
 
         <DndContext

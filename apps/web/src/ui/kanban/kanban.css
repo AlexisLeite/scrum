@@ -34,6 +34,7 @@
   min-height: 460px;
   align-items: stretch;
   transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  height: 100%;
 }
 
 .kb-column.is-drop-column {
