@@ -4,9 +4,16 @@
   "buildCommand": "pnpm vercel-build",
   "functions": {
     "api/[...all].ts": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "runtime": "@vercel/node"
     }
   },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/[...all].ts"
+    }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
