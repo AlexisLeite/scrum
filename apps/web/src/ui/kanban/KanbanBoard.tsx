@@ -661,7 +661,7 @@ export function KanbanBoard({
       if (nextStatus === task.status) {
         return;
       }
-      if (nextStatus === "Done" && task.status !== "Done" && task.actualHours == null && actualHours === undefined) {
+      if (nextStatus === "Done" && task.status !== "Done" && actualHours === undefined) {
         setCompletionRequest({ mode: "status", task, nextStatus });
         return;
       }
@@ -768,7 +768,7 @@ export function KanbanBoard({
 
     const movedTask = findTask(snapshot, taskId) ?? activeDrag.task;
 
-    if (targetColumn === "Done" && movedTask.status !== "Done" && movedTask.actualHours == null) {
+    if (targetColumn === "Done" && movedTask.status !== "Done") {
       setLocalColumns(nextColumns);
       setCompletionRequest({
         mode: "move",
