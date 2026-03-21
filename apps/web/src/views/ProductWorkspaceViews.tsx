@@ -698,8 +698,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
     setPendingTaskIds((previous) => ({ ...previous, [taskId]: true }));
     try {
       await controller.updateTaskStatus(taskId, nextStatus, actualHours);
-      await reloadBoardData();
-      await controller.loadStories(productId);
+      await Promise.all([controller.loadStories(productId), controller.loadBurnup(productId, sprintId)]);
     } catch (statusError) {
       setBoardError(getErrorMessage(statusError));
     } finally {
@@ -716,8 +715,6 @@ export const SprintBoardView = observer(function SprintBoardView() {
     setPendingTaskIds((previous) => ({ ...previous, [taskId]: true }));
     try {
       await controller.assignTask(taskId, { assigneeId });
-      await reloadBoardData();
-      await controller.loadStories(productId);
     } catch (assignError) {
       setBoardError(getErrorMessage(assignError));
     } finally {
@@ -734,8 +731,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
     setPendingTaskIds((previous) => ({ ...previous, [taskId]: true }));
     try {
       await controller.moveBoardTask(sprintId, taskId, { status, position, actualHours });
-      await reloadBoardData();
-      await controller.loadStories(productId);
+      await Promise.all([controller.loadStories(productId), controller.loadBurnup(productId, sprintId)]);
     } catch (moveError) {
       setBoardError(getErrorMessage(moveError));
     } finally {

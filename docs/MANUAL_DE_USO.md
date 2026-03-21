@@ -4,7 +4,7 @@
 
 ScrumPilot concentra trabajo operativo y administracion de productos Scrum en una misma aplicacion, pero ahora separa mucho mejor ambos contextos:
 
-- `Focused` para trabajo diario sobre tareas pendientes
+- `Focused` para trabajo diario sobre tareas visibles del sprint activo
 - `Settings` para datos personales y metricas propias
 - `Administracion` para catalogos y gestion de usuarios segun rol
 - `Workspace de producto` para backlog, sprints, board, metricas y definiciones
@@ -33,6 +33,7 @@ Al abrir la app, se intenta restaurar la sesion actual antes de resolver la nave
 
 - si hay sesion valida, `/` redirige a `/focused`
 - si no hay sesion, `/` redirige a `/login`
+- si el usuario recarga una ruta protegida como `/focused`, la app restaura la sesion y vuelve a resolver la vista sin requerir una navegacion manual adicional
 
 ### Encabezado autenticado
 
@@ -163,13 +164,12 @@ La siguiente matriz describe lo que hoy se puede hacer desde la aplicacion y lo 
 
 ## 6. `Focused` en detalle
 
-`Focused` consume el board de tareas pendientes del kanban activo y aplica el filtro segun el rol del usuario actual.
+`Focused` consume el board del sprint activo y aplica el filtro segun el rol del usuario actual.
 
 ### Que muestra
 
 Siempre aparecen tareas que cumplan todo esto:
 
-- no estan en `Done`
 - pertenecen a un sprint `ACTIVE`
 - pertenecen a un producto accesible para ese usuario
 
@@ -177,14 +177,19 @@ Ademas:
 
 - `platform_admin`, `product_owner` y `scrum_master` ven todas las tareas visibles que cumplan esas reglas
 - `team_member` ve solo tareas propias o sin asignar
+- la columna `Done` forma parte del board visible igual que el resto del workflow
 
 La vista incluye:
 
 - hero principal con resumen del contexto
 - tarjetas KPI con conteos de trabajo visible
-- kanban pendiente
+- kanban `Focused` con todas las columnas visibles del workflow, incluida `Done`
+- busqueda por texto sobre titulo, historia, descripcion y assignee visible
+- expansion local de descripciones largas con `Mostrar mas`, persistente mientras la vista siga abierta
 
 El board se refresca automaticamente cada 15 segundos.
+
+Ademas, los cambios de asignacion, estado y movimiento se reflejan primero en la vista local del board para evitar un reinicio visual completo de todo el kanban en cada accion.
 
 ### Comportamiento por rol
 
@@ -216,6 +221,7 @@ El board se refresca automaticamente cada 15 segundos.
 #### `team_member`
 
 - ve solo tareas propias o sin asignar
+- en el filtro por usuario solo puede usar `Todos`, su propio usuario y `Sin asignar`
 - puede tomar una tarea sin asignar para si mismo
 - puede cambiar estado solo en tareas propias y dentro de un sprint activo
 - puede mover solo sus tarjetas en kanban
@@ -296,6 +302,7 @@ Incluye:
 
 - formulario principal de la tarea
 - contexto de historia, sprint, asignado y ultima actualizacion
+- selectores compactos unificados para `Puntos de esfuerzo` y `Horas estimadas`
 - referencia a mensaje origen
 - referencia a tarea padre
 - lista de hijos

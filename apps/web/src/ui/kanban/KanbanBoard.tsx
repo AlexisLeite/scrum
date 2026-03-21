@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import {
   DndContext,
   DragOverlay,
@@ -13,7 +14,6 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MarkdownPreview } from "../drawers/product-workspace/MarkdownPreview";
 import { TaskCompletionDialog } from "../drawers/product-workspace/TaskCompletionDialog";
 import "./kanban.css";
 import { KanbanAssignee, KanbanColumn, KanbanTask } from "./types";
@@ -25,6 +25,7 @@ type ActiveDragState = {
   fromColumn: string;
   snapshot: KanbanColumn[];
   task: KanbanTask;
+  overlayWidth: number | null;
 };
 
 type CompletionRequest =
@@ -45,6 +46,7 @@ type CompletionRequest =
 type KanbanBoardProps = {
   columns: KanbanColumn[];
   assignees: KanbanAssignee[];
+  assigneeFilterOptions?: KanbanAssignee[];
   statusOptions: string[];
   readOnly?: boolean;
   allowCreateTask?: boolean;
@@ -98,6 +100,16 @@ function previewText(value: string | null | undefined): string {
     .replace(/\s+/g, " ")
     .trim();
   return plain || "Sin descripcion";
+}
+
+function truncateDescription(value: string, maxLength: number) {
+  if (value.length <= maxLength) {
+    return { value, truncated: false };
+  }
+  return {
+    value: `${value.slice(0, maxLength).trimEnd()}...`,
+    truncated: true
+  };
 }
 
 function findTask(columns: KanbanColumn[], taskId: string) {
@@ -176,6 +188,8 @@ function TaskCardContent(props: {
   allowEditTask: boolean;
   allowStatusChange: boolean;
   editActionLabel: string;
+  descriptionExpanded: boolean;
+  onExpandDescription?: (taskId: string) => void;
   dragHandleProps?: Record<string, unknown>;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
   onStatusChange: (task: KanbanTask, status: string) => Promise<void>;
@@ -191,12 +205,15 @@ function TaskCardContent(props: {
     allowEditTask,
     allowStatusChange,
     editActionLabel,
+    descriptionExpanded,
+    onExpandDescription,
     dragHandleProps,
     onAssigneeChange,
     onStatusChange,
     onEditTask
   } = props;
   const description = previewText(task.description);
+  const truncatedDescription = React.useMemo(() => truncateDescription(description, 255), [description]);
   const taskStatusOptions = statusOptions.includes(task.status) ? statusOptions : [task.status, ...statusOptions];
 
   return (
@@ -263,8 +280,21 @@ function TaskCardContent(props: {
         </button>
       </div>
 
-      <div title={description}>
-        <MarkdownPreview markdown={task.description} compact className="kb-description" emptyLabel="Sin descripcion" />
+      <div className={`kb-description-shell ${descriptionExpanded ? "is-expanded" : ""}`} title={description}>
+        {descriptionExpanded ? (
+          <p className="kb-description kb-description-expanded">{description || "Sin descripcion"}</p>
+        ) : (
+          <p className="kb-description">{truncatedDescription.value || "Sin descripcion"}</p>
+        )}
+        {!descriptionExpanded && truncatedDescription.truncated ? (
+          <button
+            type="button"
+            className="kb-more-btn"
+            onClick={() => onExpandDescription?.(task.id)}
+          >
+            Mostrar mas
+          </button>
+        ) : null}
       </div>
 
       <div className="kb-meta-row">
@@ -289,6 +319,8 @@ function SortableTaskCard(props: {
   allowEditTask: boolean;
   allowStatusChange: boolean;
   editActionLabel: string;
+  descriptionExpanded: boolean;
+  onExpandDescription?: (taskId: string) => void;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
   onStatusChange: (task: KanbanTask, status: string) => Promise<void>;
   onEditTask: (task: KanbanTask) => void;
@@ -303,6 +335,8 @@ function SortableTaskCard(props: {
     allowEditTask,
     allowStatusChange,
     editActionLabel,
+    descriptionExpanded,
+    onExpandDescription,
     onAssigneeChange,
     onStatusChange,
     onEditTask
@@ -335,6 +369,8 @@ function SortableTaskCard(props: {
         allowEditTask={allowEditTask}
         allowStatusChange={allowStatusChange}
         editActionLabel={editActionLabel}
+        descriptionExpanded={descriptionExpanded}
+        onExpandDescription={onExpandDescription}
         dragHandleProps={{ ...attributes, ...listeners }}
         onAssigneeChange={onAssigneeChange}
         onStatusChange={onStatusChange}
@@ -359,6 +395,8 @@ function KanbanColumnView(props: {
   canEditTask: (task: KanbanTask) => boolean;
   canChangeStatus: (task: KanbanTask) => boolean;
   getTaskAssignees: (task: KanbanTask, assignees: KanbanAssignee[]) => KanbanAssignee[];
+  expandedTaskIds: Set<string>;
+  onExpandDescription: (taskId: string) => void;
   onCreateTask: (defaultStatus: string) => void;
   onEditTask: (task: KanbanTask) => void;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
@@ -379,6 +417,8 @@ function KanbanColumnView(props: {
     canEditTask,
     canChangeStatus,
     getTaskAssignees,
+    expandedTaskIds,
+    onExpandDescription,
     onCreateTask,
     onEditTask,
     onAssigneeChange,
@@ -423,6 +463,8 @@ function KanbanColumnView(props: {
                 allowEditTask={canEditTask(task)}
                 allowStatusChange={taskAllowsStatus}
                 editActionLabel={getEditActionLabel(task)}
+                descriptionExpanded={expandedTaskIds.has(task.id)}
+                onExpandDescription={onExpandDescription}
                 onAssigneeChange={onAssigneeChange}
                 onStatusChange={onStatusChange}
                 onEditTask={onEditTask}
@@ -436,14 +478,14 @@ function KanbanColumnView(props: {
   );
 }
 
-function KanbanDragOverlay(props: { task: KanbanTask | null }) {
-  const { task } = props;
+function KanbanDragOverlay(props: { task: KanbanTask | null; width?: number | null }) {
+  const { task, width } = props;
   if (!task) {
     return null;
   }
 
   return (
-    <article className="kb-card kb-card-overlay">
+    <article className="kb-card kb-card-overlay" style={width ? { width } : undefined}>
       <div className="kb-title-row">
         <div className="kb-title-main">
           <span className="kb-drag-handle is-static">::</span>
@@ -453,7 +495,7 @@ function KanbanDragOverlay(props: { task: KanbanTask | null }) {
           {task.story?.title ?? "Sin historia"}
         </span>
       </div>
-      <MarkdownPreview markdown={task.description} compact className="kb-description" emptyLabel="Sin descripcion" />
+      <p className="kb-description">{truncateDescription(previewText(task.description), 255).value || "Sin descripcion"}</p>
       <div className="kb-meta-row">
         <span className="muted">Actualizado: {formatUpdatedAt(task.updatedAt)}</span>
         <span className="pill">SP {task.effortPoints ?? "-"}</span>
@@ -465,6 +507,7 @@ function KanbanDragOverlay(props: { task: KanbanTask | null }) {
 export function KanbanBoard({
   columns,
   assignees,
+  assigneeFilterOptions = assignees,
   statusOptions,
   readOnly = false,
   allowCreateTask = true,
@@ -490,10 +533,18 @@ export function KanbanBoard({
   const [localColumns, setLocalColumns] = React.useState<KanbanColumn[]>(() => copyColumns(columns));
   const [activeDrag, setActiveDrag] = React.useState<ActiveDragState | null>(null);
   const [completionRequest, setCompletionRequest] = React.useState<CompletionRequest | null>(null);
+  const [expandedTaskIds, setExpandedTaskIds] = React.useState<Set<string>>(() => new Set());
 
   React.useEffect(() => {
     setLocalColumns(copyColumns(columns));
   }, [columns]);
+
+  React.useEffect(() => {
+    const validFilters = new Set<AssigneeFilter>(["all", "unassigned", ...assigneeFilterOptions.map((user) => user.id)]);
+    if (!validFilters.has(assigneeFilter)) {
+      setAssigneeFilter("all");
+    }
+  }, [assigneeFilter, assigneeFilterOptions]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -526,6 +577,16 @@ export function KanbanBoard({
     [localColumns]
   );
   const canReorder = !readOnly && allowStatusChange;
+  const expandDescription = React.useCallback((taskId: string) => {
+    setExpandedTaskIds((current: Set<string>) => {
+      if (current.has(taskId)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.add(taskId);
+      return next;
+    });
+  }, []);
   const resolveEditActionLabel = React.useCallback(
     (task: KanbanTask) => typeof editActionLabel === "function" ? editActionLabel(task) : editActionLabel,
     [editActionLabel]
@@ -581,7 +642,8 @@ export function KanbanBoard({
       taskId,
       fromColumn,
       snapshot: copyColumns(localColumns),
-      task: { ...task }
+      task: { ...task },
+      overlayWidth: event.active.rect.current.initial?.width ?? null
     });
   };
 
@@ -689,7 +751,7 @@ export function KanbanBoard({
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Titulo, historia, descripcion o assignee"
+              placeholder="Titulo, historia, descripcion o asignado"
             />
           </label>
           <label>
@@ -697,7 +759,7 @@ export function KanbanBoard({
             <select value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}>
               <option value="all">Todos</option>
               <option value="unassigned">Sin asignar</option>
-              {assignees.map((user) => (
+              {assigneeFilterOptions.map((user) => (
                 <option key={user.id} value={user.id}>
                   {user.name}
                 </option>
@@ -737,6 +799,8 @@ export function KanbanBoard({
                 canEditTask={canEditTask}
                 canChangeStatus={canChangeStatus}
                 getTaskAssignees={getTaskAssignees}
+                expandedTaskIds={expandedTaskIds}
+                onExpandDescription={expandDescription}
                 onCreateTask={onCreateTask}
                 onEditTask={onEditTask}
                 onAssigneeChange={onAssigneeChange}
@@ -745,9 +809,18 @@ export function KanbanBoard({
             ))}
           </div>
 
-          <DragOverlay>
-            <KanbanDragOverlay task={activeTask} />
-          </DragOverlay>
+          {typeof document === "undefined"
+            ? (
+              <DragOverlay>
+                <KanbanDragOverlay task={activeTask} width={activeDrag?.overlayWidth} />
+              </DragOverlay>
+            )
+            : createPortal(
+              <DragOverlay>
+                <KanbanDragOverlay task={activeTask} width={activeDrag?.overlayWidth} />
+              </DragOverlay>,
+              document.body
+            )}
         </DndContext>
       </div>
 

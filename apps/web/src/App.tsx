@@ -57,18 +57,11 @@ export const App = observer(function App() {
   const location = useLocation();
 
   React.useEffect(() => {
-    let active = true;
     store.session.setLoading(true);
     void auth.refreshMe().finally(() => {
-      if (!active) {
-        return;
-      }
       store.session.setLoading(false);
       store.session.setHydrated(true);
     });
-    return () => {
-      active = false;
-    };
   }, [auth, store.session]);
 
   const user = store.session.user;
@@ -283,9 +276,13 @@ const AuthenticatedHeader = observer(function AuthenticatedHeader() {
   );
 });
 
-function Protected({ children }: { children: React.ReactNode }) {
+const Protected = observer(function Protected({ children }: { children: React.ReactNode }) {
   const store = useRootStore();
   const location = useLocation();
+
+  if (store.session.user) {
+    return <>{children}</>;
+  }
 
   if (!store.session.hydrated || store.session.loading) {
     return (
@@ -302,9 +299,9 @@ function Protected({ children }: { children: React.ReactNode }) {
   }
 
   return <>{children}</>;
-}
+});
 
-function ProtectedRoles({ roles, children }: { roles: Role[]; children: React.ReactNode }) {
+const ProtectedRoles = observer(function ProtectedRoles({ roles, children }: { roles: Role[]; children: React.ReactNode }) {
   const store = useRootStore();
   const user = store.session.user;
 
@@ -317,10 +314,14 @@ function ProtectedRoles({ roles, children }: { roles: Role[]; children: React.Re
   }
 
   return <>{children}</>;
-}
+});
 
-function RootRedirect() {
+const RootRedirect = observer(function RootRedirect() {
   const store = useRootStore();
+
+  if (store.session.user) {
+    return <Navigate to="/focused" replace />;
+  }
 
   if (!store.session.hydrated || store.session.loading) {
     return (
@@ -331,10 +332,10 @@ function RootRedirect() {
     );
   }
 
-  return <Navigate to={store.session.user ? "/focused" : "/login"} replace />;
-}
+  return <Navigate to="/login" replace />;
+});
 
-function AdministrationShell() {
+const AdministrationShell = observer(function AdministrationShell() {
   const store = useRootStore();
   const user = store.session.user;
 
@@ -343,9 +344,9 @@ function AdministrationShell() {
   }
 
   return <AdministrationView role={user.role} />;
-}
+});
 
-function AdministrationIndexRedirect() {
+const AdministrationIndexRedirect = observer(function AdministrationIndexRedirect() {
   const store = useRootStore();
   const user = store.session.user;
 
@@ -354,7 +355,7 @@ function AdministrationIndexRedirect() {
   }
 
   return <Navigate to={administrationDefaultPath(user.role)} replace />;
-}
+});
 
 const LoginView = observer(function LoginView() {
   const store = useRootStore();

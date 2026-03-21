@@ -101,6 +101,39 @@ function compactPreview(value: string | null | undefined): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function CompactOptionGroup(props: {
+  ariaLabel: string;
+  values: Array<number | string>;
+  selectedValue: number | string | null;
+  disabled?: boolean;
+  onSelect: (value: number | string) => void;
+  renderLabel?: (value: number | string) => string;
+  trailingSlot?: React.ReactNode;
+}) {
+  const { ariaLabel, values, selectedValue, disabled = false, onSelect, renderLabel, trailingSlot } = props;
+
+  return (
+    <div className="task-option-switch task-option-switch-compact" role="group" aria-label={ariaLabel}>
+      {values.map((value) => {
+        const isSelected = selectedValue === value;
+        return (
+          <button
+            key={String(value)}
+            type="button"
+            className={`task-option-button task-option-button-compact ${isSelected ? "is-selected" : ""}`}
+            onClick={() => onSelect(value)}
+            aria-pressed={isSelected}
+            disabled={disabled}
+          >
+            {renderLabel ? renderLabel(value) : String(value)}
+          </button>
+        );
+      })}
+      {trailingSlot}
+    </div>
+  );
+}
+
 export function TaskUpsertionForm(props: {
   options: TaskUpsertionDrawerOptions;
   close: () => void;
@@ -347,77 +380,57 @@ export function TaskUpsertionForm(props: {
           </label>
           <div className="task-estimator-group">
             <span className="task-estimator-label">Puntos de esfuerzo</span>
-            <div className="task-point-selector" role="group" aria-label="Puntos de esfuerzo">
-              {EFFORT_POINT_VALUES.map((value) => {
-                const isSelected = Number(effortPoints) === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`task-point-button ${isSelected ? "is-selected" : ""}`}
-                    onClick={() => setEffortPoints(String(value))}
-                    aria-pressed={isSelected}
-                    aria-label={`${value} puntos`}
-                    disabled={readOnly}
-                  >
-                    <span className="task-point-dot" />
-                    <span>{value}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <CompactOptionGroup
+              ariaLabel="Puntos de esfuerzo"
+              values={[...EFFORT_POINT_VALUES]}
+              selectedValue={effortPoints ? Number(effortPoints) : null}
+              disabled={readOnly}
+              onSelect={(value) => setEffortPoints(String(value))}
+            />
           </div>
         </div>
 
         <div className="task-hour-shell">
           <div className="task-estimator-group">
             <span className="task-estimator-label">Horas estimadas</span>
-            <div className="task-hour-switch" role="group" aria-label="Horas estimadas">
-              {ESTIMATED_HOUR_PRESETS.map((preset) => {
-                const isSelected = selectedEstimatedPreset === preset;
-                return (
-                  <button
-                    key={preset}
-                    type="button"
-                    className={`task-hour-option ${isSelected ? "is-selected" : ""}`}
-                    onClick={() => {
-                      setSelectedEstimatedPreset(preset);
-                      setCustomEstimatedHours("");
-                    }}
-                    aria-pressed={isSelected}
-                    disabled={readOnly}
-                  >
-                    {preset}
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                className={`task-hour-option task-hour-input-option ${selectedEstimatedPreset === null ? "is-selected" : ""}`}
-                onClick={() => {
-                  setSelectedEstimatedPreset(null);
-                  window.setTimeout(() => customHoursInputRef.current?.focus(), 0);
-                }}
-                aria-pressed={selectedEstimatedPreset === null}
-                disabled={readOnly}
-              >
-                <span>Input</span>
-                <input
-                  ref={customHoursInputRef}
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={customEstimatedHours}
-                  onFocus={() => setSelectedEstimatedPreset(null)}
-                  onChange={(event) => {
+            <CompactOptionGroup
+              ariaLabel="Horas estimadas"
+              values={[...ESTIMATED_HOUR_PRESETS]}
+              selectedValue={selectedEstimatedPreset}
+              disabled={readOnly}
+              onSelect={(value) => {
+                setSelectedEstimatedPreset(Number(value));
+                setCustomEstimatedHours("");
+              }}
+              trailingSlot={
+                <button
+                  type="button"
+                  className={`task-option-button task-option-button-compact task-hour-input-option ${selectedEstimatedPreset === null ? "is-selected" : ""}`}
+                  onClick={() => {
                     setSelectedEstimatedPreset(null);
-                    setCustomEstimatedHours(event.target.value);
+                    window.setTimeout(() => customHoursInputRef.current?.focus(), 0);
                   }}
-                  placeholder="Horas"
+                  aria-pressed={selectedEstimatedPreset === null}
                   disabled={readOnly}
-                />
-              </button>
-            </div>
+                >
+                  <span>Input</span>
+                  <input
+                    ref={customHoursInputRef}
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={customEstimatedHours}
+                    onFocus={() => setSelectedEstimatedPreset(null)}
+                    onChange={(event) => {
+                      setSelectedEstimatedPreset(null);
+                      setCustomEstimatedHours(event.target.value);
+                    }}
+                    placeholder="Horas"
+                    disabled={readOnly}
+                  />
+                </button>
+              }
+            />
           </div>
 
           <div className="form-grid two-columns">

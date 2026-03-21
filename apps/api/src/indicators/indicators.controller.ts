@@ -10,13 +10,13 @@ export class IndicatorsController {
   constructor(private readonly indicatorsService: IndicatorsService) {}
 
   @Get("products/:productId/burnup")
-  @Roles("platform_admin", "product_owner", "scrum_master")
+  @Roles("platform_admin", "product_owner", "scrum_master", "team_member")
   burnup(@CurrentUser() user: AuthUser, @Param("productId") productId: string, @Query("sprintId") sprintId: string) {
     return this.indicatorsService.burnup(productId, sprintId, user);
   }
 
   @Get("products/:productId/burndown")
-  @Roles("platform_admin", "product_owner", "scrum_master")
+  @Roles("platform_admin", "product_owner", "scrum_master", "team_member")
   burndown(@CurrentUser() user: AuthUser, @Param("productId") productId: string, @Query("sprintId") sprintId: string) {
     return this.indicatorsService.burndown(productId, sprintId, user);
   }

@@ -82,7 +82,6 @@ export class TasksService {
 
     const tasks = await this.prisma.task.findMany({
       where: {
-        status: { not: "Done" },
         sprint: {
           status: SprintStatus.ACTIVE
         },
