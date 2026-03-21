@@ -114,15 +114,7 @@ export const FocusedView = observer(function FocusedView() {
   const canAssignOthers = canAssignFocusedTaskToOthers(user?.role);
   const canEditTasks = canEditTaskFields(user?.role);
   const editLabel = canEditTasks ? "Editar" : "Abrir";
-  const focusedSummary = user?.role === "team_member"
-    ? "Ves solo tareas propias o sin asignar. Las tarjetas sin responsable pueden ser tomadas desde aqui sin salir del flujo."
-    : "Ves todas las tareas pendientes visibles en kanban. Desde aqui puedes abrirlas y operar segun los permisos de tu rol.";
-  const unassignedSummary = user?.role === "team_member"
-    ? "Tarjetas que puedes tomar desde Focused."
-    : "Tarjetas visibles que aun no tienen responsable.";
-  const kanbanSummary = user?.role === "team_member"
-    ? "Abre cada tarea en drawer, conversa desde ahi y opera solo lo que tu rol permite."
-    : "Abre cada tarea en drawer, revisa toda la carga visible y opera segun tu rol.";
+
   const statusOptions = board.columns.length > 0
     ? board.columns.map((column) => column.name)
     : ["Todo", "In Progress", "Blocked", "Done"];
@@ -221,7 +213,7 @@ export const FocusedView = observer(function FocusedView() {
   return (
     <div className="stack-lg">
       <section className="card focused-hero">
-        <h2>Trabajo en curso</h2>
+        <h2>Sprint actual</h2>
         {error ? <p className="error-text">{error}</p> : null}
       </section>
 
@@ -229,22 +221,18 @@ export const FocusedView = observer(function FocusedView() {
         <article className="metric metric-kpi">
           <span className="metric-kpi-label">En tablero</span>
           <strong>{allTasks.length}</strong>
-          <small>Tareas pendientes visibles ahora.</small>
         </article>
         <article className="metric metric-kpi">
           <span className="metric-kpi-label">Asignadas a ti</span>
           <strong>{ownTaskCount}</strong>
-          <small>Trabajo que ya quedo bajo tu responsabilidad.</small>
         </article>
         <article className="metric metric-kpi">
           <span className="metric-kpi-label">Sin responsable</span>
           <strong>{unassignedTaskCount}</strong>
-          <small>{unassignedSummary}</small>
         </article>
         <article className="metric metric-kpi">
           <span className="metric-kpi-label">Bloqueadas</span>
           <strong>{blockedTaskCount}</strong>
-          <small>Items que requieren destrabe o seguimiento.</small>
         </article>
       </section>
 
