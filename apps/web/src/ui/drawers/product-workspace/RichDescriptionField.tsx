@@ -21,7 +21,9 @@ import {
   Separator,
   tablePlugin,
   toolbarPlugin,
-  UndoRedo
+  UndoRedo,
+  diffSourcePlugin,
+  DiffSourceToggleWrapper
 } from "@mdxeditor/editor";
 import "@mdxeditor/editor/style.css";
 import "./rich-description-field.css";
@@ -174,22 +176,25 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
             codeBlockLanguages: CODE_BLOCK_LANGUAGES
           }),
           markdownShortcutPlugin(),
+          diffSourcePlugin({ viewMode: "rich-text" }),
           toolbarPlugin({
             toolbarContents: () => (
-              <>
-                <UndoRedo />
-                <Separator />
-                <BlockTypeSelect />
-                <Separator />
-                <BoldItalicUnderlineToggles />
-                <Separator />
-                <ListsToggle />
-                <Separator />
-                <CreateLink />
-                <InsertImage />
-                <InsertTable />
-                <InsertCodeBlock />
-              </>
+              <DiffSourceToggleWrapper>
+                <>
+                  <UndoRedo />
+                  <Separator />
+                  <BlockTypeSelect />
+                  <Separator />
+                  <BoldItalicUnderlineToggles />
+                  <Separator />
+                  <ListsToggle />
+                  <Separator />
+                  <CreateLink />
+                  <InsertImage />
+                  <InsertTable />
+                  <InsertCodeBlock />
+                </>
+              </DiffSourceToggleWrapper>
             )
           })
         ]}

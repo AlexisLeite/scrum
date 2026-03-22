@@ -378,8 +378,7 @@ const LoginView = observer(function LoginView() {
       <div className="auth-card-header">
         <span className="brand-badge">SP</span>
         <div>
-          <h1>ScrumPilot</h1>
-          <p>Entra directo a tu vista Focused.</p>
+          <h1>Scrum</h1>
         </div>
       </div>
       <div className="form-grid">
