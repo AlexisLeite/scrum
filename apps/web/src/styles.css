@@ -1556,6 +1556,7 @@ html .drawer-content .card {
   color: var(--text-secondary);
   line-height: 1.6;
   min-width: 0;
+  width: 920px;
   max-width: 920px;
   margin: auto;
 

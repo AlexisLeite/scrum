@@ -18,18 +18,26 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
   const [expanded, setExpanded] = useState(false)
 
   const { markdown, compact = false, emptyLabel = "Sin contenido.", className = "" } = props;
-  const content = markdown?.trim();
+  let content = markdown?.trim();
 
   if (!content) {
     return <p className={`muted markdown-preview-empty ${className}`.trim()}>{emptyLabel}</p>;
   }
 
-  const sliced = markdownWithTitle(props.title, `${content.slice(0, expanded ? undefined : previewSize)}${content.length > previewSize && !expanded ? '...' : ''}`, props?.titleLevel)
+  let mustSlice = content.length > previewSize;
+  if (!expanded && mustSlice) {
+    content = markdownWithTitle(props.title, `${content.slice(0, expanded ? undefined : previewSize)}...`, props?.titleLevel)
+    const sliceIndex = [...content.matchAll(/\n/g)][5];
+    if (sliceIndex) {
+      content = `${content.slice(0, sliceIndex.index)}\n...`
+    }
+  }
 
   return (
     <div className={`markdown-preview ${compact ? "is-compact" : ""} ${className}`.trim()}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{sliced}</ReactMarkdown>
-      {content.length > previewSize && !expanded && <button className="btn btn-secondary sm" onClick={() => setExpanded(true)}> Expandir</button>}
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      {mustSlice && !expanded && <button className="btn btn-secondary sm" onClick={() => setExpanded(true)}> Expandir</button>}
+      {mustSlice && expanded && <button className="btn btn-secondary sm" onClick={() => setExpanded(false)}> Colapsar</button>}
     </div >
   );
 }
