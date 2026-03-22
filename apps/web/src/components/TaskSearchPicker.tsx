@@ -1,8 +1,11 @@
 import React from "react";
 import "./task-search-picker.css";
+import { MarkdownPreview } from "../ui/drawers/product-workspace/MarkdownPreview";
 
 type TaskSearchOption = {
   id: string;
+  description: string;
+  createdAt: string;
   title: string;
   status: string;
   unfinishedSprintCount?: number;
@@ -36,7 +39,7 @@ export function TaskSearchPicker({
   const filteredTasks = React.useMemo(() => {
     const normalizedQuery = normalize(query);
     if (!normalizedQuery) {
-      return tasks.slice(0, 8);
+      return tasks.slice(0, 20);
     }
     return tasks.filter((task) =>
       [task.title, task.story?.title, task.assignee?.name, task.status]
@@ -44,7 +47,7 @@ export function TaskSearchPicker({
         .join(" ")
         .includes(normalizedQuery)
     );
-  }, [query, tasks]);
+  }, [query, tasks]).sort((a, b) => new Date(a.createdAt) < new Date(b.createdAt) ? 1 : -1);
 
   React.useEffect(() => {
     setHighlightedIndex(0);
@@ -52,9 +55,6 @@ export function TaskSearchPicker({
 
   const pickTask = async (taskId: string) => {
     await onPick(taskId);
-    setQuery("");
-    setOpen(false);
-    setHighlightedIndex(0);
   };
 
   return (
@@ -123,8 +123,8 @@ export function TaskSearchPicker({
                       <span className="status status-todo">{task.status}</span>
                     </div>
                   </div>
-                  <p className="muted">Historia: {task.story?.title ?? "Sin historia"}</p>
-                  <p className="muted">Responsable: {task.assignee?.name ?? "Sin asignar"}</p>
+                  <MarkdownPreview markdown={task.description} />
+                  <strong className="muted">Historia: {task.story?.title ?? "Sin historia"}</strong>
                 </button>
               ))}
             </div>

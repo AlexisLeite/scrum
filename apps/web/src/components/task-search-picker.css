@@ -9,7 +9,7 @@
   gap: 0.38rem;
 }
 
-.task-search-picker-label > span {
+.task-search-picker-label>span {
   color: var(--text-primary);
   font-weight: 700;
 }
@@ -37,7 +37,7 @@
 .task-search-picker-list {
   display: grid;
   gap: 0.55rem;
-  max-height: 22rem;
+  max-height: 80vh;
   overflow: auto;
 }
 

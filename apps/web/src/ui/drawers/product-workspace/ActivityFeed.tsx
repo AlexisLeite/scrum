@@ -1,4 +1,4 @@
-import React from "react";
+import { useState } from "react";
 
 type ActivityEntry = {
   id: string;
@@ -35,16 +35,18 @@ function resolveDetails(entry: ActivityEntry): string {
 
 export function ActivityFeed(props: { entries: ActivityEntry[]; emptyLabel?: string }) {
   const { entries, emptyLabel = "Sin actividad registrada." } = props;
+  const [maxIndex, setMaxIndex] = useState(5);
 
   return (
     <ul className="plain-list">
-      {entries.map((entry) => (
+      {entries.slice(0, maxIndex).map((entry) => (
         <li key={entry.id}>
           <strong>{resolveSummary(entry)}</strong>
           <span className="muted"> por {resolveActorName(entry)} en {formatDateTime(entry.createdAt)}</span>
           {resolveDetails(entry) ? <p className="muted">{resolveDetails(entry)}</p> : null}
         </li>
       ))}
+      {maxIndex < entries.length && <button className="btn-secondary sm btn" onClick={() => setMaxIndex(c => c + 10)}>Mostrar más</button>}
       {entries.length === 0 ? <li className="muted">{emptyLabel}</li> : null}
     </ul>
   );
