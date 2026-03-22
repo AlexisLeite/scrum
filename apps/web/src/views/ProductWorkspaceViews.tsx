@@ -19,13 +19,11 @@ import { ProductMetricsPanel } from "./product-workspace/ProductMetricsPanel";
 import {
   canCommentOnVisibleTask,
   canCreateTasks,
-  canCreateTaskFromMessage,
-  canEditStories,
-  canEditTaskFields,
+  canCreateTaskFromMessage, canEditTaskFields,
   canManageSprints,
-  canMoveVisibleTask,
-  canRankStories
+  canMoveVisibleTask
 } from "../lib/permissions";
+import { markdownWithTitle } from "../util/markdownWithTitle";
 
 type StoryStatus = "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
 type SprintStatus = "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
@@ -145,8 +143,7 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
   return (
     <div className="stack-lg">
       <section className="card">
-        <h2>{product?.name ?? "Producto"}</h2>
-        <MarkdownPreview markdown={product?.description} compact className="muted" emptyLabel="Sin descripcion" />
+        <MarkdownPreview title={product?.name ?? "Producto"} markdown={product?.description} compact className="muted" emptyLabel="Sin descripcion" />
       </section>
       <section className="metrics-grid">
         <article className="metric card"><h3>{stories.length}</h3><p>Historias de usuario</p></article>
@@ -224,20 +221,14 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   return (
     <div className="stack-lg">
       <section className="card">
-        <div className="section-head">
-          <h2>Backlog del producto</h2>
+        <div className="stack-h mb-4">
+          <h3>Historias</h3>
           {canManageStories ? (
             <button type="button" className="btn btn-primary btn-icon" onClick={() => openStoryDrawer()} aria-label="Crear historia">
               +
             </button>
           ) : null}
         </div>
-        <p className="muted">Arrastra las historias para priorizarlas. El orden se guarda automaticamente al soltar.</p>
-        {reorderError ? <p className="error-text">{reorderError}</p> : null}
-      </section>
-
-      <section className="card">
-        <h3>Historias priorizadas</h3>
         <div className="story-list">
           {orderedStories.map((story, index) => (
             <article
@@ -257,69 +248,42 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
                 void moveStory(draggedStoryId, index);
               }}
             >
-              <div className="story-card-order">
-                <span className="story-card-order-label">Prioridad {index + 1}</span>
-                <div className="row-actions compact">
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    aria-label={`Mover ${story.title} hacia arriba`}
-                    disabled={!canRankStories || index === 0 || reordering}
-                    onClick={() => void moveStory(story.id, index - 1)}
-                  >
-                    Subir
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    aria-label={`Mover ${story.title} hacia abajo`}
-                    disabled={!canRankStories || index === orderedStories.length - 1 || reordering}
-                    onClick={() => void moveStory(story.id, index + 1)}
-                  >
-                    Bajar
-                  </button>
-                </div>
-              </div>
               <div className="story-card-main">
                 <div className="story-card-heading">
-                  <div>
-                    <h4>{story.title}</h4>
-                    <MarkdownPreview markdown={story.description} compact className="muted" emptyLabel="Sin descripcion" />
-                  </div>
-                  <div className="story-card-metrics">
-                    <span className="pill">SP {story.storyPoints}</span>
-                    <span className="pill">{story.tasks?.length ?? 0} tareas</span>
-                  </div>
+                  <MarkdownPreview markdown={markdownWithTitle(story.title, story.description)} compact className="muted" emptyLabel="Sin descripcion" />
                 </div>
-                <div className="story-card-footer">
-                  <label className="story-card-status">
-                    Estado
-                    {story.status === "DRAFT" || story.status === "READY" ? (
-                      <select
-                        value={story.status}
-                        disabled={!canManageStories}
-                        onChange={(event) =>
-                          void controller.updateStory(story.id, {
-                            status: event.target.value as "DRAFT" | "READY"
-                          })
-                        }
-                      >
-                        {manualStoryStatusOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className={statusClass(story.status)}>{story.status}</span>
-                    )}
-                  </label>
-                  <div className="row-actions compact">
-                    {canManageStories ? <button className="btn btn-secondary" onClick={() => openStoryDrawer(story)}>Editar</button> : null}
-                    <NavLink to={productStoryTasksPath(productId, story.id)} className="btn btn-secondary">
-                      Gestionar tareas
-                    </NavLink>
-                  </div>
+              </div>
+              <div className="story-card-order">
+                <label className="story-card-status">
+                  {story.status === "DRAFT" || story.status === "READY" ? (
+                    <select
+                      value={story.status}
+                      disabled={!canManageStories}
+                      onChange={(event) =>
+                        void controller.updateStory(story.id, {
+                          status: event.target.value as "DRAFT" | "READY"
+                        })
+                      }
+                    >
+                      {manualStoryStatusOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className={statusClass(story.status)}>{story.status}</span>
+                  )}
+                </label>
+                <div className="row-actions compact">
+                  {canManageStories ? <button className="btn btn-secondary" onClick={() => openStoryDrawer(story)}>Editar</button> : null}
+                  <NavLink to={productStoryTasksPath(productId, story.id)} className="btn btn-secondary">
+                    Gestionar tareas
+                  </NavLink>
+                </div>
+                <div className="story-card-metrics">
+                  <span className="pill">SP {story.storyPoints}</span>
+                  <span className="pill">{story.tasks?.length ?? 0} tareas</span>
                 </div>
               </div>
             </article>
@@ -412,27 +376,23 @@ export const StoryTasksView = observer(function StoryTasksView() {
   return (
     <div className="stack-lg">
       <section className="card">
-        <div className="section-head">
-          <div>
-            <p className="workspace-context">Historia actual</p>
-            <h2>{currentStory?.title ?? "Tareas de historia"}</h2>
-          </div>
-          {canManageTasks ? (
-            <button type="button" className="btn btn-primary btn-icon" onClick={() => openTaskDrawer()} aria-label="Crear tarea">
-              +
-            </button>
-          ) : null}
-        </div>
         <div className="story-detail-strip">
-          {currentStory ? <span className={statusClass(currentStory.status)}>{currentStory.status}</span> : null}
-          <span className="muted">Gestiona las tareas y sus estados sin salir del workspace del producto.</span>
+          <MarkdownPreview markdown={markdownWithTitle(currentStory?.title, currentStory?.description)} />
         </div>
         {formError ? <p className="error-text">{formError}</p> : null}
       </section>
 
       <section className="card">
-        <h3>Tareas de la historia</h3>
-        <table className="table">
+        <div className="stack-h pb-3">
+          <h3>Tareas de la historia</h3>
+          {canManageTasks ? (
+            <button type="button" className="sm btn btn-primary btn-icon" onClick={() => openTaskDrawer()} aria-label="Crear tarea">
+              +
+            </button>
+          ) : null}
+        </div>
+
+        <table className="table story__tasks__table">
           <thead>
             <tr>
               <th>Tarea</th>
@@ -447,8 +407,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
             {tasks.map((task) => (
               <tr key={task.id}>
                 <td>
-                  <strong>{task.title}</strong>
-                  <MarkdownPreview markdown={task.description} compact className="muted" emptyLabel="Sin descripcion" />
+                  <MarkdownPreview markdown={markdownWithTitle(task.title, task.description, 4)} compact className="muted" emptyLabel="Sin descripcion" />
                   {task.unfinishedSprintCount ? (
                     <small className="muted">No terminada en {task.unfinishedSprintCount} sprint{task.unfinishedSprintCount === 1 ? "" : "s"}</small>
                   ) : null}
@@ -545,20 +504,16 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
 
   return (
     <div className="stack-lg">
+
       <section className="card">
-        <div className="section-head">
-          <h2>Planificacion de sprint</h2>
+        <div className="stack-h pb-4">
+          <h3>Sprints del producto</h3>
           {canManageSprints ? (
             <button type="button" className="btn btn-primary btn-icon" onClick={() => openSprintDrawer()} aria-label="Crear sprint">
               +
             </button>
           ) : null}
         </div>
-        <p className="muted">La alta y edicion de sprints se realiza desde drawers reutilizables.</p>
-      </section>
-
-      <section className="card">
-        <h3>Sprints del producto</h3>
         <div className="sprint-grid">
           {sprints.map((sprint) => (
             <article key={sprint.id} className="sprint-tile">
@@ -670,18 +625,18 @@ export const SprintBoardView = observer(function SprintBoardView() {
         defaultStatus,
         task: task
           ? {
-              id: task.id,
-              title: task.title,
-              description: task.description ?? null,
-              status: task.status,
-              storyId: task.story?.id ?? task.storyId ?? null,
-              sprintId: task.sprintId ?? sprintId,
-              assigneeId: task.assignee?.id ?? task.assigneeId ?? null,
-              effortPoints: task.effortPoints ?? null,
-              estimatedHours: task.estimatedHours ?? null,
-              actualHours: task.actualHours ?? null,
-              unfinishedSprintCount: task.unfinishedSprintCount ?? 0
-            }
+            id: task.id,
+            title: task.title,
+            description: task.description ?? null,
+            status: task.status,
+            storyId: task.story?.id ?? task.storyId ?? null,
+            sprintId: task.sprintId ?? sprintId,
+            assigneeId: task.assignee?.id ?? task.assigneeId ?? null,
+            effortPoints: task.effortPoints ?? null,
+            estimatedHours: task.estimatedHours ?? null,
+            actualHours: task.actualHours ?? null,
+            unfinishedSprintCount: task.unfinishedSprintCount ?? 0
+          }
           : undefined,
         fixedSprintId: task ? undefined : sprintId,
         allowSprintChange: task ? true : false,

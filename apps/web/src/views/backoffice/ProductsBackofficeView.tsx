@@ -51,7 +51,7 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
       <section className="card">
         <div className="stack-h pb-4">
           <h3>Catalogo</h3>
-          {canManageProducts ? <button className="btn btn-primary" onClick={openCreate}>+ Producto</button> : null}
+          {canManageProducts ? <button className="btn btn-primary" onClick={openCreate}>+</button> : null}
         </div>
 
         <table className="table">
@@ -71,8 +71,8 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
                 <td><MarkdownPreview markdown={product.description} compact emptyLabel="-" /></td>
                 <td>
                   <div className="row-actions compact">
-                    {canManageProducts ? <button className="btn btn-secondary" onClick={() => openEdit(product)}>Editar</button> : null}
                     <NavLink to={productOverviewPath(product.id)} className="btn btn-primary">Abrir workspace</NavLink>
+                    {canManageProducts ? <button className="btn btn-secondary" onClick={() => openEdit(product)}>Editar</button> : null}
                     {canManageProducts ? <button className="btn btn-secondary" onClick={() => void removeProduct(product)}>Eliminar</button> : null}
                   </div>
                 </td>

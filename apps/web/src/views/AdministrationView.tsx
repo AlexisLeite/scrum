@@ -9,36 +9,34 @@ export function administrationDefaultPath(role: Role): string {
   return "/administration/users";
 }
 
-export function AdministrationView({ role }: { role: Role }) {
+export const AdministrationLinks = ({ role }: { role: Role }) => {
   const showProducts = role === "platform_admin" || role === "product_owner" || role === "scrum_master";
   const showTeams = role === "platform_admin" || role === "product_owner" || role === "scrum_master";
   const showUsers = canViewUsersAdministration(role);
-  const roleClass = `status status-${role.replace(/_/g, "-")}`;
-  const visibleAreas = [
-    showProducts ? "Productos" : null,
-    showTeams ? "Equipos" : null,
-    showUsers ? "Usuarios" : null
-  ].filter(Boolean) as string[];
 
+  return <> {showProducts ? (
+    <NavLink to="/administration/products" className={({ isActive }) => isActive ? "tab active" : "tab"}>
+      Productos
+    </NavLink>
+  ) : null}
+    {showTeams ? (
+      <NavLink to="/administration/teams" className={({ isActive }) => isActive ? "tab active" : "tab"}>
+        Equipos
+      </NavLink>
+    ) : null}
+    {showUsers ? (
+      <NavLink to="/administration/users" className={({ isActive }) => isActive ? "tab active" : "tab"}>
+        Usuarios
+      </NavLink>
+    ) : null}</>
+}
+
+export function AdministrationView({ role }: { role: Role }) {
   return (
     <div className="stack-lg">
-      <section className="card definition-hero">
+      <section className="card workspace-shell-card">
         <div className="tabs">
-          {showProducts ? (
-            <NavLink to="/administration/products" className={({ isActive }) => isActive ? "tab active" : "tab"}>
-              Productos
-            </NavLink>
-          ) : null}
-          {showTeams ? (
-            <NavLink to="/administration/teams" className={({ isActive }) => isActive ? "tab active" : "tab"}>
-              Equipos
-            </NavLink>
-          ) : null}
-          {showUsers ? (
-            <NavLink to="/administration/users" className={({ isActive }) => isActive ? "tab active" : "tab"}>
-              Usuarios
-            </NavLink>
-          ) : null}
+          <AdministrationLinks role={role} />
         </div>
       </section>
       <Outlet />

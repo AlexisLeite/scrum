@@ -618,6 +618,9 @@ label>small.muted {
   background: var(--bg-card);
   box-shadow: var(--shadow-soft);
   transition: border-color var(--trans), box-shadow var(--trans), background var(--trans), transform var(--trans);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .card:hover {
@@ -692,7 +695,7 @@ a.btn {
 
 .btn.sm,
 a.btn.sm {
-  padding: 0.20 rem 0.62rem;
+  padding: 0.20rem 0.62rem;
   font-size: 0.85em;
 }
 
@@ -713,6 +716,7 @@ a.btn:active {
   box-shadow: 0 8px 18px color-mix(in srgb, var(--accent-a) 32%, transparent);
 }
 
+a.btn-secondary,
 .btn-secondary {
   color: var(--text-main);
   border-color: var(--border);
@@ -726,8 +730,10 @@ a.btn:active {
 }
 
 .btn-icon {
-  width: var(--control-height);
-  min-width: var(--control-height);
+  width: calc(var(--control-height) * 0.75);
+  min-width: calc(var(--control-height) * 0.75);
+  height: calc(var(--control-height) * 0.75);
+  min-height: calc(var(--control-height) * 0.75);
   padding: 0;
   font-size: 1.22rem;
   line-height: 1;
@@ -735,9 +741,10 @@ a.btn:active {
 
 .row-actions {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  align-items: end;
   gap: 0.6rem;
+  justify-content: end;
 }
 
 .row-actions .btn,
@@ -785,18 +792,6 @@ a.btn:active {
 
 .workspace-title {
   margin: 0;
-}
-
-.workspace-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  flex-wrap: wrap;
-}
-
-.workspace-meta-text {
-  color: var(--text-muted);
-  font-weight: 600;
 }
 
 .workspace-back-link {
@@ -990,7 +985,7 @@ a.btn:active {
 .story-card {
   display: grid;
   gap: 0.9rem;
-  grid-template-columns: minmax(170px, 220px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 220px);
   padding: 1rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-soft);
@@ -998,11 +993,10 @@ a.btn:active {
       color-mix(in srgb, var(--bg-card) 96%, transparent),
       color-mix(in srgb, var(--bg-soft) 70%, transparent));
   box-shadow: var(--shadow-soft);
-  transition: transform var(--trans), border-color var(--trans), box-shadow var(--trans);
+  transition: border-color var(--trans), box-shadow var(--trans);
 }
 
 .story-card:hover {
-  transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--accent-c) 32%, var(--border-soft));
 }
 
@@ -1041,6 +1035,7 @@ a.btn:active {
 }
 
 .story-card-metrics {
+  align-self: end;
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
@@ -1561,6 +1556,17 @@ html .drawer-content .card {
   color: var(--text-secondary);
   line-height: 1.6;
   min-width: 0;
+  max-width: 920px;
+  margin: auto;
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: var(--text-main);
+  }
 }
 
 .markdown-preview>* {
@@ -1642,9 +1648,9 @@ html .drawer-content .card {
 
 /* --- Visual pass: premium workspace skin --- */
 :root {
-  --page-max: 1680px;
+  --page-max: 1280px;
   --text-primary: var(--text-main);
-  --text-secondary: var(--text-muted);
+  --text-secondary: #d5dfeb;
   --border-subtle: var(--border-soft);
   --panel-elevated: var(--bg-card);
   --panel-muted: var(--bg-soft);
@@ -1814,7 +1820,6 @@ th {
 
 .card:hover {
   border-color: color-mix(in srgb, var(--accent-a) 24%, var(--border-soft));
-  transform: translateY(-1px);
 }
 
 .page-state {
@@ -1933,13 +1938,6 @@ th {
     0 1px 0 rgba(255, 255, 255, 0.3) inset;
 }
 
-.story-card:hover,
-.team-tile:hover,
-.product-tile:hover,
-.sprint-tile:hover {
-  transform: translateY(-2px);
-}
-
 .kanban-board,
 .kb-board {
   display: grid;
@@ -1980,10 +1978,6 @@ th {
   box-shadow:
     0 10px 26px rgba(9, 28, 52, 0.08),
     0 1px 0 rgba(255, 255, 255, 0.25) inset;
-}
-
-.kb-card:hover {
-  transform: translateY(-1px);
 }
 
 .kb-drag-handle {
@@ -2042,17 +2036,7 @@ th {
   background: color-mix(in srgb, var(--bg-card) 96%, transparent);
 }
 
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.99);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
+@keyframes rise-in {}
 
 @media (max-width: 1080px) {
   .kb-toolbar {
@@ -2122,7 +2106,55 @@ th {
   align-items: center;
 }
 
-.rich-description-content>* {
-  margin-top: 0;
-  margin-bottom: 1em;
+.rich-description-content {
+  &>* {
+    margin-top: 0;
+    margin-bottom: 1em;
+  }
+
+  ul,
+  li {
+    margin-left: 10px;
+    padding-left: 0;
+
+  }
+
+}
+
+.story__tasks__table {
+  .markdown-preview {
+    margin: auto;
+  }
+}
+
+.navigation__separate {
+  width: 5px;
+  height: 5px;
+  background: white;
+  align-self: center;
+  border-radius: 100%;
+  margin: 0 20px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  /* for horizontal scrollbars */
+}
+
+/* Track */
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+  /* or your color */
+}
+
+/* Thumb */
+::-webkit-scrollbar-thumb {
+  background: var(--bg-elevated);
+  border-radius: 4px;
+}
+
+/* Optional: hover */
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.6);
 }

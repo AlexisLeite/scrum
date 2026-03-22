@@ -9,10 +9,13 @@ import {
   productSprintsPath
 } from "../routes/product-routes";
 import { useRootStore } from "../stores/root-store";
+import { AdministrationLinks } from "../views/AdministrationView";
+import { Role } from "@scrum/contracts";
 
-function ProductTabs({ productId }: { productId: string }) {
+function ProductTabs({ role, productId }: { role?: Role; productId: string }) {
   return (
     <div className="tabs">
+      {role && <><AdministrationLinks role={role} /> <div className="navigation__separate" /></>}
       <NavLink to={productOverviewPath(productId)} className={({ isActive }) => isActive ? "tab active" : "tab"}>Resumen</NavLink>
       <NavLink to={productBacklogPath(productId)} className={({ isActive }) => isActive ? "tab active" : "tab"}>Backlog</NavLink>
       <NavLink to={productSprintsPath(productId)} className={({ isActive }) => isActive ? "tab active" : "tab"}>Sprints</NavLink>
@@ -51,30 +54,12 @@ export const ProductWorkspaceLayout = observer(function ProductWorkspaceLayout()
     return <Navigate to="/focused" replace />;
   }
 
-  const product = (store.products.items as Array<{ id: string; name: string; key: string }>).find((entry) => entry.id === productId);
-  const sectionLabel = getWorkspaceSectionLabel(location.pathname);
-  const detailLabel = storyId
-    ? `Historia ${storyId.slice(0, 8)}`
-    : sprintId
-      ? `Sprint ${sprintId.slice(0, 8)}`
-      : taskId
-        ? `Tarea ${taskId.slice(0, 8)}`
-      : product?.key ?? "Producto";
-
   return (
     <div className="stack-lg">
       <section className="card workspace-shell-card">
         <div className="workspace-header">
-          <div>
-            <p className="workspace-context">Workspace de producto</p>
-            <h2 className="workspace-title">{product?.name ?? "Producto"}</h2>
-          </div>
-          <div className="workspace-meta">
-            <span className="pill">{sectionLabel}</span>
-            <span className="workspace-meta-text">{detailLabel}</span>
-          </div>
+          {user?.role !== "team_member" ? <ProductTabs role={user?.role} productId={productId} /> : null}
         </div>
-        {user?.role !== "team_member" ? <ProductTabs productId={productId} /> : null}
       </section>
       <Outlet />
     </div>

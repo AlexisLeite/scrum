@@ -255,10 +255,6 @@ export function SprintUpsertionForm(props: {
               <h4>Tareas del sprint</h4>
               <p className="muted">Agrega tareas desde un buscador con teclado y filtra la lista actual sin perder contexto.</p>
             </div>
-            <div className="workspace-meta">
-              <span className="pill">Pendientes {pendingTasks.length}</span>
-              <span className="pill">En sprint {sprintTasks.length}</span>
-            </div>
           </div>
           {tasksLoading ? <p className="muted">Cargando tareas...</p> : null}
 
