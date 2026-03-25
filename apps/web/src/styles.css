@@ -1649,7 +1649,7 @@ html .drawer-content .card {
 
 /* --- Visual pass: premium workspace skin --- */
 :root {
-  --page-max: 1280px;
+  --page-max: 98vw;
   --text-primary: var(--text-main);
   --text-secondary: #d5dfeb;
   --border-subtle: var(--border-soft);
@@ -2158,4 +2158,11 @@ th {
 /* Optional: hover */
 ::-webkit-scrollbar-thumb:hover {
   background-color: rgba(0, 0, 0, 0.6);
+}
+
+.link {
+  &:hover {
+    text-decoration: underline;
+    cursor: pointer;
+  }
 }

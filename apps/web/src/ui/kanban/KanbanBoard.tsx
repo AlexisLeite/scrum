@@ -230,7 +230,7 @@ function TaskCardContent(props: {
           >
             ::
           </button>
-          <h5>{task.title}</h5>
+          <h5 className="link" onClick={() => onEditTask(task)}>{task.title}</h5>
         </div>
         <span className="kb-story" title={task.story?.title ?? "Sin historia"}>
           {task.story?.title ?? "Sin historia"}
@@ -271,14 +271,6 @@ function TaskCardContent(props: {
         ) : (
           <span className="pill">{task.status}</span>
         )}
-        <button
-          type="button"
-          className="btn btn-secondary kb-edit-btn"
-          onClick={() => onEditTask(task)}
-          disabled={pending}
-        >
-          {editActionLabel}
-        </button>
       </div>
 
       <div className={`kb-description-shell ${descriptionExpanded ? "is-expanded" : ""}`} title={description}>
