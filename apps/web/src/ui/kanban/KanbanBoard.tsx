@@ -232,9 +232,6 @@ function TaskCardContent(props: {
           </button>
           <h5 className="link" onClick={() => onEditTask(task)}>{task.title}</h5>
         </div>
-        <span className="kb-story" title={task.story?.title ?? "Sin historia"}>
-          {task.story?.title ?? "Sin historia"}
-        </span>
       </div>
 
       <div className="kb-control-row">
@@ -291,7 +288,10 @@ function TaskCardContent(props: {
       </div>
 
       <div className="kb-meta-row">
-        <span className="muted">Actualizado: {formatUpdatedAt(task.updatedAt)}</span>
+        <span className="kb-story" title={task.story?.title ?? "Sin historia"}>
+          {task.story?.title ?? "Sin historia"}
+        </span>
+        <span className="kb-date muted">{formatUpdatedAt(task.updatedAt)}</span>
         <div className="kb-meta-pills">
           {task.isHistoricalUnfinished ? <span className="pill">Pendiente al cierre</span> : null}
           {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
@@ -534,13 +534,13 @@ function KanbanDragOverlay(props: { task: KanbanTask | null; width?: number | nu
           <span className="kb-drag-handle is-static">::</span>
           <h5>{task.title}</h5>
         </div>
-        <span className="kb-story" title={task.story?.title ?? "Sin historia"}>
-          {task.story?.title ?? "Sin historia"}
-        </span>
       </div>
       <p className="kb-description">{truncateDescription(previewText(task.description), 255).value || "Sin descripcion"}</p>
       <div className="kb-meta-row">
-        <span className="muted">Actualizado: {formatUpdatedAt(task.updatedAt)}</span>
+        <span className="kb-story" title={task.story?.title ?? "Sin historia"}>
+          {task.story?.title ?? "Sin historia"}
+        </span>
+        <span className="kb-date muted">{formatUpdatedAt(task.updatedAt)}</span>
         <span className="pill">SP {task.effortPoints ?? "-"}</span>
       </div>
     </article>
