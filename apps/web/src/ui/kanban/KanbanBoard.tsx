@@ -278,17 +278,8 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
           compact
           className={`kb-description-markdown ${descriptionExpanded ? "is-expanded" : ""}`}
           emptyLabel="Sin descripcion"
-          previewSize={descriptionExpanded ? 10_000 : 255}
+          previewSize={255}
         />
-        {!descriptionExpanded && truncatedDescription.truncated ? (
-          <button
-            type="button"
-            className="kb-more-btn"
-            onClick={() => onExpandDescription?.(task.id)}
-          >
-            Mostrar mas
-          </button>
-        ) : null}
       </div>
 
       <div className="kb-meta-row">
