@@ -173,6 +173,10 @@
   display: grid;
   gap: 0.35rem;
   overflow: hidden;
+
+  .markdown-preview {
+    max-width: fit-content;
+  }
 }
 
 .kb-description-shell.is-expanded .kb-description {
