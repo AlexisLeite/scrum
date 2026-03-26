@@ -14,6 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { MarkdownPreview } from "../drawers/product-workspace/MarkdownPreview";
 import { TaskCompletionDialog } from "../drawers/product-workspace/TaskCompletionDialog";
 import "./kanban.css";
 import { KanbanAssignee, KanbanColumn, KanbanTask } from "./types";
@@ -272,11 +273,13 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
       </div>
 
       <div className={`kb-description-shell ${descriptionExpanded ? "is-expanded" : ""}`} title={description}>
-        {descriptionExpanded ? (
-          <p className="kb-description kb-description-expanded">{description || "Sin descripcion"}</p>
-        ) : (
-          <p className="kb-description">{truncatedDescription.value || "Sin descripcion"}</p>
-        )}
+        <MarkdownPreview
+          markdown={task.description}
+          compact
+          className={`kb-description-markdown ${descriptionExpanded ? "is-expanded" : ""}`}
+          emptyLabel="Sin descripcion"
+          previewSize={descriptionExpanded ? 10_000 : 255}
+        />
         {!descriptionExpanded && truncatedDescription.truncated ? (
           <button
             type="button"
@@ -536,7 +539,13 @@ function KanbanDragOverlay(props: { task: KanbanTask | null; width?: number | nu
           <h5>{task.title}</h5>
         </div>
       </div>
-      <p className="kb-description">{truncateDescription(previewText(task.description), 255).value || "Sin descripcion"}</p>
+      <MarkdownPreview
+        markdown={task.description}
+        compact
+        className="kb-description-markdown"
+        emptyLabel="Sin descripcion"
+        previewSize={255}
+      />
       <div className="kb-meta-row">
         <span className="kb-story" title={task.story?.title ?? "Sin historia"}>
           {task.story?.title ?? "Sin historia"}

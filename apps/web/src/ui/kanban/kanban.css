@@ -173,14 +173,38 @@
   display: grid;
   gap: 0.35rem;
   overflow: hidden;
-
-  .markdown-preview {
-    max-width: fit-content;
-  }
 }
 
 .kb-description-shell.is-expanded .kb-description {
   max-height: 40rem;
+}
+
+.kb-description-markdown.markdown-preview {
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.kb-description-markdown.markdown-preview > * {
+  margin-block: 0.18rem;
+}
+
+.kb-description-markdown.markdown-preview p,
+.kb-description-markdown.markdown-preview li,
+.kb-description-markdown.markdown-preview code,
+.kb-description-markdown.markdown-preview a,
+.kb-description-markdown.markdown-preview blockquote {
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.kb-description-markdown.markdown-preview pre {
+  margin: 0.2rem 0;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.74rem;
+}
+
+.kb-description-markdown.markdown-preview table {
+  font-size: 0.75rem;
 }
 
 .kb-description {
