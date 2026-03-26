@@ -15,6 +15,16 @@ export interface UserProfileDto {
   teamIds: string[];
 }
 
+export interface ApiKeyDto {
+  id: string;
+  name: string;
+  prefix: string;
+  maskedCode: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TeamDto {
   id: string;
   name: string;
@@ -156,4 +166,15 @@ export interface UserActivityStatsDto {
   sprintActions: number;
   averageVelocity: number;
   velocityBySprint: UserActivityVelocityPointDto[];
+}
+
+export type DraftEntityType = "PRODUCT" | "STORY" | "TASK" | "TASK_MESSAGE";
+
+export interface DraftDto {
+  entityType: DraftEntityType;
+  entityId: string;
+  productId?: string | null;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
 }

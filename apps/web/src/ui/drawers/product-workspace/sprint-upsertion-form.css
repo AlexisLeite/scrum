@@ -27,14 +27,15 @@
 }
 
 .sprint-task-suggestion {
-  display: inline-grid;
-  gap: 0.15rem;
+  display: grid;
+  gap: 0.35rem;
   padding: 0.6rem 0.8rem;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
   color: var(--text-primary);
   text-align: left;
+  min-width: min(100%, 18rem);
 }
 
 .sprint-task-suggestion span {
@@ -46,6 +47,10 @@
 .sprint-task-suggestion:hover {
   border-color: color-mix(in srgb, var(--accent-a) 38%, var(--border));
   background: color-mix(in srgb, var(--bg-hover) 88%, transparent);
+}
+
+.sprint-task-suggestion-actions {
+  justify-content: flex-end;
 }
 
 .sprint-task-filter {

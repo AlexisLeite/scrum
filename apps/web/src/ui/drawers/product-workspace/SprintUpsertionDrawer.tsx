@@ -2,10 +2,12 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ProductController } from "../../../controllers";
 import { productSprintDefinitionPath } from "../../../routes/product-routes";
+import { useRootStore } from "../../../stores/root-store";
 import { TaskSearchPicker } from "../../../components/TaskSearchPicker";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { RichDescriptionField } from "./RichDescriptionField";
+import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import "./sprint-upsertion-form.css";
 
 type SprintTeamOption = { id: string; name: string };
@@ -23,6 +25,8 @@ type EditableSprint = {
 type PendingTask = {
   id: string;
   title: string;
+  description: string;
+  createdAt: string;
   status: string;
   unfinishedSprintCount?: number;
   story?: { id: string; title: string } | null;
@@ -83,6 +87,7 @@ export function SprintUpsertionForm(props: {
 }) {
   const { options, close, closeLabel = "Cancelar", definitionHref, closeOnSubmit = true, showCloseAction = true } = props;
   const { controller, productId, teams, sprint, onDone } = options;
+  const store = useRootStore();
   const navigate = useNavigate();
 
   const [name, setName] = React.useState(sprint?.name ?? "");
@@ -191,6 +196,40 @@ export function SprintUpsertionForm(props: {
     [sprintTaskQuery, sprintTasks]
   );
 
+  const openTaskDetail = React.useCallback(
+    (task: PendingTask) => {
+      const relatedStory = task.story ? [{ id: task.story.id, title: task.story.title }] : [];
+      const relatedSprint = sprint ? [{ id: sprint.id, name: sprint.name }] : [];
+      const relatedAssignee = task.assignee ? [{ id: task.assignee.id, name: task.assignee.name }] : [];
+
+      store.drawers.add(
+        new TaskUpsertionDrawer({
+          controller,
+          productId,
+          stories: relatedStory,
+          sprints: relatedSprint,
+          assignees: relatedAssignee,
+          statusOptions: [task.status],
+          readOnly: true,
+          definitionReadOnly: true,
+          allowTaskCreation: false,
+          allowMessageCreation: false,
+          task: {
+            id: task.id,
+            title: task.title,
+            description: task.description ?? null,
+            status: task.status,
+            storyId: task.story?.id ?? null,
+            sprintId: sprint?.id ?? null,
+            assigneeId: task.assignee?.id ?? null,
+            unfinishedSprintCount: task.unfinishedSprintCount ?? 0
+          }
+        })
+      );
+    },
+    [controller, productId, sprint, store.drawers]
+  );
+
   return (
     <div className="form-grid">
       <div className="form-grid two-columns">
@@ -271,16 +310,27 @@ export function SprintUpsertionForm(props: {
                 <p className="muted">Sugeridas</p>
                 <div className="sprint-task-suggestion-list">
                   {pendingTasks.slice(0, 5).map((task) => (
-                    <button
-                      key={task.id}
-                      type="button"
-                      className="sprint-task-suggestion"
-                      onClick={() => void addTaskToSprint(task.id)}
-                    >
+                    <article key={task.id} className="sprint-task-suggestion">
                       <strong>{task.title}</strong>
                       {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
                       <span>{task.story?.title ?? "Sin historia"}</span>
-                    </button>
+                      <div className="row-actions compact sprint-task-suggestion-actions">
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => openTaskDetail(task)}
+                        >
+                          Ver detalle
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => void addTaskToSprint(task.id)}
+                        >
+                          Agregar
+                        </button>
+                      </div>
+                    </article>
                   ))}
                 </div>
               </div>
@@ -321,6 +371,13 @@ export function SprintUpsertionForm(props: {
                   <span>Estado: {task.status}</span>
                 </div>
                 <div className="row-actions compact">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => openTaskDetail(task)}
+                  >
+                    Ver detalle
+                  </button>
                   <button
                     type="button"
                     className="btn btn-secondary"

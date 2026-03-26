@@ -1,4 +1,4 @@
-import { ActivityEntityType, Role } from "@scrum/contracts";
+import { ActivityEntityType, ApiKeyDto, Role } from "@scrum/contracts";
 import { apiClient } from "../api/client";
 import { RootStore } from "../stores/root-store";
 
@@ -45,6 +45,18 @@ export class AuthController {
   async getGitLabRedirect() {
     const result = await apiClient.get<{ redirectUrl: string }>("/auth/gitlab");
     window.location.href = result.redirectUrl;
+  }
+
+  async listApiKeys() {
+    return apiClient.get<ApiKeyDto[]>("/api-keys");
+  }
+
+  async createApiKey(payload: { name: string }) {
+    return apiClient.post<{ apiKey: ApiKeyDto; code: string }>("/api-keys", payload);
+  }
+
+  async deleteApiKey(apiKeyId: string) {
+    await apiClient.del(`/api-keys/${apiKeyId}`);
   }
 }
 

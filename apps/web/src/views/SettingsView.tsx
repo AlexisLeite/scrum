@@ -1,5 +1,6 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
+import { ApiKeyDto } from "@scrum/contracts";
 import { apiClient } from "../api/client";
 import { AuthController, ProductController } from "../controllers";
 import { getUserInitials } from "../lib/permissions";
@@ -30,11 +31,49 @@ export const SettingsView = observer(function SettingsView() {
   const [windowSize, setWindowSize] = React.useState<StatsWindow>("month");
   const [stats, setStats] = React.useState<ActivityStats | null>(null);
   const [statsError, setStatsError] = React.useState("");
+  const [apiKeys, setApiKeys] = React.useState<ApiKeyDto[]>([]);
+  const [apiKeysLoading, setApiKeysLoading] = React.useState(true);
+  const [apiKeysError, setApiKeysError] = React.useState("");
+  const [newApiKeyName, setNewApiKeyName] = React.useState("");
+  const [newApiKeyCode, setNewApiKeyCode] = React.useState("");
+  const [apiKeysBusy, setApiKeysBusy] = React.useState(false);
 
   React.useEffect(() => {
     setName(user?.name ?? "");
     setAvatarUrl(user?.avatarUrl ?? "");
   }, [user?.avatarUrl, user?.name]);
+
+  React.useEffect(() => {
+    if (!user) {
+      return;
+    }
+    let active = true;
+    setApiKeysLoading(true);
+    void auth.listApiKeys()
+      .then((items) => {
+        if (!active) {
+          return;
+        }
+        setApiKeys(items);
+        setApiKeysError("");
+      })
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
+        setApiKeys([]);
+        setApiKeysError(error instanceof Error ? error.message : "No se pudieron cargar las API keys.");
+      })
+      .finally(() => {
+        if (active) {
+          setApiKeysLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [auth, user]);
 
   React.useEffect(() => {
     if (!user) {
@@ -123,6 +162,93 @@ export const SettingsView = observer(function SettingsView() {
               <strong>{avatarUrl ? "URL configurada" : "Sin avatar personalizado"}</strong>
               <span className="muted">{avatarUrl || "Se usan iniciales como fallback en la interfaz."}</span>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="section-head">
+          <div>
+            <h3>API keys</h3>
+            <p className="muted">Cada key usa tus mismos permisos y sirve para autenticar el servidor MCP por `x-api-key`.</p>
+          </div>
+        </div>
+        <div className="definition-grid">
+          <div className="form-grid">
+            <label>
+              Nombre
+              <input
+                value={newApiKeyName}
+                onChange={(event) => setNewApiKeyName(event.target.value)}
+                placeholder="Ej. Claude Desktop"
+              />
+            </label>
+            <div className="row-actions">
+              <button
+                className="btn btn-primary"
+                disabled={apiKeysBusy || newApiKeyName.trim().length < 2}
+                onClick={() => void (async () => {
+                  setApiKeysBusy(true);
+                  try {
+                    const created = await auth.createApiKey({ name: newApiKeyName.trim() });
+                    setApiKeys((current) => [created.apiKey, ...current]);
+                    setNewApiKeyCode(created.code);
+                    setNewApiKeyName("");
+                    setApiKeysError("");
+                  } catch (error) {
+                    setApiKeysError(error instanceof Error ? error.message : "No se pudo crear la API key.");
+                  } finally {
+                    setApiKeysBusy(false);
+                  }
+                })()}
+              >
+                Crear key
+              </button>
+            </div>
+            {newApiKeyCode ? (
+              <div className="definition-note">
+                <span className="muted">Codigo generado</span>
+                <strong style={{ wordBreak: "break-all" }}>{newApiKeyCode}</strong>
+                <span className="muted">Se muestra una sola vez. Usalo como header `x-api-key` al conectar el MCP.</span>
+              </div>
+            ) : null}
+          </div>
+          <div className="stack-lg">
+            {apiKeysLoading ? <p className="muted">Cargando API keys...</p> : null}
+            {!apiKeysLoading && apiKeys.length === 0 ? (
+              <p className="muted">Todavia no creaste ninguna API key.</p>
+            ) : null}
+            {apiKeys.map((apiKey) => (
+              <div key={apiKey.id} className="definition-note">
+                <span className="muted">{apiKey.name}</span>
+                <strong>{apiKey.maskedCode}</strong>
+                <span className="muted">
+                  Creada {new Date(apiKey.createdAt).toLocaleString()} · Ultimo uso {apiKey.lastUsedAt ? new Date(apiKey.lastUsedAt).toLocaleString() : "sin uso"}
+                </span>
+                <div className="row-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={apiKeysBusy}
+                    onClick={() => void (async () => {
+                      setApiKeysBusy(true);
+                      try {
+                        await auth.deleteApiKey(apiKey.id);
+                        setApiKeys((current) => current.filter((entry) => entry.id !== apiKey.id));
+                        setApiKeysError("");
+                      } catch (error) {
+                        setApiKeysError(error instanceof Error ? error.message : "No se pudo eliminar la API key.");
+                      } finally {
+                        setApiKeysBusy(false);
+                      }
+                    })()}
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            ))}
+            {apiKeysError ? <p className="error-text">{apiKeysError}</p> : null}
           </div>
         </div>
       </section>

@@ -2,8 +2,11 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AdminModule } from "./admin/admin.module";
 import { ActivityModule } from "./activity/activity.module";
+import { ApiKeysModule } from "./api-keys/api-keys.module";
 import { AuthModule } from "./auth/auth.module";
+import { DraftsModule } from "./drafts/drafts.module";
 import { IndicatorsModule } from "./indicators/indicators.module";
+import { McpModule } from "./mcp/mcp.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductsModule } from "./products/products.module";
 import { SprintsModule } from "./sprints/sprints.module";
@@ -19,14 +22,17 @@ import { TeamsModule } from "./teams/teams.module";
     }),
     PrismaModule,
     ActivityModule,
+    ApiKeysModule,
     AdminModule,
     AuthModule,
+    DraftsModule,
     TeamsModule,
     ProductsModule,
     StoriesModule,
     TasksModule,
     SprintsModule,
-    IndicatorsModule
+    IndicatorsModule,
+    McpModule
   ]
 })
 export class AppModule {}

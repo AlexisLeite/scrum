@@ -3,7 +3,9 @@ import { NestFactory } from "@nestjs/core";
 import { ExpressAdapter } from "@nestjs/platform-express";
 import cookieParser from "cookie-parser";
 import express, { type Express } from "express";
+import { Request, Response } from "express";
 import { AppModule } from "./app.module";
+import { McpService } from "./mcp/mcp.service";
 
 function normalizeOrigins(rawOrigins: string | undefined): string[] {
   return (rawOrigins ?? "http://localhost:5173")
@@ -35,6 +37,10 @@ export async function configureApp(app: INestApplication): Promise<void> {
     credentials: true
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  const mcpService = app.get(McpService);
+  app.use("/mcp", (req: Request, res: Response) => {
+    void mcpService.handleHttp(req, res);
+  });
 }
 
 export async function createHttpApp(): Promise<INestApplication> {
