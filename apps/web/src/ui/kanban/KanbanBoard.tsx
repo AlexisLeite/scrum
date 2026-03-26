@@ -180,7 +180,7 @@ function moveTaskInColumns(
   return next;
 }
 
-function TaskCardContent(props: {
+const TaskCardContent = React.memo(function TaskCardContent(props: {
   task: KanbanTask;
   assignees: KanbanAssignee[];
   statusOptions: string[];
@@ -301,9 +301,9 @@ function TaskCardContent(props: {
       </div>
     </>
   );
-}
+});
 
-function SortableTaskCard(props: {
+const SortableTaskCard = React.memo(function SortableTaskCard(props: {
   task: KanbanTask;
   assignees: KanbanAssignee[];
   statusOptions: string[];
@@ -372,7 +372,7 @@ function SortableTaskCard(props: {
       />
     </article>
   );
-}
+});
 
 function GhostTaskCard(props: { task: KanbanTask; height?: number | null }) {
   const { task, height } = props;
@@ -402,7 +402,7 @@ function GhostTaskCard(props: { task: KanbanTask; height?: number | null }) {
   );
 }
 
-function KanbanColumnView(props: {
+const KanbanColumnView = React.memo(function KanbanColumnView(props: {
   column: KanbanColumn;
   assignees: KanbanAssignee[];
   statusOptions: string[];
@@ -520,7 +520,7 @@ function KanbanColumnView(props: {
       </SortableContext>
     </section>
   );
-}
+});
 
 function KanbanDragOverlay(props: { task: KanbanTask | null; width?: number | null }) {
   const { task, width } = props;
@@ -692,26 +692,8 @@ export function KanbanBoard({
     });
   };
 
-  const handleDragOver = (event: DragOverEvent) => {
-    if (!canReorder || !activeDrag || !event.over) {
-      return;
-    }
-
-    const activeId = String(event.active.id);
-    const overId = String(event.over.id);
-    const activeContainer = findTaskColumn(localColumns, activeId);
-    const overContainer = findContainer(localColumns, overId);
-
-    if (!activeContainer || !overContainer || activeContainer === overContainer) {
-      return;
-    }
-
-    const overTasks = localColumns.find((column) => column.name === overContainer)?.tasks ?? [];
-    const overIndex = overId === overContainer ? overTasks.length : overTasks.findIndex((task) => task.id === overId);
-
-    setLocalColumns((previous) =>
-      moveTaskInColumns(previous, activeId, activeContainer, overContainer, overIndex >= 0 ? overIndex : overTasks.length)
-    );
+  const handleDragOver = (_event: DragOverEvent) => {
+    // Keep board state stable while dragging to avoid re-render storms on large boards.
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -729,35 +711,37 @@ export function KanbanBoard({
       return;
     }
 
-    const currentColumn = findTaskColumn(localColumns, taskId);
-    const targetColumn = findContainer(localColumns, overId) ?? currentColumn;
-    if (!currentColumn || !targetColumn) {
+    const sourceColumn = activeDrag.fromColumn;
+    const targetColumn = findContainer(snapshot, overId) ?? sourceColumn;
+    if (!sourceColumn || !targetColumn) {
       setLocalColumns(snapshot);
       clearDrag();
       return;
     }
 
-    let targetIndex = findTaskIndex(localColumns, currentColumn, taskId);
-    let nextColumns = localColumns;
+    const sourceTasks = snapshot.find((column) => column.name === sourceColumn)?.tasks ?? [];
+    const targetTasks = snapshot.find((column) => column.name === targetColumn)?.tasks ?? [];
+    const sourceIndex = sourceTasks.findIndex((task) => task.id === taskId);
 
-    if (currentColumn === activeDrag.fromColumn) {
-      const originalTasks = snapshot.find((column) => column.name === activeDrag.fromColumn)?.tasks ?? [];
-      const currentIndex = originalTasks.findIndex((task) => task.id === taskId);
-      const nextIndex =
-        overId === activeDrag.fromColumn
-          ? originalTasks.length - 1
-          : originalTasks.findIndex((task) => task.id === overId);
-
-      if (currentIndex >= 0 && nextIndex >= 0 && currentIndex !== nextIndex) {
-        nextColumns = moveTaskInColumns(snapshot, taskId, activeDrag.fromColumn, activeDrag.fromColumn, nextIndex);
-        targetIndex = findTaskIndex(nextColumns, activeDrag.fromColumn, taskId);
-      } else {
-        targetIndex = currentIndex;
-        nextColumns = snapshot;
-      }
-    } else {
-      nextColumns = moveTaskInColumns(snapshot, taskId, activeDrag.fromColumn, currentColumn, targetIndex);
+    if (sourceIndex < 0) {
+      setLocalColumns(snapshot);
+      clearDrag();
+      return;
     }
+
+    let targetIndex =
+      overId === targetColumn
+        ? targetTasks.length
+        : targetTasks.findIndex((task) => task.id === overId);
+    if (targetIndex < 0) {
+      targetIndex = targetTasks.length;
+    }
+
+    if (sourceColumn === targetColumn && overId !== targetColumn && targetIndex > sourceIndex) {
+      targetIndex -= 1;
+    }
+
+    const nextColumns = moveTaskInColumns(snapshot, taskId, sourceColumn, targetColumn, targetIndex);
 
     const movedTask = findTask(snapshot, taskId) ?? activeDrag.task;
 
@@ -766,7 +750,7 @@ export function KanbanBoard({
       setCompletionRequest({
         mode: "move",
         task: movedTask,
-        fromColumn: activeDrag.fromColumn,
+        fromColumn: sourceColumn,
         targetColumnName: targetColumn,
         visibleIndex: targetIndex,
         snapshot
@@ -778,11 +762,11 @@ export function KanbanBoard({
     setLocalColumns(nextColumns);
     clearDrag();
 
-    if (activeDrag.fromColumn === targetColumn && findTaskIndex(snapshot, activeDrag.fromColumn, taskId) === targetIndex) {
+    if (sourceColumn === targetColumn && sourceIndex === targetIndex) {
       return;
     }
 
-    await persistMove(movedTask, activeDrag.fromColumn, targetColumn, targetIndex);
+    await persistMove(movedTask, sourceColumn, targetColumn, targetIndex);
   };
 
   const activeTask = activeDrag ? findTask(localColumns, activeDrag.taskId) ?? activeDrag.task : null;

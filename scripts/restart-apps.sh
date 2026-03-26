@@ -15,12 +15,6 @@ FRONT_PORT="4173"
 
 mkdir -p "$LOG_API_DIR" "$LOG_FRONT_DIR" "$PID_DIR"
 
-exec 9>"$PID_DIR/restart.lock"
-if ! flock -n 9; then
-  echo "Another restart-apps.sh instance is already running."
-  exit 1
-fi
-
 touch "$LOG_API_DIR/app.log" "$LOG_API_DIR/error.log"
 touch "$LOG_FRONT_DIR/app.log" "$LOG_FRONT_DIR/error.log"
 

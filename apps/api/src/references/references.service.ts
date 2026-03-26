@@ -52,7 +52,7 @@ export class ReferencesService {
           key: true,
           name: true
         },
-        take: 8
+        take: 12
       }),
       this.prisma.userStory.findMany({
         where: {
@@ -74,7 +74,7 @@ export class ReferencesService {
             }
           }
         },
-        take: 8
+        take: 12
       }),
       this.prisma.task.findMany({
         where: {
@@ -102,7 +102,7 @@ export class ReferencesService {
             }
           }
         },
-        take: 8
+        take: 12
       }),
       this.loadVisibleUsers(user, accessibleTeamIds, normalizedQuery)
     ]);
@@ -149,7 +149,7 @@ export class ReferencesService {
         }
         return left.title.localeCompare(right.title, "es", { sensitivity: "base" });
       })
-      .slice(0, 12)
+      .slice(0, 20)
       .map(({ score, ...reference }) => reference);
   }
 
@@ -168,7 +168,7 @@ export class ReferencesService {
           email: true,
           role: true
         },
-        take: 8
+        take: 12
       });
     }
 
@@ -215,7 +215,7 @@ export class ReferencesService {
           email: true,
           role: true
         },
-        take: 8
+        take: 12
       });
     }
 
@@ -259,7 +259,7 @@ export class ReferencesService {
         email: true,
         role: true
       },
-      take: 8
+      take: 12
     });
   }
 }
@@ -318,6 +318,10 @@ function andTextSearchFilter<T>(query: string, orClauses: T[]) {
 }
 
 function entityScore(query: string, candidates: Array<string | null | undefined>) {
+  if (!query) {
+    return 0;
+  }
+
   let bestScore = Number.MAX_SAFE_INTEGER;
 
   for (const candidate of candidates) {
@@ -326,10 +330,22 @@ function entityScore(query: string, candidates: Array<string | null | undefined>
     }
 
     const normalizedCandidate = candidate.toLowerCase();
-    const distance = levenshtein(query, normalizedCandidate);
-    const prefixBonus = normalizedCandidate.startsWith(query) ? -3 : 0;
-    const containsBonus = normalizedCandidate.includes(query) ? -1 : 0;
-    bestScore = Math.min(bestScore, distance + prefixBonus + containsBonus);
+    const compactCandidate = normalizedCandidate.replace(/\s+/g, " ").trim();
+    const containsIndex = compactCandidate.indexOf(query);
+    const isExact = compactCandidate === query;
+    const isPrefix = compactCandidate.startsWith(query);
+    const hasWordPrefix = compactCandidate
+      .split(/[^a-z0-9_]+/)
+      .some((part) => part.startsWith(query));
+    const distance = levenshtein(query, compactCandidate.slice(0, Math.min(compactCandidate.length, query.length + 16)));
+
+    const score = distance
+      + (isExact ? -150 : 0)
+      + (isPrefix ? -80 : 0)
+      + (hasWordPrefix ? -45 : 0)
+      + (containsIndex >= 0 ? -25 + Math.min(containsIndex, 20) : 0);
+
+    bestScore = Math.min(bestScore, score);
   }
 
   return bestScore;

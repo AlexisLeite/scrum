@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -167,8 +168,10 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
         return;
       }
 
-      if (event.key === " ") {
+      if (event.key === "Escape") {
+        event.preventDefault();
         setActiveAnchor(null);
+        setReferenceResults([]);
       }
     };
     const handleSelectionChange = () => {
@@ -326,44 +329,48 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
           })
         ]}
       />
-      {activeAnchor ? (
-        <div
-          className="reference-anchor-popover"
-          style={{
-            top: activeAnchor.viewport.top,
-            left: activeAnchor.viewport.left
-          }}
-        >
-          <div className="reference-anchor-popover-head">
-            <strong>Referencias</strong>
-            <span className="muted">@{activeAnchor.query}</span>
-          </div>
-          {referenceLoading ? <p className="muted">Buscando elementos...</p> : null}
-          {!referenceLoading && referenceResults.length === 0 ? (
-            <p className="muted">Sin coincidencias para esta ancla.</p>
-          ) : null}
-          <div className="reference-anchor-results">
-            {referenceResults.map((result, index) => (
-              <button
-                key={`${result.entityType}-${result.id}`}
-                type="button"
-                className={`reference-anchor-option ${index === selectedReferenceIndex ? "is-active" : ""}`}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  replaceActiveAnchor(result);
-                }}
-              >
-                <span className="reference-anchor-icon">{iconLabel(result.icon)}</span>
-                <span className="reference-anchor-copy">
-                  <strong>{result.title}</strong>
-                  <small>{result.subtitle}</small>
-                </span>
-              </button>
-            ))}
-          </div>
-          <p className="muted reference-anchor-help">Enter resuelve la ancla. Espacio la deja sin resolver.</p>
-        </div>
-      ) : null}
+      {activeAnchor
+        ? createPortal(
+          <div
+            className="reference-anchor-popover"
+            style={{
+              top: activeAnchor.viewport.top,
+              left: Math.max(16, Math.min(activeAnchor.viewport.left, window.innerWidth - 496)),
+              transform: activeAnchor.viewport.placement === "top" ? "translateY(calc(-100% - 12px))" : "none"
+            }}
+          >
+            <div className="reference-anchor-popover-head">
+              <strong>Referencias</strong>
+              <span className="muted">@{activeAnchor.query}</span>
+            </div>
+            {referenceLoading ? <p className="muted">Buscando elementos...</p> : null}
+            {!referenceLoading && referenceResults.length === 0 ? (
+              <p className="muted">Sin coincidencias para esta ancla.</p>
+            ) : null}
+            <div className="reference-anchor-results">
+              {referenceResults.map((result, index) => (
+                <button
+                  key={`${result.entityType}-${result.id}`}
+                  type="button"
+                  className={`reference-anchor-option ${index === selectedReferenceIndex ? "is-active" : ""}`}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    replaceActiveAnchor(result);
+                  }}
+                >
+                  <span className="reference-anchor-icon">{iconLabel(result.icon)}</span>
+                  <span className="reference-anchor-copy">
+                    <strong>{result.title}</strong>
+                    <small>{result.subtitle}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="muted reference-anchor-help">Enter resuelve la ancla. Escape cierra este dialogo.</p>
+          </div>,
+          document.body
+        )
+        : null}
       <style>{`.rich-description-content { min-height: ${minHeight}px; max-height: 75vh; }`}</style>
     </div>
   );
@@ -376,6 +383,7 @@ type ActiveAnchor = {
   viewport: {
     top: number;
     left: number;
+    placement: "top" | "bottom";
   };
 };
 
@@ -405,8 +413,9 @@ function resolveActiveAnchor(root: HTMLElement): ActiveAnchor | null {
   rootRange.setEnd(textNode.node, match.start);
 
   const rect = anchorRange.getBoundingClientRect();
-  const top = rect.bottom + window.scrollY + 8;
-  const left = rect.left + window.scrollX;
+  const top = rect.bottom + 8;
+  const left = rect.left;
+  const placement: "top" | "bottom" = rect.bottom > window.innerHeight * 0.72 ? "top" : "bottom";
   const occurrenceIndex = countOccurrences(rootRange.toString(), match.token);
 
   return {
@@ -415,7 +424,8 @@ function resolveActiveAnchor(root: HTMLElement): ActiveAnchor | null {
     occurrenceIndex,
     viewport: {
       top,
-      left
+      left,
+      placement
     }
   };
 }
@@ -464,7 +474,7 @@ function firstTextNode(node: Node): Text | null {
 }
 
 function findAnchorMatch(value: string, offset: number) {
-  const anchorPattern = /@[A-Za-z0-9_]*/g;
+  const anchorPattern = /@[A-Za-z0-9_ ]*/g;
   let match: RegExpExecArray | null = null;
 
   while ((match = anchorPattern.exec(value)) !== null) {
@@ -484,7 +494,7 @@ function findAnchorMatch(value: string, offset: number) {
 
 function replaceAnchorOccurrence(markdown: string, anchor: ActiveAnchor, replacement: string) {
   let currentOccurrence = 0;
-  return markdown.replace(/@[A-Za-z0-9_]*/g, (match) => {
+  return markdown.replace(/@[A-Za-z0-9_ ]*/g, (match) => {
     if (match !== anchor.token) {
       return match;
     }
