@@ -1,5 +1,6 @@
 ﻿import React from "react";
 import { ProductController } from "../../../controllers";
+import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { canCommentOnVisibleTask, canEditTaskFields } from "../../../lib/permissions";
 import { useRootStore } from "../../../stores/root-store";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
@@ -179,9 +180,33 @@ export function TaskCollaborationPanel(props: {
   const [detail, setDetail] = React.useState<TaskDetail | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
-  const [messageBody, setMessageBody] = React.useState("");
   const [submittingMessage, setSubmittingMessage] = React.useState(false);
   const [replyTarget, setReplyTarget] = React.useState<TaskMessageNode | null>(null);
+  const draft = useDraftPersistence({
+    userId: store.session.user?.id,
+    entityType: "TASK_MESSAGE",
+    entityId: taskId,
+    initialValue: {
+      body: "",
+      replyTargetId: ""
+    },
+    enabled: allowMessageCreation && !submittingMessage
+  });
+  const { value: messageDraft, setValue: setMessageDraft, isHydratingRemote, saveError, clearDraft } = draft;
+  const messageBody = typeof messageDraft.body === "string" ? messageDraft.body : "";
+
+  const findMessageById = React.useCallback((nodes: TaskMessageNode[], messageId: string): TaskMessageNode | null => {
+    for (const node of nodes) {
+      if (node.id === messageId) {
+        return node;
+      }
+      const nested = findMessageById(node.replies, messageId);
+      if (nested) {
+        return nested;
+      }
+    }
+    return null;
+  }, []);
 
   const loadDetail = React.useCallback(async () => {
     setLoading(true);
@@ -199,6 +224,14 @@ export function TaskCollaborationPanel(props: {
   React.useEffect(() => {
     void loadDetail();
   }, [loadDetail]);
+
+  React.useEffect(() => {
+    const replyTargetId = typeof messageDraft.replyTargetId === "string" ? messageDraft.replyTargetId : "";
+    if (!detail || !replyTargetId) {
+      return;
+    }
+    setReplyTarget(findMessageById(detail.conversation, replyTargetId));
+  }, [detail, findMessageById, messageDraft.replyTargetId]);
 
   const refresh = async () => {
     await loadDetail();
@@ -331,8 +364,9 @@ export function TaskCollaborationPanel(props: {
         body: messageBody.trim(),
         parentMessageId: replyTarget?.id
       });
-      setMessageBody("");
+      setMessageDraft((current) => ({ ...current, body: "", replyTargetId: "" }));
       setReplyTarget(null);
+      await clearDraft();
       await refresh();
     } catch (messageError) {
       setError(messageError instanceof Error ? messageError.message : "No se pudo publicar el mensaje.");
@@ -417,7 +451,14 @@ export function TaskCollaborationPanel(props: {
             className="definition-note-markdown"
           />
           <div className="row-actions compact">
-            <button type="button" className="btn btn-secondary" onClick={() => setReplyTarget(null)}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setReplyTarget(null);
+                setMessageDraft((current) => ({ ...current, replyTargetId: "" }));
+              }}
+            >
               Cancelar respuesta
             </button>
           </div>
@@ -425,13 +466,20 @@ export function TaskCollaborationPanel(props: {
       ) : null}
       {allowMessageCreation ? (
         <>
-          <RichDescriptionField label="Nuevo mensaje" value={messageBody} onChange={setMessageBody} rows={7} />
+          <RichDescriptionField
+            label="Nuevo mensaje"
+            value={messageBody}
+            onChange={(nextValue) => setMessageDraft((current) => ({ ...current, body: nextValue }))}
+            rows={7}
+            disabled={submittingMessage || isHydratingRemote}
+          />
+          {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
           <div className="row-actions compact">
             <button
               type="button"
               className="btn btn-primary"
               onClick={() => void submitMessage()}
-              disabled={submittingMessage || !messageBody.trim()}
+              disabled={submittingMessage || isHydratingRemote || !messageBody.trim()}
             >
               Publicar mensaje
             </button>
@@ -442,13 +490,17 @@ export function TaskCollaborationPanel(props: {
       {detail ? (
         <TaskMessageThread
           nodes={detail.conversation}
-          onReply={(message) => setReplyTarget(message)}
+          onReply={(message) => {
+            setReplyTarget(message);
+            setMessageDraft((current) => ({ ...current, replyTargetId: message.id }));
+          }}
           onCreateTask={openDerivedTaskDrawer}
           onOpenDerivedTask={(derivedTaskId) => void openTaskDrawerById(derivedTaskId)}
           allowTaskCreation={allowTaskCreation}
           allowMessageCreation={allowMessageCreation}
         />
       ) : null}
+      {saveError ? <p className="error-text">{saveError}</p> : null}
       {error ? <p className="error-text">{error}</p> : null}
     </section>
   );

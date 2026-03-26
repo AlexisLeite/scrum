@@ -68,7 +68,7 @@ export class TasksService {
   async listFocused(user: AuthUser) {
     const accessibleProducts = await this.teamScopeService.getAccessibleProductIds(user);
     if (accessibleProducts !== null && accessibleProducts.length === 0) {
-      return { sprint: null, columns: [] };
+      return { sprint: null, hasActiveSprint: false, columns: [] };
     }
 
     const assignmentScope = this.teamScopeService.isTeamMember(user.role)
@@ -80,12 +80,18 @@ export class TasksService {
         }
       : {};
 
+    const activeSprintWhere = {
+      status: SprintStatus.ACTIVE,
+      ...(accessibleProducts !== null ? { productId: { in: accessibleProducts } } : {})
+    } satisfies Prisma.SprintWhereInput;
+
+    const hasActiveSprint = (await this.prisma.sprint.count({
+      where: activeSprintWhere
+    })) > 0;
+
     const tasks = await this.prisma.task.findMany({
       where: {
-        sprint: {
-          status: SprintStatus.ACTIVE
-        },
-        ...(accessibleProducts !== null ? { productId: { in: accessibleProducts } } : {}),
+        sprint: activeSprintWhere,
         ...assignmentScope
       },
       include: {
@@ -136,6 +142,7 @@ export class TasksService {
 
     return {
       sprint: null,
+      hasActiveSprint,
       columns: columnNames.map((name) => ({
         name,
         tasks: tasks

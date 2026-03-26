@@ -1,7 +1,9 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ProductController } from "../../../controllers";
+import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productTaskDefinitionPath } from "../../../routes/product-routes";
+import { useRootStore } from "../../../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { TaskCollaborationPanel } from "./TaskCollaborationPanel";
@@ -151,6 +153,7 @@ export function TaskUpsertionForm(props: {
     showCollaboration = true
   } = props;
   const navigate = useNavigate();
+  const store = useRootStore();
   const {
     controller,
     stories,
@@ -175,20 +178,44 @@ export function TaskUpsertionForm(props: {
 
   const initialEstimatedHours = React.useMemo(() => toInitialHoursState(task?.estimatedHours), [task?.estimatedHours]);
   const customHoursInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  const [title, setTitle] = React.useState(task?.title ?? "");
-  const [description, setDescription] = React.useState(task?.description ?? "");
-  const [storyId, setStoryId] = React.useState(task?.storyId ?? defaultStoryId ?? "");
-  const [status, setStatus] = React.useState(task?.status ?? defaultStatus ?? statusOptions[0] ?? "Todo");
-  const [sprintId, setSprintId] = React.useState(task?.sprintId ?? fixedSprintId ?? "");
-  const [assigneeId, setAssigneeId] = React.useState(task?.assigneeId ?? "");
-  const [effortPoints, setEffortPoints] = React.useState(task?.effortPoints ? String(task.effortPoints) : "");
-  const [selectedEstimatedPreset, setSelectedEstimatedPreset] = React.useState<number | null>(initialEstimatedHours.preset);
-  const [customEstimatedHours, setCustomEstimatedHours] = React.useState(initialEstimatedHours.custom);
-  const [actualHours, setActualHours] = React.useState(task?.actualHours != null ? String(task.actualHours) : "");
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false);
+  const draft = useDraftPersistence({
+    userId: store.session.user?.id,
+    entityType: "TASK",
+    entityId: task?.id ?? "-1",
+    productId: options.productId,
+    initialValue: {
+      title: task?.title ?? "",
+      description: task?.description ?? "",
+      storyId: task?.storyId ?? defaultStoryId ?? "",
+      status: task?.status ?? defaultStatus ?? statusOptions[0] ?? "Todo",
+      sprintId: task?.sprintId ?? fixedSprintId ?? "",
+      assigneeId: task?.assigneeId ?? "",
+      effortPoints: task?.effortPoints != null ? String(task.effortPoints) : "",
+      selectedEstimatedPreset: initialEstimatedHours.preset,
+      customEstimatedHours: initialEstimatedHours.custom,
+      actualHours: task?.actualHours != null ? String(task.actualHours) : ""
+    },
+    enabled: !readOnly && !saving
+  });
+  const { value: form, setValue: setForm, isHydratingRemote, saveError, clearDraft } = draft;
+  const title = typeof form.title === "string" ? form.title : "";
+  const description = typeof form.description === "string" ? form.description : "";
+  const storyId = typeof form.storyId === "string" ? form.storyId : "";
+  const status = typeof form.status === "string" ? form.status : defaultStatus ?? statusOptions[0] ?? "Todo";
+  const sprintId = typeof form.sprintId === "string" ? form.sprintId : "";
+  const assigneeId = typeof form.assigneeId === "string" ? form.assigneeId : "";
+  const effortPoints = typeof form.effortPoints === "string" ? form.effortPoints : "";
+  const selectedEstimatedPreset =
+    typeof form.selectedEstimatedPreset === "number" || form.selectedEstimatedPreset === null
+      ? form.selectedEstimatedPreset
+      : initialEstimatedHours.preset;
+  const customEstimatedHours =
+    typeof form.customEstimatedHours === "string" ? form.customEstimatedHours : initialEstimatedHours.custom;
+  const actualHours = typeof form.actualHours === "string" ? form.actualHours : "";
+  const formDisabled = readOnly || saving || isHydratingRemote;
 
   const shouldSelectStory = !defaultStoryId || Boolean(fixedSprintId) || Boolean(task);
   const storySelectionLocked = Boolean(defaultStoryId) || Boolean(task);
@@ -201,23 +228,12 @@ export function TaskUpsertionForm(props: {
     defaultSourceMessagePreview ?? (defaultSourceMessageId ? `Mensaje ${defaultSourceMessageId.slice(0, 8)}` : "");
 
   React.useEffect(() => {
-    const nextEstimatedHours = toInitialHoursState(task?.estimatedHours);
-    setTitle(task?.title ?? "");
-    setDescription(task?.description ?? "");
-    setStoryId(task?.storyId ?? defaultStoryId ?? "");
-    setStatus(task?.status ?? defaultStatus ?? statusOptions[0] ?? "Todo");
-    setSprintId(task?.sprintId ?? fixedSprintId ?? "");
-    setAssigneeId(task?.assigneeId ?? "");
-    setEffortPoints(task?.effortPoints != null ? String(task.effortPoints) : "");
-    setSelectedEstimatedPreset(nextEstimatedHours.preset);
-    setCustomEstimatedHours(nextEstimatedHours.custom);
-    setActualHours(task?.actualHours != null ? String(task.actualHours) : "");
     setError("");
     setCompletionDialogOpen(false);
   }, [task, defaultStoryId, fixedSprintId, defaultStatus, statusOptions]);
 
   const persistTask = async (actualHoursOverride?: number) => {
-    if (readOnly) {
+    if (formDisabled) {
       return;
     }
     setError("");
@@ -268,8 +284,9 @@ export function TaskUpsertionForm(props: {
       }
 
       if (payload.actualHours !== undefined) {
-        setActualHours(String(payload.actualHours));
+        setForm((current) => ({ ...current, actualHours: String(payload.actualHours) }));
       }
+      await clearDraft();
       if (onDone) {
         await onDone();
       }
@@ -284,7 +301,7 @@ export function TaskUpsertionForm(props: {
   };
 
   const handleStatusChange = (nextStatus: string) => {
-    setStatus(nextStatus);
+    setForm((current) => ({ ...current, status: nextStatus }));
   };
 
   const showActualHoursField = status === "Done" || task?.actualHours != null;
@@ -317,11 +334,15 @@ export function TaskUpsertionForm(props: {
         <div className="form-grid two-columns">
           <label>
             Titulo
-            <input value={title} onChange={(event) => setTitle(event.target.value)} disabled={readOnly} />
+            <input
+              value={title}
+              onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+              disabled={formDisabled}
+            />
           </label>
           <label>
             Estado
-            <select value={status} onChange={(event) => handleStatusChange(event.target.value)} disabled={readOnly}>
+            <select value={status} onChange={(event) => handleStatusChange(event.target.value)} disabled={formDisabled}>
               {statusOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -336,8 +357,8 @@ export function TaskUpsertionForm(props: {
             Historia
             <select
               value={defaultStoryId ? defaultStoryId : storyId}
-              onChange={(event) => setStoryId(event.target.value)}
-              disabled={storySelectionLocked || readOnly}
+              onChange={(event) => setForm((current) => ({ ...current, storyId: event.target.value }))}
+              disabled={storySelectionLocked || formDisabled}
             >
               <option value="">Seleccionar historia</option>
               {stories.map((story) => (
@@ -349,15 +370,22 @@ export function TaskUpsertionForm(props: {
           </label>
         ) : null}
 
-        <RichDescriptionField label="Descripcion" value={description} onChange={setDescription} disabled={readOnly} />
+        <RichDescriptionField
+          label="Descripcion"
+          value={description}
+          onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
+          disabled={formDisabled}
+          productId={options.productId}
+        />
+        {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
 
         <div className="form-grid three-columns">
           <label>
             Sprint
             <select
               value={canChangeSprint ? sprintId : fixedSprintId ?? sprintId}
-              onChange={(event) => setSprintId(event.target.value)}
-              disabled={!canChangeSprint || readOnly}
+              onChange={(event) => setForm((current) => ({ ...current, sprintId: event.target.value }))}
+              disabled={!canChangeSprint || formDisabled}
             >
               <option value="">Sin asignar</option>
               {sprints.map((sprint) => (
@@ -369,7 +397,11 @@ export function TaskUpsertionForm(props: {
           </label>
           <label>
             Asignado a
-            <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} disabled={readOnly}>
+            <select
+              value={assigneeId}
+              onChange={(event) => setForm((current) => ({ ...current, assigneeId: event.target.value }))}
+              disabled={formDisabled}
+            >
               <option value="">Sin asignar</option>
               {assignees.map((assignee) => (
                 <option key={assignee.id} value={assignee.id}>
@@ -384,8 +416,8 @@ export function TaskUpsertionForm(props: {
               ariaLabel="Puntos de esfuerzo"
               values={[...EFFORT_POINT_VALUES]}
               selectedValue={effortPoints ? Number(effortPoints) : null}
-              disabled={readOnly}
-              onSelect={(value) => setEffortPoints(String(value))}
+              disabled={formDisabled}
+              onSelect={(value) => setForm((current) => ({ ...current, effortPoints: String(value) }))}
             />
           </div>
         </div>
@@ -397,21 +429,24 @@ export function TaskUpsertionForm(props: {
               ariaLabel="Horas estimadas"
               values={[...ESTIMATED_HOUR_PRESETS]}
               selectedValue={selectedEstimatedPreset}
-              disabled={readOnly}
+              disabled={formDisabled}
               onSelect={(value) => {
-                setSelectedEstimatedPreset(Number(value));
-                setCustomEstimatedHours("");
+                setForm((current) => ({
+                  ...current,
+                  selectedEstimatedPreset: Number(value),
+                  customEstimatedHours: ""
+                }));
               }}
               trailingSlot={
                 <button
                   type="button"
                   className={`task-option-button task-option-button-compact task-hour-input-option ${selectedEstimatedPreset === null ? "is-selected" : ""}`}
                   onClick={() => {
-                    setSelectedEstimatedPreset(null);
+                    setForm((current) => ({ ...current, selectedEstimatedPreset: null }));
                     window.setTimeout(() => customHoursInputRef.current?.focus(), 0);
                   }}
                   aria-pressed={selectedEstimatedPreset === null}
-                  disabled={readOnly}
+                  disabled={formDisabled}
                 >
                   <span>Input</span>
                   <input
@@ -420,13 +455,16 @@ export function TaskUpsertionForm(props: {
                     min={0}
                     step={0.5}
                     value={customEstimatedHours}
-                    onFocus={() => setSelectedEstimatedPreset(null)}
+                    onFocus={() => setForm((current) => ({ ...current, selectedEstimatedPreset: null }))}
                     onChange={(event) => {
-                      setSelectedEstimatedPreset(null);
-                      setCustomEstimatedHours(event.target.value);
+                      setForm((current) => ({
+                        ...current,
+                        selectedEstimatedPreset: null,
+                        customEstimatedHours: event.target.value
+                      }));
                     }}
                     placeholder="Horas"
-                    disabled={readOnly}
+                    disabled={formDisabled}
                   />
                 </button>
               }
@@ -446,9 +484,9 @@ export function TaskUpsertionForm(props: {
                   min={0}
                   step={0.5}
                   value={actualHours}
-                  onChange={(event) => setActualHours(event.target.value)}
+                  onChange={(event) => setForm((current) => ({ ...current, actualHours: event.target.value }))}
                   placeholder="Se completan al cerrar"
-                  disabled={readOnly}
+                  disabled={formDisabled}
                 />
               </label>
             ) : (
@@ -461,7 +499,7 @@ export function TaskUpsertionForm(props: {
 
         <div className="row-actions compact">
           {!readOnly ? (
-            <button type="button" className="btn btn-primary" onClick={() => void persistTask()} disabled={saving}>
+            <button type="button" className="btn btn-primary" onClick={() => void persistTask()} disabled={formDisabled}>
               {task ? "Guardar tarea" : "Crear tarea"}
             </button>
           ) : null}
@@ -473,12 +511,12 @@ export function TaskUpsertionForm(props: {
                 close();
                 navigate(definitionReadOnly ? `${definitionHref}?mode=readonly` : definitionHref);
               }}
-              disabled={saving}
+              disabled={formDisabled}
             >
               Ver definicion
             </button>
           ) : null}
-          <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>
+          <button type="button" className="btn btn-secondary" onClick={close} disabled={formDisabled}>
             {readOnly ? "Cerrar" : closeLabel}
           </button>
         </div>
@@ -498,6 +536,7 @@ export function TaskUpsertionForm(props: {
             onChanged={onDone}
           />
         ) : null}
+        {saveError ? <p className="error-text">{saveError}</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
       </div>
 
@@ -508,7 +547,7 @@ export function TaskUpsertionForm(props: {
         onCancel={() => setCompletionDialogOpen(false)}
         onConfirm={(hours) => {
           setCompletionDialogOpen(false);
-          setActualHours(String(hours));
+          setForm((current) => ({ ...current, actualHours: String(hours) }));
           void persistTask(hours);
         }}
       />

@@ -116,6 +116,7 @@ model Product {
   sprints     Sprint[]
   workflow    WorkflowColumn[]
   tasks       Task[]
+  drafts      UserDraft[]
   teamLinks   ProductTeam[]
   activityLogs ActivityLog[]
 

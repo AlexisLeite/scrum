@@ -133,6 +133,10 @@ export class DraftsService {
       return task.productId;
     }
 
+    if (!(this.teamScopeService.isPlatformAdmin(user.role) || this.teamScopeService.isScrumMaster(user.role))) {
+      throw new ForbiddenException("Insufficient product scope");
+    }
+
     if (entityId !== "-1") {
       const resolvedProductId = await this.resolveProductIdFromEntity(entityType, entityId);
       await this.teamScopeService.assertProductReadable(user, resolvedProductId);

@@ -865,7 +865,13 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
             ) : null}
             {canWriteMessages ? (
               <>
-                <RichDescriptionField label="Nuevo mensaje" value={messageBody} onChange={setMessageBody} rows={8} />
+                <RichDescriptionField
+                  label="Nuevo mensaje"
+                  value={messageBody}
+                  onChange={setMessageBody}
+                  rows={8}
+                  productId={productId}
+                />
                 <div className="row-actions compact">
                   <button
                     type="button"

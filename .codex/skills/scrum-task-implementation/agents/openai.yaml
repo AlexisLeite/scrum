@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scrum Task Implementation"
+  short_description: "Implementa tareas Scrum end-to-end"
+  default_prompt: "Use $scrum-task-implementation to tomar la primera tarea sin asignar, implementarla y cerrarla con comentario final."

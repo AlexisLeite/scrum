@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ProductController, TeamController } from "../../../controllers";
+import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productStoryDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../Drawer";
@@ -103,16 +104,29 @@ export function StoryUpsertionForm(props: {
   const store = useRootStore();
   const navigate = useNavigate();
   const teamController = React.useMemo(() => new TeamController(store), [store]);
-  const [title, setTitle] = React.useState(story?.title ?? "");
-  const [description, setDescription] = React.useState(story?.description ?? "");
-  const [storyPoints, setStoryPoints] = React.useState(String(story?.storyPoints ?? 3));
-  const [status, setStatus] = React.useState<"DRAFT" | "READY">(
-    story?.status === "READY" ? "READY" : "DRAFT"
-  );
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [taskError, setTaskError] = React.useState("");
   const [tasksLoading, setTasksLoading] = React.useState(false);
+  const draft = useDraftPersistence({
+    userId: store.session.user?.id,
+    entityType: "STORY",
+    entityId: story?.id ?? "-1",
+    productId,
+    initialValue: {
+      title: story?.title ?? "",
+      description: story?.description ?? "",
+      storyPoints: String(story?.storyPoints ?? 3),
+      status: story?.status === "READY" ? "READY" : "DRAFT"
+    },
+    enabled: !saving
+  });
+  const { value: form, setValue: setForm, isHydratingRemote, saveError, clearDraft } = draft;
+  const title = typeof form.title === "string" ? form.title : "";
+  const description = typeof form.description === "string" ? form.description : "";
+  const storyPoints = typeof form.storyPoints === "string" ? form.storyPoints : "3";
+  const status = form.status === "READY" ? "READY" : "DRAFT";
+  const formDisabled = saving || isHydratingRemote;
 
   const tasks = store.tasks.items as StoryTask[];
   const sprints = store.sprints.items as SprintOption[];
@@ -171,6 +185,9 @@ export function StoryUpsertionForm(props: {
   }, [loadStoryTasks, story]);
 
   const submit = async () => {
+    if (formDisabled) {
+      return;
+    }
     setError("");
     setSaving(true);
     try {
@@ -187,6 +204,7 @@ export function StoryUpsertionForm(props: {
         await controller.createStory(productId, payload);
       }
 
+      await clearDraft();
       if (onDone) {
         await onDone();
       }
@@ -316,7 +334,11 @@ export function StoryUpsertionForm(props: {
       <div className="form-grid two-columns">
         <label>
           Titulo
-          <input value={title} onChange={(event) => setTitle(event.target.value)} />
+          <input
+            value={title}
+            onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+            disabled={formDisabled}
+          />
         </label>
         <label>
           Story points
@@ -324,14 +346,19 @@ export function StoryUpsertionForm(props: {
             type="number"
             min={1}
             value={storyPoints}
-            onChange={(event) => setStoryPoints(event.target.value)}
+            onChange={(event) => setForm((current) => ({ ...current, storyPoints: event.target.value }))}
+            disabled={formDisabled}
           />
         </label>
       </div>
 
       <label>
         Estado manual
-        <select value={status} onChange={(event) => setStatus(event.target.value as "DRAFT" | "READY")}>
+        <select
+          value={status}
+          onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as "DRAFT" | "READY" }))}
+          disabled={formDisabled}
+        >
           {manualStoryStatuses.map((option) => (
             <option key={option} value={option}>
               {option}
@@ -340,14 +367,21 @@ export function StoryUpsertionForm(props: {
         </select>
       </label>
 
-      <RichDescriptionField label="Descripcion" value={description} onChange={setDescription} />
+      <RichDescriptionField
+        label="Descripcion"
+        value={description}
+        onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
+        disabled={formDisabled}
+        productId={productId}
+      />
+      {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
 
       <div className="row-actions compact">
         <button
           type="button"
           className="btn btn-primary"
           onClick={() => void submit()}
-          disabled={saving || !title.trim()}
+          disabled={formDisabled || !title.trim()}
         >
           {story ? "Guardar historia" : "Crear historia"}
         </button>
@@ -359,12 +393,12 @@ export function StoryUpsertionForm(props: {
               close();
               navigate(definitionHref);
             }}
-            disabled={saving}
+            disabled={formDisabled}
           >
             Ver definicion
           </button>
         ) : null}
-        <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>
+        <button type="button" className="btn btn-secondary" onClick={close} disabled={formDisabled}>
           {closeLabel}
         </button>
       </div>
@@ -399,6 +433,7 @@ export function StoryUpsertionForm(props: {
         </section>
       ) : null}
       {story ? <ActivityTimeline controller={controller} entityType="STORY" entityId={story.id} /> : null}
+      {saveError ? <p className="error-text">{saveError}</p> : null}
       {error ? <p className="error-text">{error}</p> : null}
     </div>
   );

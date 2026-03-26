@@ -203,6 +203,28 @@ export class ProductController {
     return apiClient.post<any>(`/tasks/${taskId}/messages`, payload);
   }
 
+  async getDraft(entityType: string, entityId: string, productId?: string) {
+    const params = new URLSearchParams();
+    if (productId) {
+      params.set("productId", productId);
+    }
+    const query = params.toString();
+    return apiClient.get<any>(`/drafts/${entityType}/${entityId}${query ? `?${query}` : ""}`);
+  }
+
+  async saveDraft(entityType: string, entityId: string, payload: Record<string, unknown>, productId?: string) {
+    return apiClient.patch<any>(`/drafts/${entityType}/${entityId}`, { payload, productId });
+  }
+
+  async deleteDraft(entityType: string, entityId: string, productId?: string) {
+    const params = new URLSearchParams();
+    if (productId) {
+      params.set("productId", productId);
+    }
+    const query = params.toString();
+    return apiClient.del<any>(`/drafts/${entityType}/${entityId}${query ? `?${query}` : ""}`);
+  }
+
   async createTaskFromMessage(taskId: string, messageId: string, payload: any) {
     const task = await apiClient.post<any>(`/tasks/${taskId}/messages/${messageId}/tasks`, payload);
     this.store.tasks.upsert(task);

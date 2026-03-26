@@ -75,3 +75,73 @@
 .mdxeditor-popup-container {
   z-index: 1105 !important;
 }
+
+.reference-anchor-popover {
+  position: absolute;
+  z-index: 1110;
+  min-width: 320px;
+  max-width: min(480px, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel) 94%, #fff6df);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+}
+
+.reference-anchor-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.reference-anchor-results {
+  display: grid;
+  gap: 8px;
+}
+
+.reference-anchor-option {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--panel);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.reference-anchor-option.is-active {
+  border-color: color-mix(in srgb, var(--accent-a) 56%, transparent);
+  background: color-mix(in srgb, var(--accent-b) 12%, var(--panel));
+}
+
+.reference-anchor-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--text-main);
+  color: var(--panel);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.reference-anchor-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.reference-anchor-copy small {
+  color: var(--text-muted);
+}
+
+.reference-anchor-help {
+  margin: 10px 0 0;
+}

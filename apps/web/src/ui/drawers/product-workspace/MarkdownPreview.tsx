@@ -1,6 +1,9 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useRootStore } from "../../../stores/root-store";
+import { parseInternalReferenceHref } from "../../../lib/internal-references";
+import { InternalReferenceDrawer } from "../reference/InternalReferenceDrawer";
 import { markdownWithTitle } from "../../../util/markdownWithTitle";
 import { markdownTruncate } from "../../../util/markdownTruncate";
 
@@ -17,6 +20,7 @@ type MarkdownPreviewProps = {
 const defaultPreviewSize = 600;
 
 export function MarkdownPreview(props: MarkdownPreviewProps) {
+  const store = useRootStore();
   const [expanded, setExpanded] = useState(false)
   const previewSize = props.previewSize ?? defaultPreviewSize
 
@@ -34,7 +38,31 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
 
   return (
     <div className={`markdown-preview ${compact ? "is-compact" : ""} ${className}`.trim()}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a(anchorProps) {
+            const internalReference = parseInternalReferenceHref(anchorProps.href);
+            if (!internalReference) {
+              return <a {...anchorProps} target="_blank" rel="noreferrer" />;
+            }
+
+            return (
+              <a
+                {...anchorProps}
+                href={anchorProps.href}
+                className={`internal-reference-link ${anchorProps.className ?? ""}`.trim()}
+                onClick={(event) => {
+                  event.preventDefault();
+                  store.drawers.add(new InternalReferenceDrawer(internalReference));
+                }}
+              />
+            );
+          }
+        }}
+      >
+        {content}
+      </ReactMarkdown>
       {mustSlice && !expanded && <button className="btn btn-secondary sm" onClick={() => setExpanded(true)}> Expandir</button>}
       {mustSlice && expanded && <button className="btn btn-secondary sm" onClick={() => setExpanded(false)}> Colapsar</button>}
     </div >

@@ -2,7 +2,9 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../../api/client";
 import { ProductController } from "../../../controllers";
+import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productRootDefinitionPath } from "../../../routes/product-routes";
+import { useRootStore } from "../../../stores/root-store";
 import { RichDescriptionField } from "../product-workspace/RichDescriptionField";
 import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { Drawer, DrawerRenderContext } from "../Drawer";
@@ -70,10 +72,8 @@ export function ProductUpsertionForm(props: {
     closeOnSubmit = true
   } = props;
   const navigate = useNavigate();
+  const store = useRootStore();
   const isEditing = Boolean(product);
-  const [name, setName] = React.useState(product?.name ?? "");
-  const [key, setKey] = React.useState(product?.key ?? "");
-  const [description, setDescription] = React.useState(product?.description ?? "");
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState("");
   const [activity, setActivity] = React.useState<ActivityItem[]>([]);
@@ -81,6 +81,22 @@ export function ProductUpsertionForm(props: {
   const [teams, setTeams] = React.useState<TeamOption[]>([]);
   const [linkedTeamIds, setLinkedTeamIds] = React.useState<string[]>([]);
   const [teamsError, setTeamsError] = React.useState("");
+  const draft = useDraftPersistence({
+    userId: store.session.user?.id,
+    entityType: "PRODUCT",
+    entityId: product?.id ?? "-1",
+    initialValue: {
+      name: product?.name ?? "",
+      key: product?.key ?? "",
+      description: product?.description ?? ""
+    },
+    enabled: !saving
+  });
+  const { value: form, setValue: setForm, isHydratingRemote, saveError, clearDraft } = draft;
+  const name = typeof form.name === "string" ? form.name : "";
+  const key = typeof form.key === "string" ? form.key : "";
+  const description = typeof form.description === "string" ? form.description : "";
+  const formDisabled = saving || isHydratingRemote;
 
   React.useEffect(() => {
     if (!product) return;
@@ -123,7 +139,7 @@ export function ProductUpsertionForm(props: {
   }, [product]);
 
   const submit = React.useCallback(async () => {
-    if (saving) return;
+    if (formDisabled) return;
     setSaving(true);
     setError("");
     try {
@@ -141,6 +157,7 @@ export function ProductUpsertionForm(props: {
         });
       }
 
+      await clearDraft();
       if (onSaved) await onSaved();
       if (closeOnSubmit) {
         close();
@@ -150,7 +167,7 @@ export function ProductUpsertionForm(props: {
     } finally {
       setSaving(false);
     }
-  }, [close, controller, description, isEditing, key, name, onSaved, product, saving]);
+  }, [clearDraft, close, closeOnSubmit, controller, description, formDisabled, isEditing, key, name, onSaved, product]);
 
   const toggleLinkedTeam = React.useCallback((teamId: string) => {
     setLinkedTeamIds((prev) => prev.includes(teamId)
@@ -177,17 +194,28 @@ export function ProductUpsertionForm(props: {
     <div className="form-grid">
       <label>
         Nombre
-        <input value={name} onChange={(event) => setName(event.target.value)} />
+        <input
+          value={name}
+          onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+          disabled={formDisabled}
+        />
       </label>
       <label>
         Key
         <input
           value={key}
-          onChange={(event) => setKey(event.target.value.toUpperCase())}
-          disabled={isEditing}
+          onChange={(event) => setForm((current) => ({ ...current, key: event.target.value.toUpperCase() }))}
+          disabled={isEditing || formDisabled}
         />
       </label>
-      <RichDescriptionField label="Descripcion" value={description} onChange={setDescription} rows={4} />
+      <RichDescriptionField
+        label="Descripcion"
+        value={description}
+        onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
+        rows={4}
+        disabled={formDisabled}
+      />
+      {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
       {isEditing && product ? (
         <section className="card">
           <div className="section-head">
@@ -215,24 +243,24 @@ export function ProductUpsertionForm(props: {
               Guardar equipos
             </button>
           </div>
-          {teamsError ? <p className="error-text">{teamsError}</p> : null}
+          {teamsError ? <p className="teamsError error-text">{teamsError}</p> : null}
         </section>
       ) : null}
       {isEditing && product ? (
         <section className="card">
           <h4>Historial de actividad</h4>
           <ActivityFeed entries={activity} />
-          {activityError ? <p className="error-text">{activityError}</p> : null}
+          {activityError ? <p className="activityError error-text">{activityError}</p> : null}
         </section>
       ) : null}
       <div className="row-actions">
-        <button className="btn btn-primary" disabled={saving} onClick={() => void submit()}>
+        <button className="btn btn-primary" disabled={formDisabled} onClick={() => void submit()}>
           {isEditing ? "Guardar cambios" : "Crear producto"}
         </button>
         {isEditing && definitionHref ? (
           <button
             className="btn btn-secondary"
-            disabled={saving}
+            disabled={formDisabled}
             onClick={() => {
               close();
               navigate(definitionHref);
@@ -241,11 +269,12 @@ export function ProductUpsertionForm(props: {
             Ver definicion
           </button>
         ) : null}
-        <button className="btn btn-secondary" disabled={saving} onClick={close}>
+        <button className="btn btn-secondary" disabled={formDisabled} onClick={close}>
           {closeLabel}
         </button>
       </div>
-      {error ? <p className="error-text">{error}</p> : null}
+      {saveError ? <p className="saveError error-text">{saveError}</p> : null}
+      {error ? <p className="error error-text">{error}</p> : null}
     </div>
   );
 }

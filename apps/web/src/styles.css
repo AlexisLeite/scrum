@@ -1585,6 +1585,12 @@ html .drawer-content .card {
   color: var(--accent-a);
 }
 
+.markdown-preview .internal-reference-link {
+  color: #0f766e;
+  font-weight: 600;
+  text-decoration-thickness: 2px;
+}
+
 .markdown-preview code {
   background: color-mix(in srgb, var(--panel-muted) 88%, transparent);
   border: 1px solid var(--border-subtle);
@@ -1628,6 +1634,29 @@ html .drawer-content .card {
 .markdown-preview img {
   max-width: 100%;
   border-radius: 12px;
+}
+
+.reference-entity-card {
+  display: grid;
+  gap: 16px;
+}
+
+.reference-entity-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.reference-entity-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #0f172a, #334155);
+  color: #fff;
+  font-weight: 700;
 }
 
 .task-derived-pill {
@@ -1852,6 +1881,20 @@ th {
 
 .focused-hero .muted {
   max-width: 62ch;
+}
+
+.focused-empty-state {
+  display: grid;
+  gap: 0.8rem;
+  justify-items: start;
+  padding: clamp(1.2rem, 2.4vw, 1.8rem);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent-b) 16%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, transparent), color-mix(in srgb, var(--bg-soft) 86%, transparent));
+}
+
+.focused-empty-state h3 {
+  margin: 0;
 }
 
 .tabs {

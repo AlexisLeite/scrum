@@ -9,6 +9,7 @@ import { IndicatorsModule } from "./indicators/indicators.module";
 import { McpModule } from "./mcp/mcp.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductsModule } from "./products/products.module";
+import { ReferencesModule } from "./references/references.module";
 import { SprintsModule } from "./sprints/sprints.module";
 import { StoriesModule } from "./stories/stories.module";
 import { TasksModule } from "./tasks/tasks.module";
@@ -28,6 +29,7 @@ import { TeamsModule } from "./teams/teams.module";
     DraftsModule,
     TeamsModule,
     ProductsModule,
+    ReferencesModule,
     StoriesModule,
     TasksModule,
     SprintsModule,

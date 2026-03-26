@@ -83,7 +83,12 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown, allo
     return undefined as T;
   }
 
-  return (await response.json()) as T;
+  const text = await response.text();
+  if (!text.trim()) {
+    return undefined as T;
+  }
+
+  return JSON.parse(text) as T;
 }
 
 export const apiClient = {
