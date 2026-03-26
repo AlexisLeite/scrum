@@ -18,6 +18,48 @@ type McpToolResult = {
   isError?: boolean;
 };
 
+type TaskMessageNode = {
+  id: string;
+  parentMessageId: string | null;
+  body: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  authorUser?: {
+    id: string;
+    name: string;
+    email: string;
+    role?: string;
+  } | null;
+  derivedTasks?: Array<{
+    id: string;
+    title: string;
+    status: string;
+    updatedAt: string | Date;
+  }>;
+  replies: TaskMessageNode[];
+};
+
+type FlatMessageNode = {
+  depth: number;
+  id: string;
+  parentMessageId: string | null;
+  body: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  authorUser?: {
+    id: string;
+    name: string;
+    email: string;
+    role?: string;
+  } | null;
+  derivedTasks: Array<{
+    id: string;
+    title: string;
+    status: string;
+    updatedAt: string | Date;
+  }>;
+};
+
 const MCP_PROTOCOL_VERSION = "2025-03-26";
 
 @Injectable()
@@ -158,6 +200,63 @@ export class McpService {
                     }
                   }
                 }
+              },
+              {
+                name: "get_task_details",
+                description: "Devuelve detalles profundos de una tarea, con historia, tarea y los ultimos 4 mensajes.",
+                inputSchema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["taskId"],
+                  properties: {
+                    taskId: {
+                      type: "string",
+                      description: "ID de la tarea."
+                    }
+                  }
+                }
+              },
+              {
+                name: "get_task_history",
+                description: "Devuelve el historial de mensajes de una tarea como arbol ASCII usando offset y limit sobre la vista plana.",
+                inputSchema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["taskId"],
+                  properties: {
+                    taskId: {
+                      type: "string",
+                      description: "ID de la tarea."
+                    },
+                    offset: {
+                      type: "number",
+                      description: "Offset sobre el historial plano."
+                    },
+                    limit: {
+                      type: "number",
+                      description: "Cantidad maxima de mensajes a devolver."
+                    }
+                  }
+                }
+              },
+              {
+                name: "respond_message",
+                description: "Responde a un mensaje existente dentro de una tarea asignada al usuario autenticado.",
+                inputSchema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["messageId", "response"],
+                  properties: {
+                    messageId: {
+                      type: "string",
+                      description: "ID del mensaje a responder."
+                    },
+                    response: {
+                      type: "string",
+                      description: "Respuesta a publicar."
+                    }
+                  }
+                }
               }
             ]
           });
@@ -182,14 +281,25 @@ export class McpService {
     switch (name) {
       case "list_pending_tasks": {
         const board = await this.tasksService.listFocused(user);
+        const normalizedBoard = {
+          ...board,
+          columns: board.columns.map((column) => ({
+            ...column,
+            tasks: column.tasks.map((task) => ({
+              ...task,
+              parentMessageId: task.sourceMessage?.id ?? task.sourceMessageId ?? null,
+              parentMessage: task.sourceMessage ?? null
+            }))
+          }))
+        };
         return {
           content: [
             {
               type: "text",
-              text: `Se devolvieron ${board.columns.reduce((total, column) => total + column.tasks.length, 0)} tareas visibles en Focused.`
+              text: `Se devolvieron ${normalizedBoard.columns.reduce((total, column) => total + column.tasks.length, 0)} tareas visibles en Focused.`
             }
           ],
-          structuredContent: board
+          structuredContent: normalizedBoard
         };
       }
       case "take_task": {
@@ -256,6 +366,114 @@ export class McpService {
           }
         };
       }
+      case "get_task_details": {
+        const taskId = this.readStringArgument(args, "taskId");
+        const detail = await this.tasksService.getDetail(taskId, user);
+        const history = this.flattenMessages(detail.conversation as TaskMessageNode[]);
+        const recentMessages = history.slice(-4);
+        const hasMoreMessages = history.length > recentMessages.length;
+        const summary = {
+          story: detail.story
+            ? {
+                id: detail.story.id,
+                title: detail.story.title,
+                description: detail.story.description ?? null,
+                storyPoints: detail.story.storyPoints,
+                status: detail.story.status,
+                backlogRank: detail.story.backlogRank ?? null
+              }
+            : null,
+          task: {
+            id: detail.id,
+            title: detail.title,
+            description: detail.description,
+            status: detail.status,
+            assigneeId: detail.assigneeId,
+            assignee: detail.assignee ?? null,
+            sprintId: detail.sprintId,
+            sprint: detail.sprint ?? null,
+            product: detail.product ?? null,
+            parentTaskId: detail.parentTask?.id ?? detail.parentTaskId ?? null,
+            parentTask: detail.parentTask ?? null,
+            parentMessageId: detail.sourceMessage?.id ?? detail.sourceMessageId ?? null,
+            parentMessage: detail.sourceMessage ?? null,
+            childSummary: detail.childSummary,
+            unfinishedSprintCount: detail.unfinishedSprintCount ?? 0
+          },
+          latestMessages: recentMessages.map((message) => this.serializeFlatMessage(message)),
+          latestMessagesInfo: {
+            returned: recentMessages.length,
+            total: history.length,
+            hasMore: hasMoreMessages
+          }
+        };
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: this.buildTaskDetailsText(summary)
+            }
+          ],
+          structuredContent: summary
+        };
+      }
+      case "get_task_history": {
+        const taskId = this.readStringArgument(args, "taskId");
+        const offset = this.readOptionalIntegerArgument(args, "offset") ?? 0;
+        const limit = this.readOptionalIntegerArgument(args, "limit") ?? 50;
+        if (offset < 0 || limit < 1) {
+          throw new BadRequestException("offset must be >= 0 and limit must be >= 1");
+        }
+        const historyTree = (await this.tasksService.listMessages(taskId, user)) as TaskMessageNode[];
+        const history = this.flattenMessages(historyTree);
+        const slice = history.slice(offset, offset + limit);
+        const ascii = this.renderAsciiHistory(slice, history.length, offset, limit);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: ascii
+            }
+          ],
+          structuredContent: {
+            taskId,
+            offset,
+            limit,
+            total: history.length,
+            hasMore: offset + slice.length < history.length,
+            messages: slice.map((message) => this.serializeFlatMessage(message)),
+            ascii
+          }
+        };
+      }
+      case "respond_message": {
+        const messageId = this.readStringArgument(args, "messageId");
+        const response = this.readStringArgument(args, "response");
+        const message = await this.tasksService.getMessageContext(messageId, user);
+        if (message.task.assigneeId !== user.sub) {
+          throw new ForbiddenException("Only messages from tasks assigned to the current user can be answered via MCP");
+        }
+        const created = await this.tasksService.addMessage(
+          message.task.id,
+          { body: response, parentMessageId: message.id },
+          user
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Se respondio el mensaje ${message.id} en la tarea ${message.task.id}.`
+            }
+          ],
+          structuredContent: {
+            taskId: message.task.id,
+            parentMessageId: message.id,
+            message: created
+          }
+        };
+      }
       default:
         throw new BadRequestException(`Unknown tool: ${name}`);
     }
@@ -303,6 +521,143 @@ export class McpService {
       throw new BadRequestException(`Invalid argument: ${key}`);
     }
     return value;
+  }
+
+  private readOptionalIntegerArgument(args: Record<string, unknown>, key: string) {
+    const value = this.readOptionalNumberArgument(args, key);
+    if (value === undefined) {
+      return undefined;
+    }
+    if (!Number.isInteger(value)) {
+      throw new BadRequestException(`Invalid argument: ${key}`);
+    }
+    return value;
+  }
+
+  private flattenMessages(messages: TaskMessageNode[], depth: number = 0): FlatMessageNode[] {
+    const flattened: FlatMessageNode[] = [];
+    for (const message of messages) {
+      flattened.push({
+        depth,
+        id: message.id,
+        parentMessageId: message.parentMessageId,
+        body: message.body,
+        createdAt: message.createdAt,
+        updatedAt: message.updatedAt,
+        authorUser: message.authorUser ?? null,
+        derivedTasks: message.derivedTasks ?? []
+      });
+      flattened.push(...this.flattenMessages(message.replies ?? [], depth + 1));
+    }
+    return flattened;
+  }
+
+  private renderAsciiHistory(messages: FlatMessageNode[], total: number, offset: number, limit: number) {
+    if (messages.length === 0) {
+      return `Historial vacio. total=${total} offset=${offset} limit=${limit}`;
+    }
+
+    const lines = [
+      `task_history total=${total} offset=${offset} limit=${limit} returned=${messages.length}`
+    ];
+
+    for (const message of messages) {
+      const indent = message.depth > 0 ? `${"|  ".repeat(message.depth - 1)}|- ` : "";
+      const author = message.authorUser?.name ?? message.authorUser?.email ?? "Sistema";
+      const preview = this.toSingleLine(message.body, 160);
+      const derivedSuffix =
+        message.derivedTasks.length > 0
+          ? ` | derived=${message.derivedTasks.map((task) => `${task.id}:${task.status}`).join(", ")}`
+          : "";
+      lines.push(
+        `${indent}[${message.id}] ${author} @ ${this.formatTimestamp(message.createdAt)}${derivedSuffix}`
+      );
+      lines.push(`${indent}${preview}`);
+    }
+
+    if (offset + messages.length < total) {
+      lines.push(`... hay mas mensajes (${total - (offset + messages.length)} restantes)`);
+    }
+
+    return lines.join("\n");
+  }
+
+  private buildTaskDetailsText(summary: {
+    story: Record<string, unknown> | null;
+    task: Record<string, unknown>;
+    latestMessages: Array<Record<string, unknown>>;
+    latestMessagesInfo: { returned: number; total: number; hasMore: boolean };
+  }) {
+    const story = summary.story as {
+      title?: string;
+      status?: string;
+      storyPoints?: number;
+      description?: string | null;
+    } | null;
+    const task = summary.task as {
+      id: string;
+      title: string;
+      status: string;
+      description?: string | null;
+      parentTask?: { id: string; title: string; status: string } | null;
+      parentMessage?: { id: string; body: string } | null;
+    };
+
+    const lines = [
+      "Historia:",
+      story
+        ? `- ${story.title} | status=${story.status} | storyPoints=${story.storyPoints ?? "-"} | description=${this.toSingleLine(story.description as string | null | undefined, 160)}`
+        : "- Sin historia asociada",
+      "Tarea:",
+      `- ${task.id} | ${task.title} | status=${task.status} | description=${this.toSingleLine(task.description, 160)}`,
+      `- parentTask=${task.parentTask ? `${task.parentTask.id} ${task.parentTask.title} (${task.parentTask.status})` : "none"}`,
+      `- parentMessage=${task.parentMessage ? `${task.parentMessage.id} ${this.toSingleLine(task.parentMessage.body, 120)}` : "none"}`,
+      `Ultimos mensajes (${summary.latestMessagesInfo.returned}/${summary.latestMessagesInfo.total}):`
+    ];
+
+    for (const message of summary.latestMessages as Array<{
+      id: string;
+      depth: number;
+      author: string;
+      createdAt: string;
+      bodyPreview: string;
+    }>) {
+      lines.push(`- [${message.id}] depth=${message.depth} ${message.author} @ ${message.createdAt}: ${message.bodyPreview}`);
+    }
+
+    lines.push(summary.latestMessagesInfo.hasMore ? "- Hay mas mensajes disponibles." : "- No hay mas mensajes.");
+    return lines.join("\n");
+  }
+
+  private serializeFlatMessage(message: FlatMessageNode) {
+    return {
+      id: message.id,
+      depth: message.depth,
+      parentMessageId: message.parentMessageId,
+      author: message.authorUser?.name ?? message.authorUser?.email ?? "Sistema",
+      authorUser: message.authorUser ?? null,
+      createdAt: this.formatTimestamp(message.createdAt),
+      updatedAt: this.formatTimestamp(message.updatedAt),
+      body: message.body,
+      bodyPreview: this.toSingleLine(message.body, 160),
+      derivedTasks: message.derivedTasks
+    };
+  }
+
+  private formatTimestamp(value: string | Date) {
+    const parsed = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString();
+  }
+
+  private toSingleLine(value: string | null | undefined, maxLength: number) {
+    const normalized = (value ?? "").replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      return "(sin contenido)";
+    }
+    if (normalized.length <= maxLength) {
+      return normalized;
+    }
+    return `${normalized.slice(0, Math.max(0, maxLength - 3))}...`;
   }
 
   private jsonRpcResult(id: JsonRpcId, result: unknown) {

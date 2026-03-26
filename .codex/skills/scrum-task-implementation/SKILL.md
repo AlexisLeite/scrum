@@ -13,11 +13,12 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 2. Identifica la primera tarea sin responsable.
 3. Toma esa tarea para el usuario autenticado.
 4. Cambia su estado a `In Progress`.
-5. Lee con cuidado el titulo, la descripcion y cualquier comentario disponible antes de editar codigo.
-6. Implementa solo lo que pida la tarea, respetando el estado actual del worktree.
-7. Ejecuta validaciones razonables para el cambio: pruebas focalizadas, lint o build parcial si aplica.
-8. Cambia la tarea a `Done` cuando la implementacion y la validacion esten terminadas.
-9. Publica un comentario final en markdown valido con resumen, validaciones y archivos tocados.
+5. Lee los detalles en profundidad de la tarea antes de editar codigo.
+6. Incluye en esa lectura la historia, la tarea, los ultimos mensajes y cualquier tarea padre o mensaje padre cuando exista para reconstruir el contexto completo.
+7. Implementa solo lo que pida la tarea, respetando el estado actual del worktree.
+8. Ejecuta validaciones razonables para el cambio: pruebas focalizadas, lint o build parcial si aplica.
+9. Cambia la tarea a `Done` cuando la implementacion y la validacion esten terminadas.
+10. Publica un comentario final en markdown valido con resumen, validaciones y archivos tocados.
 
 ## Reglas Operativas
 
@@ -36,6 +37,8 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 ## Implementacion
 
 - Usa el contenido de la tarea como fuente de verdad para el alcance.
+- Antes de tocar codigo, relee siempre el detalle profundo de la tarea y el contexto conversacional asociado.
+- Si la tarea deriva de otra tarea o de un mensaje, navega tambien esos padres antes de decidir la implementacion.
 - Inspecciona primero los archivos y modulos relacionados antes de editar.
 - Manten los cambios acotados al problema descrito.
 - Si hay senales de trabajo concurrente en los mismos archivos, prioriza integrarte con ese estado en lugar de sobrescribirlo.

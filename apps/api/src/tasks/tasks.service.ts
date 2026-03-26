@@ -95,6 +95,28 @@ export class TasksService {
         ...assignmentScope
       },
       include: {
+        parentTask: {
+          select: {
+            id: true,
+            title: true,
+            status: true
+          }
+        },
+        sourceMessage: {
+          select: {
+            id: true,
+            body: true,
+            createdAt: true,
+            taskId: true,
+            authorUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          }
+        },
         assignee: {
           select: {
             id: true,
@@ -106,6 +128,8 @@ export class TasksService {
           select: {
             id: true,
             title: true,
+            description: true,
+            storyPoints: true,
             status: true
           }
         },
@@ -169,6 +193,51 @@ export class TasksService {
   async listMessages(taskId: string, user: AuthUser) {
     await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
     return this.loadTaskConversation(taskId);
+  }
+
+  async getMessageContext(messageId: string, user: AuthUser) {
+    const message = await this.prisma.taskMessage.findUnique({
+      where: { id: messageId },
+      include: {
+        authorUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true
+          }
+        },
+        task: {
+          select: {
+            id: true,
+            title: true,
+            assigneeId: true,
+            sprintId: true,
+            productId: true
+          }
+        },
+        parentMessage: {
+          select: {
+            id: true,
+            body: true,
+            authorUser: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          }
+        }
+      }
+    });
+    if (!message) {
+      throw new BadRequestException("Message not found");
+    }
+
+    await this.assertProductAccess(user, message.task.productId);
+    this.assertCanReadTask(user, message.task);
+    return message;
   }
 
   async create(storyId: string, dto: CreateTaskDto, user: AuthUser) {
@@ -713,8 +782,17 @@ export class TasksService {
           select: {
             id: true,
             title: true,
+            description: true,
             storyPoints: true,
-            status: true
+            status: true,
+            backlogRank: true
+          }
+        },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            key: true
           }
         },
         sprint: {
@@ -729,7 +807,10 @@ export class TasksService {
           select: {
             id: true,
             title: true,
-            status: true
+            description: true,
+            status: true,
+            assigneeId: true,
+            sprintId: true
           }
         },
         sourceMessage: withMessages
