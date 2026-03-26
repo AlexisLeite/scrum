@@ -286,7 +286,7 @@ label>small.muted {
 }
 
 .auth-page-wrap {
-  width: min(100%, 520px);
+  width: min(98vw, 520px);
 }
 
 .auth-card {
@@ -1760,7 +1760,7 @@ th {
 
 .app-shell>main,
 .auth-page-wrap {
-  width: min(100%, var(--page-max));
+  width: min(98vw, var(--page-max));
   margin-inline: auto;
 }
 
