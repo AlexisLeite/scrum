@@ -1,5 +1,5 @@
 import { ActivityEntityType, ApiKeyDto, Role } from "@scrum/contracts";
-import { apiClient } from "../api/client";
+import { ApiError, apiClient } from "../api/client";
 import { RootStore } from "../stores/root-store";
 
 type ActivityListResult<T> = { items: T[]; page: number; pageSize: number; total: number };
@@ -27,6 +27,17 @@ export class AuthController {
       this.store.session.setUser(me);
     } catch {
       this.store.session.setUser(null);
+    }
+  }
+
+  async refreshSessionInBackground() {
+    try {
+      await apiClient.refreshSession();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        this.store.session.setUser(null);
+      }
+      throw error;
     }
   }
 

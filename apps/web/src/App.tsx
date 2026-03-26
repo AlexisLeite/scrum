@@ -51,6 +51,8 @@ import {
   getUserInitials
 } from "./lib/permissions";
 
+const SESSION_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+
 export const App = observer(function App() {
   const store = useRootStore();
   const auth = React.useMemo(() => new AuthController(store), [store]);
@@ -63,6 +65,50 @@ export const App = observer(function App() {
       store.session.setHydrated(true);
     });
   }, [auth, store.session]);
+
+  React.useEffect(() => {
+    if (!store.session.user) {
+      return undefined;
+    }
+
+    let disposed = false;
+
+    const refreshInBackground = async () => {
+      try {
+        await auth.refreshSessionInBackground();
+      } catch (error) {
+        if (error instanceof Error) {
+          console.warn("Background session refresh failed", error);
+        }
+      }
+    };
+
+    const handleVisibilityRefresh = () => {
+      if (document.visibilityState === "visible") {
+        void refreshInBackground();
+      }
+    };
+
+    const handleWindowFocus = () => {
+      void refreshInBackground();
+    };
+
+    const intervalId = window.setInterval(() => {
+      if (!disposed && document.visibilityState === "visible") {
+        void refreshInBackground();
+      }
+    }, SESSION_REFRESH_INTERVAL_MS);
+
+    document.addEventListener("visibilitychange", handleVisibilityRefresh);
+    window.addEventListener("focus", handleWindowFocus);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityRefresh);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [auth, store.session.user]);
 
   const user = store.session.user;
   const showMinimalShell = location.pathname === "/login" || location.pathname.startsWith("/auth/gitlab/callback");

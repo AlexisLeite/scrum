@@ -15,6 +15,16 @@ type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
 let refreshRequest: Promise<void> | null = null;
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 function normalizeApiError(rawText: string, status: number): string {
   if (!rawText) {
     return `HTTP ${status}`;
@@ -55,7 +65,7 @@ async function refreshSession(): Promise<void> {
       .then(async (response) => {
         if (!response.ok) {
           const text = await response.text();
-          throw new Error(normalizeApiError(text, response.status));
+          throw new ApiError(normalizeApiError(text, response.status), response.status);
         }
       })
       .finally(() => {
@@ -76,7 +86,7 @@ async function request<T>(method: HttpMethod, path: string, body?: unknown, allo
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(normalizeApiError(text, response.status));
+    throw new ApiError(normalizeApiError(text, response.status), response.status);
   }
 
   if (response.status === 204) {
@@ -95,5 +105,6 @@ export const apiClient = {
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
-  del: <T>(path: string) => request<T>("DELETE", path)
+  del: <T>(path: string) => request<T>("DELETE", path),
+  refreshSession
 };

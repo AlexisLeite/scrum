@@ -1,5 +1,5 @@
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useRootStore } from "../../../stores/root-store";
 import { parseInternalReferenceHref } from "../../../lib/internal-references";
@@ -40,6 +40,13 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
     <div className={`markdown-preview ${compact ? "is-compact" : ""} ${className}`.trim()}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        urlTransform={(url) => {
+          if (parseInternalReferenceHref(url)) {
+            return url;
+          }
+
+          return defaultUrlTransform(url);
+        }}
         components={{
           a(anchorProps) {
             const internalReference = parseInternalReferenceHref(anchorProps.href);

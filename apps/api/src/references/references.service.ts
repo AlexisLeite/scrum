@@ -23,10 +23,6 @@ export class ReferencesService {
 
   async search(user: AuthUser, query: string, preferredProductId?: string) {
     const normalizedQuery = normalizeQuery(query);
-    if (!normalizedQuery) {
-      return [];
-    }
-
     const [accessibleProductIds, accessibleTeamIds] = await Promise.all([
       this.teamScopeService.getAccessibleProductIds(user),
       this.teamScopeService.getAccessibleTeamIds(user)
@@ -46,10 +42,10 @@ export class ReferencesService {
       this.prisma.product.findMany({
         where: {
           ...scope.productWhere,
-          OR: [
+          ...textSearchFilter(normalizedQuery, [
             { name: { contains: normalizedQuery, mode: "insensitive" } },
             { key: { contains: normalizedQuery, mode: "insensitive" } }
-          ]
+          ])
         },
         select: {
           id: true,
@@ -61,10 +57,10 @@ export class ReferencesService {
       this.prisma.userStory.findMany({
         where: {
           ...scope.storyWhere,
-          OR: [
+          ...textSearchFilter(normalizedQuery, [
             { title: { contains: normalizedQuery, mode: "insensitive" } },
             { description: { contains: normalizedQuery, mode: "insensitive" } }
-          ]
+          ])
         },
         select: {
           id: true,
@@ -84,10 +80,10 @@ export class ReferencesService {
         where: {
           ...scope.taskWhere,
           ...taskAssignmentScope,
-          OR: [
+          ...textSearchFilter(normalizedQuery, [
             { title: { contains: normalizedQuery, mode: "insensitive" } },
             { description: { contains: normalizedQuery, mode: "insensitive" } }
-          ]
+          ])
         },
         select: {
           id: true,
@@ -161,10 +157,10 @@ export class ReferencesService {
     if (this.teamScopeService.isPlatformAdmin(user.role)) {
       return this.prisma.user.findMany({
         where: {
-          OR: [
+          ...textSearchFilter(query, [
             { name: { contains: query, mode: "insensitive" } },
             { email: { contains: query, mode: "insensitive" } }
-          ]
+          ])
         },
         select: {
           id: true,
@@ -181,10 +177,10 @@ export class ReferencesService {
         return this.prisma.user.findMany({
           where: {
             id: user.sub,
-            OR: [
+            ...textSearchFilter(query, [
               { name: { contains: query, mode: "insensitive" } },
               { email: { contains: query, mode: "insensitive" } }
-            ]
+            ])
           },
           select: {
             id: true,
@@ -208,14 +204,10 @@ export class ReferencesService {
               }
             }
           ],
-          AND: [
-            {
-              OR: [
-                { name: { contains: query, mode: "insensitive" } },
-                { email: { contains: query, mode: "insensitive" } }
-              ]
-            }
-          ]
+          ...andTextSearchFilter(query, [
+            { name: { contains: query, mode: "insensitive" } },
+            { email: { contains: query, mode: "insensitive" } }
+          ])
         },
         select: {
           id: true,
@@ -256,14 +248,10 @@ export class ReferencesService {
     return this.prisma.user.findMany({
       where: {
         ...roleScope,
-        AND: [
-          {
-            OR: [
-              { name: { contains: query, mode: "insensitive" } },
-              { email: { contains: query, mode: "insensitive" } }
-            ]
-          }
-        ]
+        ...andTextSearchFilter(query, [
+          { name: { contains: query, mode: "insensitive" } },
+          { email: { contains: query, mode: "insensitive" } }
+        ])
       },
       select: {
         id: true,
@@ -319,6 +307,14 @@ function buildAccessibleProductScope(accessibleProductIds: string[] | null, pref
 
 function normalizeQuery(value: string): string {
   return value.trim().replace(/^@+/, "").toLowerCase();
+}
+
+function textSearchFilter<T>(query: string, orClauses: T[]) {
+  return query ? { OR: orClauses } : {};
+}
+
+function andTextSearchFilter<T>(query: string, orClauses: T[]) {
+  return query ? { AND: [{ OR: orClauses }] } : {};
 }
 
 function entityScore(query: string, candidates: Array<string | null | undefined>) {

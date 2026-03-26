@@ -36,7 +36,8 @@ type StoryItem = {
   storyPoints: number;
   status: StoryStatus;
   backlogRank: number;
-  tasks?: Array<{ id: string; status: string }>;
+  createdAt?: string | null;
+  tasks?: Array<{ id: string; status: string; title?: string | null; description?: string | null }>;
 };
 type SprintItem = {
   id: string;
@@ -113,12 +114,59 @@ function buildAssignableUsers(teams: TeamItem[]) {
   );
 }
 
-function reorderItems<T>(items: T[], fromIndex: number, toIndex: number): T[] {
-  if (fromIndex === toIndex) return items;
-  const next = [...items];
-  const [moved] = next.splice(fromIndex, 1);
-  next.splice(toIndex, 0, moved);
-  return next;
+type StorySortOption = "title-asc" | "title-desc" | "created-desc" | "created-asc";
+
+const storySortOptions: Array<{ value: StorySortOption; label: string }> = [
+  { value: "title-asc", label: "Titulo ascendente" },
+  { value: "title-desc", label: "Titulo descendente" },
+  { value: "created-desc", label: "Mas recientes" },
+  { value: "created-asc", label: "Mas antiguas" }
+];
+
+function normalizeSearchValue(value: string | null | undefined): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase();
+}
+
+function matchesStorySearch(story: StoryItem, query: string): boolean {
+  if (!query) return true;
+
+  const haystack = [
+    story.title,
+    story.description,
+    ...(story.tasks ?? []).flatMap((task) => [task.title, task.description])
+  ]
+    .map((value) => normalizeSearchValue(value))
+    .join("\n");
+
+  return haystack.includes(query);
+}
+
+function getStoryCreatedAt(story: StoryItem): number {
+  if (!story.createdAt) return 0;
+  const createdAt = new Date(story.createdAt).getTime();
+  return Number.isNaN(createdAt) ? 0 : createdAt;
+}
+
+function sortStories(stories: StoryItem[], sortBy: StorySortOption): StoryItem[] {
+  const sortedStories = [...stories];
+  sortedStories.sort((left, right) => {
+    switch (sortBy) {
+      case "title-asc":
+        return left.title.localeCompare(right.title, undefined, { sensitivity: "base" });
+      case "title-desc":
+        return right.title.localeCompare(left.title, undefined, { sensitivity: "base" });
+      case "created-desc":
+        return getStoryCreatedAt(right) - getStoryCreatedAt(left);
+      case "created-asc":
+        return getStoryCreatedAt(left) - getStoryCreatedAt(right);
+      default:
+        return left.backlogRank - right.backlogRank;
+    }
+  });
+  return sortedStories;
 }
 
 export const ProductOverviewView = observer(function ProductOverviewView() {
@@ -161,11 +209,8 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const { productId } = useParams<{ productId: string }>();
   const role = store.session.user?.role;
   const canManageStories = role === "platform_admin" || role === "scrum_master";
-  const canRankStories = role === "platform_admin" || role === "scrum_master" || role === "product_owner";
-  const [orderedStories, setOrderedStories] = React.useState<StoryItem[]>([]);
-  const [draggedStoryId, setDraggedStoryId] = React.useState("");
-  const [reorderError, setReorderError] = React.useState("");
-  const [reordering, setReordering] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const [sortBy, setSortBy] = React.useState<StorySortOption>("title-asc");
 
   React.useEffect(() => {
     if (!productId) return;
@@ -173,37 +218,13 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   }, [controller, productId]);
 
   const stories = store.stories.items as StoryItem[];
-
-  React.useEffect(() => {
-    setOrderedStories([...stories].sort((left, right) => left.backlogRank - right.backlogRank));
-  }, [stories]);
+  const normalizedSearch = React.useMemo(() => normalizeSearchValue(search.trim()), [search]);
+  const filteredStories = React.useMemo(
+    () => sortStories(stories.filter((story) => matchesStorySearch(story, normalizedSearch)), sortBy),
+    [normalizedSearch, sortBy, stories]
+  );
 
   if (!productId) return null;
-
-  const persistOrder = async (nextStories: StoryItem[]) => {
-    setReorderError("");
-    setReordering(true);
-    setOrderedStories(nextStories);
-    try {
-      for (let index = 0; index < nextStories.length; index += 1) {
-        await controller.rankStory(nextStories[index].id, (index + 1) * 10);
-      }
-      await controller.loadStories(productId);
-    } catch (error) {
-      setReorderError(getErrorMessage(error));
-      await controller.loadStories(productId);
-    } finally {
-      setDraggedStoryId("");
-      setReordering(false);
-    }
-  };
-
-  const moveStory = async (storyId: string, targetIndex: number) => {
-    const currentIndex = orderedStories.findIndex((story) => story.id === storyId);
-    if (currentIndex < 0) return;
-    if (targetIndex < 0 || targetIndex >= orderedStories.length || currentIndex === targetIndex) return;
-    await persistOrder(reorderItems(orderedStories, currentIndex, targetIndex));
-  };
 
   const openStoryDrawer = (story?: StoryItem) => {
     store.drawers.add(
@@ -229,25 +250,30 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
             </button>
           ) : null}
         </div>
+        <div className="story-list-toolbar">
+          <label className="story-list-search">
+            Buscar historia
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Titulo, descripcion o tareas asociadas"
+            />
+          </label>
+          <label className="story-list-sort">
+            Orden
+            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as StorySortOption)}>
+              {storySortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="story-list">
-          {orderedStories.map((story, index) => (
-            <article
-              key={story.id}
-              className={`story-card ${draggedStoryId === story.id ? "is-dragging" : ""}`}
-              draggable={canRankStories && !reordering}
-              onDragStart={() => {
-                if (canRankStories) {
-                  setDraggedStoryId(story.id);
-                }
-              }}
-              onDragEnd={() => setDraggedStoryId("")}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                if (!canRankStories || !draggedStoryId || draggedStoryId === story.id) return;
-                void moveStory(draggedStoryId, index);
-              }}
-            >
+          {filteredStories.map((story) => (
+            <article key={story.id} className="story-card">
               <div className="story-card-main">
                 <div className="story-card-heading">
                   <MarkdownPreview markdown={markdownWithTitle(story.title, story.description)} compact className="muted" emptyLabel="Sin descripcion" />
@@ -288,7 +314,10 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
               </div>
             </article>
           ))}
-          {orderedStories.length === 0 ? <p className="muted">No hay historias. Crea la primera historia para iniciar el backlog.</p> : null}
+          {stories.length === 0 ? <p className="muted">No hay historias. Crea la primera historia para iniciar el backlog.</p> : null}
+          {stories.length > 0 && filteredStories.length === 0 ? (
+            <p className="muted">No hay historias que coincidan con la busqueda actual.</p>
+          ) : null}
         </div>
       </section>
     </div>

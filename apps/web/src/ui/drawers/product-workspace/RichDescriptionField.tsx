@@ -218,12 +218,14 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
   }, [activeAnchor?.token]);
 
   React.useEffect(() => {
+    const anchorQuery = activeAnchor?.query ?? null;
+
     if (searchTimeoutRef.current !== null) {
       window.clearTimeout(searchTimeoutRef.current);
       searchTimeoutRef.current = null;
     }
 
-    if (!activeAnchor?.query) {
+    if (anchorQuery === null) {
       setReferenceResults([]);
       setReferenceLoading(false);
       return;
@@ -231,7 +233,8 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
 
     searchTimeoutRef.current = window.setTimeout(() => {
       setReferenceLoading(true);
-      const params = new URLSearchParams({ q: activeAnchor.query });
+      const params = new URLSearchParams();
+      params.set("q", anchorQuery);
       if (productId) {
         params.set("productId", productId);
       }
@@ -461,7 +464,7 @@ function firstTextNode(node: Node): Text | null {
 }
 
 function findAnchorMatch(value: string, offset: number) {
-  const anchorPattern = /@[A-Za-z0-9_]+/g;
+  const anchorPattern = /@[A-Za-z0-9_]*/g;
   let match: RegExpExecArray | null = null;
 
   while ((match = anchorPattern.exec(value)) !== null) {
@@ -481,7 +484,7 @@ function findAnchorMatch(value: string, offset: number) {
 
 function replaceAnchorOccurrence(markdown: string, anchor: ActiveAnchor, replacement: string) {
   let currentOccurrence = 0;
-  return markdown.replace(/@[A-Za-z0-9_]+/g, (match) => {
+  return markdown.replace(/@[A-Za-z0-9_]*/g, (match) => {
     if (match !== anchor.token) {
       return match;
     }
