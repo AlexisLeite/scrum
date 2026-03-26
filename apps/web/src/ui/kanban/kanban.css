@@ -184,7 +184,7 @@
   line-height: 1.35;
 }
 
-.kb-description-markdown.markdown-preview > * {
+.kb-description-markdown.markdown-preview>* {
   margin-block: 0.18rem;
 }
 
