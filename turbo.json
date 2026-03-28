@@ -3,6 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["BUILD_DEV_MODE"],
       "outputs": ["dist/**", "build/**"]
     },
     "dev": {

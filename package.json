@@ -14,6 +14,7 @@
   "scripts": {
     "dev": "pnpm db:push && pnpm db:generate && pnpm db:seed && turbo run dev --parallel",
     "build": "turbo run build",
+    "build-dev-mode": "BUILD_DEV_MODE=1 turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
