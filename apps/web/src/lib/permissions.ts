@@ -6,7 +6,7 @@ type TaskPermissionContext = {
 };
 
 export const ADMINISTRATION_ROLES: Role[] = ["platform_admin", "product_owner", "scrum_master"];
-export const USER_ADMIN_ROLES: Role[] = ["platform_admin", "scrum_master"];
+export const USER_ADMIN_ROLES: Role[] = ["platform_admin", "product_owner"];
 export const PRODUCT_MANAGERS: Role[] = ["platform_admin", "product_owner"];
 export const DELIVERY_MANAGERS: Role[] = ["platform_admin", "scrum_master"];
 export const PRODUCT_WORKSPACE_ROLES: Role[] = ["platform_admin", "product_owner", "scrum_master"];

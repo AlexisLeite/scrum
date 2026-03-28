@@ -5,6 +5,8 @@ import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productStoryDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../Drawer";
+import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
+import { ModalsController } from "../../modals/ModalsController";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { RichDescriptionField } from "./RichDescriptionField";
@@ -84,6 +86,9 @@ export class StoryUpsertionDrawer extends Drawer {
       <StoryUpsertionForm
         options={this.options}
         close={context.close}
+        requestClose={context.requestClose}
+        drawerController={context.controller}
+        drawerId={context.drawerId}
         definitionHref={
           this.options.story ? productStoryDefinitionPath(this.options.productId, this.options.story.id) : undefined
         }
@@ -95,11 +100,23 @@ export class StoryUpsertionDrawer extends Drawer {
 export function StoryUpsertionForm(props: {
   options: StoryUpsertionDrawerOptions;
   close: () => void;
+  requestClose?: () => Promise<boolean>;
+  drawerController?: DrawerRenderContext["controller"];
+  drawerId?: string;
   closeLabel?: string;
   definitionHref?: string;
   closeOnSubmit?: boolean;
 }) {
-  const { options, close, closeLabel = "Cancelar", definitionHref, closeOnSubmit = true } = props;
+  const {
+    options,
+    close,
+    requestClose,
+    drawerController,
+    drawerId,
+    closeLabel = "Cancelar",
+    definitionHref,
+    closeOnSubmit = true
+  } = props;
   const { controller, productId, story, onDone } = options;
   const store = useRootStore();
   const navigate = useNavigate();
@@ -127,6 +144,31 @@ export function StoryUpsertionForm(props: {
   const storyPoints = typeof form.storyPoints === "string" ? form.storyPoints : "3";
   const status = form.status === "READY" ? "READY" : "DRAFT";
   const formDisabled = saving || isHydratingRemote;
+  const initialCloseSnapshot = React.useMemo(
+    () => JSON.stringify({
+      title: story?.title ?? "",
+      description: story?.description ?? "",
+      storyPoints: String(story?.storyPoints ?? 3),
+      status: story?.status === "READY" ? "READY" : "DRAFT"
+    }),
+    [story]
+  );
+  const currentCloseSnapshot = React.useMemo(
+    () => JSON.stringify({
+      title,
+      description,
+      storyPoints,
+      status
+    }),
+    [description, status, storyPoints, title]
+  );
+  const hasUnsavedChanges = !isHydratingRemote && currentCloseSnapshot !== initialCloseSnapshot;
+
+  useDrawerCloseGuard({
+    controller: drawerController,
+    drawerId,
+    when: hasUnsavedChanges
+  });
 
   const tasks = store.tasks.items as StoryTask[];
   const sprints = store.sprints.items as SprintOption[];
@@ -262,7 +304,14 @@ export function StoryUpsertionForm(props: {
       return;
     }
 
-    if (!window.confirm("Quitar esta tarea eliminara el trabajo asociado. Deseas continuar?")) {
+    const confirmed = await ModalsController.confirm({
+      title: "Quitar tarea",
+      message: "Quitar esta tarea eliminara el trabajo asociado. Deseas continuar?",
+      confirmLabel: "Quitar tarea",
+      cancelLabel: "Cancelar",
+      tone: "danger"
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -389,8 +438,11 @@ export function StoryUpsertionForm(props: {
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => {
-              close();
+            onClick={async () => {
+              const closed = requestClose ? await requestClose() : true;
+              if (!closed) {
+                return;
+              }
               navigate(definitionHref);
             }}
             disabled={formDisabled}
@@ -398,7 +450,18 @@ export function StoryUpsertionForm(props: {
             Ver definicion
           </button>
         ) : null}
-        <button type="button" className="btn btn-secondary" onClick={close} disabled={formDisabled}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => {
+            if (requestClose) {
+              void requestClose();
+              return;
+            }
+            close();
+          }}
+          disabled={formDisabled}
+        >
           {closeLabel}
         </button>
       </div>

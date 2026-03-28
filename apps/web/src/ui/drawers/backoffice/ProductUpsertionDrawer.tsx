@@ -8,6 +8,7 @@ import { useRootStore } from "../../../stores/root-store";
 import { RichDescriptionField } from "../product-workspace/RichDescriptionField";
 import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { Drawer, DrawerRenderContext } from "../Drawer";
+import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 
 type ProductItem = {
   id: string;
@@ -47,6 +48,9 @@ export class ProductUpsertionDrawer extends Drawer {
         product={this.options.product}
         onSaved={this.options.onSaved}
         close={context.close}
+        requestClose={context.requestClose}
+        drawerController={context.controller}
+        drawerId={context.drawerId}
         definitionHref={this.options.product ? productRootDefinitionPath(this.options.product.id) : undefined}
       />
     );
@@ -58,6 +62,9 @@ export function ProductUpsertionForm(props: {
   product?: ProductItem;
   onSaved?: SaveHook;
   close: () => void;
+  requestClose?: () => Promise<boolean>;
+  drawerController?: DrawerRenderContext["controller"];
+  drawerId?: string;
   closeLabel?: string;
   definitionHref?: string;
   closeOnSubmit?: boolean;
@@ -67,6 +74,9 @@ export function ProductUpsertionForm(props: {
     product,
     onSaved,
     close,
+    requestClose,
+    drawerController,
+    drawerId,
     closeLabel = "Cancelar",
     definitionHref,
     closeOnSubmit = true
@@ -81,6 +91,12 @@ export function ProductUpsertionForm(props: {
   const [teams, setTeams] = React.useState<TeamOption[]>([]);
   const [linkedTeamIds, setLinkedTeamIds] = React.useState<string[]>([]);
   const [teamsError, setTeamsError] = React.useState("");
+  const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
+    name: product?.name ?? "",
+    key: product?.key ?? "",
+    description: product?.description ?? "",
+    linkedTeamIds: [] as string[]
+  }));
   const draft = useDraftPersistence({
     userId: store.session.user?.id,
     entityType: "PRODUCT",
@@ -97,6 +113,31 @@ export function ProductUpsertionForm(props: {
   const key = typeof form.key === "string" ? form.key : "";
   const description = typeof form.description === "string" ? form.description : "";
   const formDisabled = saving || isHydratingRemote;
+  const currentCloseSnapshot = React.useMemo(
+    () => JSON.stringify({
+      name,
+      key,
+      description,
+      linkedTeamIds: [...linkedTeamIds].sort()
+    }),
+    [description, key, linkedTeamIds, name]
+  );
+  const hasUnsavedChanges = !isHydratingRemote && currentCloseSnapshot !== closeBaseline;
+
+  useDrawerCloseGuard({
+    controller: drawerController,
+    drawerId,
+    when: hasUnsavedChanges
+  });
+
+  React.useEffect(() => {
+    setCloseBaseline(JSON.stringify({
+      name: product?.name ?? "",
+      key: product?.key ?? "",
+      description: product?.description ?? "",
+      linkedTeamIds: [] as string[]
+    }));
+  }, [product]);
 
   React.useEffect(() => {
     if (!product) return;
@@ -129,6 +170,12 @@ export function ProductUpsertionForm(props: {
         if (!active) return;
         setTeams(allTeams);
         setLinkedTeamIds(productTeams.map((team) => team.id));
+        setCloseBaseline(JSON.stringify({
+          name: product.name,
+          key: product.key,
+          description: product.description ?? "",
+          linkedTeamIds: productTeams.map((team) => team.id).sort()
+        }));
         setTeamsError("");
       } catch (loadError) {
         if (!active) return;
@@ -261,15 +308,28 @@ export function ProductUpsertionForm(props: {
           <button
             className="btn btn-secondary"
             disabled={formDisabled}
-            onClick={() => {
-              close();
+            onClick={async () => {
+              const closed = requestClose ? await requestClose() : true;
+              if (!closed) {
+                return;
+              }
               navigate(definitionHref);
             }}
           >
             Ver definicion
           </button>
         ) : null}
-        <button className="btn btn-secondary" disabled={formDisabled} onClick={close}>
+        <button
+          className="btn btn-secondary"
+          disabled={formDisabled}
+          onClick={() => {
+            if (requestClose) {
+              void requestClose();
+              return;
+            }
+            close();
+          }}
+        >
           {closeLabel}
         </button>
       </div>

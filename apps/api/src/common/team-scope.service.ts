@@ -60,21 +60,32 @@ export class TeamScopeService {
       return products.map((entry) => entry.id);
     }
 
+    const directProducts = await this.prisma.productMember.findMany({
+      where: {
+        userId: user.sub,
+        role: user.role
+      },
+      select: {
+        productId: true
+      }
+    });
+
     const teamIds = await this.getUserTeamIds(user.sub);
-    if (teamIds.length === 0) {
-      return [];
-    }
-    const [links, sprints] = await Promise.all([
-      this.prisma.productTeam.findMany({
-        where: { teamId: { in: teamIds } },
-        select: { productId: true }
-      }),
-      this.prisma.sprint.findMany({
-        where: { teamId: { in: teamIds } },
-        select: { productId: true }
-      })
-    ]);
+    const [links, sprints] = teamIds.length > 0
+      ? await Promise.all([
+          this.prisma.productTeam.findMany({
+            where: { teamId: { in: teamIds } },
+            select: { productId: true }
+          }),
+          this.prisma.sprint.findMany({
+            where: { teamId: { in: teamIds } },
+            select: { productId: true }
+          })
+        ])
+      : [[], []];
+
     return Array.from(new Set([
+      ...directProducts.map((entry) => entry.productId),
       ...links.map((entry) => entry.productId),
       ...sprints.map((entry) => entry.productId)
     ]));
@@ -101,7 +112,24 @@ export class TeamScopeService {
       ]));
     }
 
-    return this.getUserTeamIds(user.sub);
+    const directTeamIds = await this.getUserTeamIds(user.sub);
+    const productIds = await this.getAccessibleProductIds(user);
+    if (!productIds || productIds.length === 0) {
+      return directTeamIds;
+    }
+    const linkedTeams = await this.prisma.productTeam.findMany({
+      where: {
+        productId: { in: productIds }
+      },
+      select: {
+        teamId: true
+      }
+    });
+
+    return Array.from(new Set([
+      ...directTeamIds,
+      ...linkedTeams.map((entry) => entry.teamId)
+    ]));
   }
 
   async assertProductReadable(user: ScopedUser, productId: string): Promise<void> {
@@ -187,4 +215,3 @@ export class TeamScopeService {
     }
   }
 }
-

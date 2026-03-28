@@ -5,6 +5,7 @@ import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productTaskDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../Drawer";
+import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { TaskCollaborationPanel } from "./TaskCollaborationPanel";
 import { RichDescriptionField } from "./RichDescriptionField";
@@ -29,7 +30,7 @@ type TaskStoryOption = { id: string; title: string };
 type TaskSprintOption = { id: string; name: string };
 type TaskAssigneeOption = { id: string; name: string };
 
-const EFFORT_POINT_VALUES = [1, 2, 3, 4, 5] as const;
+const EFFORT_POINT_VALUES = [1, 2, 3, 5, 8, 13, 21] as const;
 const ESTIMATED_HOUR_PRESETS = [4, 8, 16, 24] as const;
 
 type TaskUpsertionDrawerOptions = {
@@ -72,6 +73,9 @@ export class TaskUpsertionDrawer extends Drawer {
       <TaskUpsertionForm
         options={this.options}
         close={context.close}
+        requestClose={context.requestClose}
+        drawerController={context.controller}
+        drawerId={context.drawerId}
         definitionHref={
           this.options.task ? productTaskDefinitionPath(this.options.productId, this.options.task.id) : undefined
         }
@@ -139,6 +143,9 @@ function CompactOptionGroup(props: {
 export function TaskUpsertionForm(props: {
   options: TaskUpsertionDrawerOptions;
   close: () => void;
+  requestClose?: () => Promise<boolean>;
+  drawerController?: DrawerRenderContext["controller"];
+  drawerId?: string;
   closeLabel?: string;
   definitionHref?: string;
   closeOnSubmit?: boolean;
@@ -147,6 +154,9 @@ export function TaskUpsertionForm(props: {
   const {
     options,
     close,
+    requestClose,
+    drawerController,
+    drawerId,
     closeLabel = "Cancelar",
     definitionHref,
     closeOnSubmit = true,
@@ -305,6 +315,43 @@ export function TaskUpsertionForm(props: {
   };
 
   const showActualHoursField = status === "Done" || task?.actualHours != null;
+  const initialCloseSnapshot = React.useMemo(
+    () => JSON.stringify({
+      title: task?.title ?? "",
+      description: task?.description ?? "",
+      storyId: task?.storyId ?? defaultStoryId ?? "",
+      status: task?.status ?? defaultStatus ?? statusOptions[0] ?? "Todo",
+      sprintId: task?.sprintId ?? fixedSprintId ?? "",
+      assigneeId: task?.assigneeId ?? "",
+      effortPoints: task?.effortPoints != null ? String(task.effortPoints) : "",
+      selectedEstimatedPreset: initialEstimatedHours.preset,
+      customEstimatedHours: initialEstimatedHours.custom,
+      actualHours: task?.actualHours != null ? String(task.actualHours) : ""
+    }),
+    [defaultStatus, defaultStoryId, fixedSprintId, initialEstimatedHours.custom, initialEstimatedHours.preset, statusOptions, task]
+  );
+  const currentCloseSnapshot = React.useMemo(
+    () => JSON.stringify({
+      title,
+      description,
+      storyId,
+      status,
+      sprintId,
+      assigneeId,
+      effortPoints,
+      selectedEstimatedPreset,
+      customEstimatedHours,
+      actualHours
+    }),
+    [actualHours, assigneeId, customEstimatedHours, description, effortPoints, selectedEstimatedPreset, sprintId, status, storyId, title]
+  );
+  const hasUnsavedChanges = !readOnly && !isHydratingRemote && currentCloseSnapshot !== initialCloseSnapshot;
+
+  useDrawerCloseGuard({
+    controller: drawerController,
+    drawerId,
+    when: hasUnsavedChanges
+  });
 
   return (
     <>
@@ -507,8 +554,11 @@ export function TaskUpsertionForm(props: {
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => {
-                close();
+              onClick={async () => {
+                const closed = requestClose ? await requestClose() : true;
+                if (!closed) {
+                  return;
+                }
                 navigate(definitionReadOnly ? `${definitionHref}?mode=readonly` : definitionHref);
               }}
               disabled={formDisabled}
@@ -516,7 +566,18 @@ export function TaskUpsertionForm(props: {
               Ver definicion
             </button>
           ) : null}
-          <button type="button" className="btn btn-secondary" onClick={close} disabled={formDisabled}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => {
+              if (requestClose) {
+                void requestClose();
+                return;
+              }
+              close();
+            }}
+            disabled={formDisabled}
+          >
             {readOnly ? "Cerrar" : closeLabel}
           </button>
         </div>

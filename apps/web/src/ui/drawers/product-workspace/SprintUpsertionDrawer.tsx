@@ -5,6 +5,7 @@ import { productSprintDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { TaskSearchPicker } from "../../../components/TaskSearchPicker";
 import { Drawer, DrawerRenderContext } from "../Drawer";
+import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { RichDescriptionField } from "./RichDescriptionField";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
@@ -69,6 +70,9 @@ export class SprintUpsertionDrawer extends Drawer {
       <SprintUpsertionForm
         options={this.options}
         close={context.close}
+        requestClose={context.requestClose}
+        drawerController={context.controller}
+        drawerId={context.drawerId}
         definitionHref={
           this.options.sprint ? productSprintDefinitionPath(this.options.productId, this.options.sprint.id) : undefined
         }
@@ -80,12 +84,25 @@ export class SprintUpsertionDrawer extends Drawer {
 export function SprintUpsertionForm(props: {
   options: SprintUpsertionDrawerOptions;
   close: () => void;
+  requestClose?: () => Promise<boolean>;
+  drawerController?: DrawerRenderContext["controller"];
+  drawerId?: string;
   closeLabel?: string;
   definitionHref?: string;
   closeOnSubmit?: boolean;
   showCloseAction?: boolean;
 }) {
-  const { options, close, closeLabel = "Cancelar", definitionHref, closeOnSubmit = true, showCloseAction = true } = props;
+  const {
+    options,
+    close,
+    requestClose,
+    drawerController,
+    drawerId,
+    closeLabel = "Cancelar",
+    definitionHref,
+    closeOnSubmit = true,
+    showCloseAction = true
+  } = props;
   const { controller, productId, teams, sprint, onDone } = options;
   const store = useRootStore();
   const navigate = useNavigate();
@@ -102,6 +119,33 @@ export function SprintUpsertionForm(props: {
   const [tasksLoading, setTasksLoading] = React.useState(false);
   const [sprintTaskQuery, setSprintTaskQuery] = React.useState("");
   const canManageTasks = Boolean(sprint && (sprint.status === "PLANNED" || sprint.status === "ACTIVE"));
+  const initialCloseSnapshot = React.useMemo(
+    () => JSON.stringify({
+      name: sprint?.name ?? "",
+      goal: sprint?.goal ?? "",
+      teamId: sprint?.teamId ?? "",
+      startDate: asDateInput(sprint?.startDate),
+      endDate: asDateInput(sprint?.endDate)
+    }),
+    [sprint]
+  );
+  const currentCloseSnapshot = React.useMemo(
+    () => JSON.stringify({
+      name,
+      goal,
+      teamId,
+      startDate,
+      endDate
+    }),
+    [endDate, goal, name, startDate, teamId]
+  );
+  const hasUnsavedChanges = !saving && currentCloseSnapshot !== initialCloseSnapshot;
+
+  useDrawerCloseGuard({
+    controller: drawerController,
+    drawerId,
+    when: hasUnsavedChanges
+  });
 
   const loadTaskPools = React.useCallback(async () => {
     if (!sprint) return;
@@ -271,8 +315,11 @@ export function SprintUpsertionForm(props: {
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => {
-              close();
+            onClick={async () => {
+              const closed = requestClose ? await requestClose() : true;
+              if (!closed) {
+                return;
+              }
               navigate(definitionHref);
             }}
             disabled={saving}
@@ -281,7 +328,18 @@ export function SprintUpsertionForm(props: {
           </button>
         ) : null}
         {showCloseAction && closeLabel ? (
-          <button type="button" className="btn btn-secondary" onClick={close} disabled={saving}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => {
+              if (requestClose) {
+                void requestClose();
+                return;
+              }
+              close();
+            }}
+            disabled={saving}
+          >
             {closeLabel}
           </button>
         ) : null}

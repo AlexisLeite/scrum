@@ -11,6 +11,13 @@ type UserItem = { id: string; name: string; email: string };
 type TeamMember = { userId: string; user?: UserItem };
 type TeamItem = { id: string; name: string; description: string | null; members?: TeamMember[] };
 
+function normalizeText(value: string | null | undefined): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase();
+}
+
 export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
   const store = useRootStore();
   const teamsController = React.useMemo(() => new TeamController(store), [store]);
@@ -18,6 +25,7 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
   const role = store.session.user?.role;
   const canCreateTeam = role === "platform_admin" || role === "product_owner";
   const canManageTeam = role === "platform_admin" || role === "product_owner";
+  const [search, setSearch] = React.useState("");
 
   React.useEffect(() => {
     void teamsController.loadTeams();
@@ -26,6 +34,16 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
 
   const teams = store.teams.items as TeamItem[];
   const users = store.users.items as UserItem[];
+  const filteredTeams = React.useMemo(() => {
+    const query = normalizeText(search.trim());
+    if (!query) {
+      return teams;
+    }
+    return teams.filter((team) => {
+      const members = (team.members ?? []).map((member) => member.user?.name ?? member.userId);
+      return [team.name, team.description, ...members].some((value) => normalizeText(value).includes(query));
+    });
+  }, [search, teams]);
 
   const openCreate = React.useCallback(() => {
     store.drawers.add(
@@ -62,9 +80,18 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
           <h3>Listado de equipos</h3>
           {canCreateTeam ? <button className="btn btn-primary" onClick={openCreate}>+ Equipo</button> : null}
         </div>
+        <label>
+          Filtrar equipos
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Nombre, descripcion o miembro"
+          />
+        </label>
         <div className="team-grid">
 
-          {teams.map((team) => (
+          {filteredTeams.map((team) => (
             <article key={team.id} className="team-tile">
               <div className="section-head">
                 <h4>{team.name}</h4>
@@ -85,6 +112,7 @@ export const TeamsBackofficeView = observer(function TeamsBackofficeView() {
             </article>
           ))}
           {teams.length === 0 ? <p className="muted">No hay equipos creados.</p> : null}
+          {teams.length > 0 && filteredTeams.length === 0 ? <p className="muted">No hay equipos que coincidan con el filtro.</p> : null}
         </div>
       </section>
     </div>

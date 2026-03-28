@@ -472,6 +472,7 @@ export function TaskCollaborationPanel(props: {
             onChange={(nextValue) => setMessageDraft((current) => ({ ...current, body: nextValue }))}
             rows={7}
             disabled={submittingMessage || isHydratingRemote}
+            productId={productId}
           />
           {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
           <div className="row-actions compact">
@@ -505,4 +506,3 @@ export function TaskCollaborationPanel(props: {
     </section>
   );
 }
-

@@ -8,6 +8,13 @@ type StatsWindow = "week" | "month" | "semester" | "year";
 type MetricTask = Awaited<ReturnType<IndicatorsService["loadSprintMetricTasks"]>>[number];
 type SprintMembershipEvent = { taskId: string; type: "entered" | "removed"; at: Date };
 type SprintWindow = { from: Date; to: Date; completedAt: Date | null };
+type MetricsScope = {
+  productId: string;
+  sprintId?: string;
+  teamId?: string;
+  userId?: string;
+  teamMemberIds?: string[];
+};
 
 @Injectable()
 export class IndicatorsService {
@@ -26,11 +33,123 @@ export class IndicatorsService {
     return this.buildSprintTimeSeries(sprint.id, window.from, window.to);
   }
 
-  burndown(productId: string, sprintId: string, viewer: AuthUser) {
-    return this.burnup(productId, sprintId, viewer);
+  async burndown(productId: string, sprintId: string, viewer: AuthUser) {
+    const sprint = await this.getVisibleSprint(productId, sprintId, viewer);
+    if (!sprint) {
+      return [];
+    }
+
+    const scope = await this.resolveMetricsScope(viewer, { productId });
+    const window = await this.resolveSprintWindow(sprint);
+    return this.buildSprintBurndownSeries(sprint.id, window.from, window.to, scope);
   }
 
-  async teamVelocity(teamId: string, viewer: AuthUser, window?: string) {
+  async productMetrics(
+    productId: string,
+    viewer: AuthUser,
+    options: { sprintId?: string; teamId?: string; userId?: string; window?: string }
+  ) {
+    await this.assertProductVisible(viewer, productId);
+    const sprint = options.sprintId
+      ? await this.getVisibleSprint(productId, options.sprintId, viewer)
+      : null;
+    if (options.sprintId && !sprint) {
+      throw new BadRequestException("Sprint not found");
+    }
+
+    const scope = await this.resolveMetricsScope(viewer, {
+      productId,
+      sprintId: sprint?.id,
+      teamId: options.teamId,
+      userId: options.userId
+    });
+    const { key, from, to } = this.resolveWindow(options.window, await this.resolveLatestProductDate(productId));
+    const taskWhere = this.buildScopedTaskWhere(scope);
+    const actorWhere = this.buildScopedActivityActorWhere(scope);
+    const taskFilter = this.buildScopedTaskFilter(scope);
+    const scopedTaskIdsPromise = this.prisma.task.findMany({
+      where: taskWhere,
+      select: { id: true }
+    }).then((rows) => rows.map((row) => row.id));
+
+    const [doneTaskIds, scopedTaskIds, completedSprints, teamVelocity, userVelocity] = await Promise.all([
+      this.findCompletedTaskIds({
+        changedAt: { gte: from, lte: to },
+        task: taskWhere
+      }),
+      scopedTaskIdsPromise,
+      this.countCompletedSprints(
+        {
+          productId,
+          ...(scope.sprintId ? { id: scope.sprintId } : {})
+        },
+        from,
+        to,
+        scope.sprintId || scope.teamId || scope.userId
+          ? async ({ sprintId, startedAt, completedAt }) => {
+            const points = await this.computeSprintCompletedPointsAt(sprintId, startedAt, completedAt, taskFilter);
+            return points > 0;
+          }
+          : undefined
+      ),
+      scope.teamId ? this.teamVelocity(scope.teamId, viewer, options.window, productId) : Promise.resolve([]),
+      scope.userId ? this.userVelocity(scope.userId, viewer, options.window, productId, scope.teamId) : Promise.resolve([])
+    ]);
+    const workedCount = scopedTaskIds.length === 0
+      ? 0
+      : await this.findWorkedTaskIds({
+        entityType: ActivityEntityType.TASK,
+        productId,
+        entityId: { in: scopedTaskIds },
+        createdAt: { gte: from, lte: to },
+        ...actorWhere
+      }).then((rows) => rows.length);
+
+    const completedTasks = doneTaskIds.length > 0
+      ? await this.prisma.task.findMany({
+        where: {
+          id: { in: doneTaskIds }
+        },
+        include: { story: true }
+      })
+      : [];
+    const completedPoints = completedTasks.reduce(
+      (acc, task) => acc + (task.effortPoints ?? task.story.storyPoints),
+      0
+    );
+
+    const sprintWindow = sprint ? await this.resolveSprintWindow(sprint) : null;
+    const [burnup, burndown] = sprint && sprintWindow
+      ? await Promise.all([
+        this.buildSprintTimeSeries(sprint.id, sprintWindow.from, sprintWindow.to, taskFilter),
+        this.buildSprintBurndownSeries(sprint.id, sprintWindow.from, sprintWindow.to, scope)
+      ])
+      : [[], []];
+
+    return {
+      productStats: this.buildStatsResponse({
+        scope: {
+          productId,
+          sprintId: scope.sprintId ?? null,
+          teamId: scope.teamId ?? null,
+          userId: scope.userId ?? null
+        },
+        window: key,
+        from,
+        to,
+        workedCount,
+        completedCount: doneTaskIds.length,
+        completedPoints,
+        completedSprints
+      }),
+      burnup,
+      burndown,
+      teamVelocity,
+      userVelocity
+    };
+  }
+
+  async teamVelocity(teamId: string, viewer: AuthUser, window?: string, productId?: string) {
     const scopedTeamIds = await this.getScopedTeamIds(viewer);
     if (scopedTeamIds && !scopedTeamIds.includes(teamId)) {
       throw new ForbiddenException("Insufficient team scope");
@@ -52,11 +171,16 @@ export class IndicatorsService {
     return Promise.all(latest.map(async ({ sprint, completedAt, startedAt }) => ({
       sprintId: sprint.id,
       sprintName: sprint.name,
-      completedPoints: await this.computeSprintCompletedPointsAt(sprint.id, startedAt, completedAt)
+      completedPoints: await this.computeSprintCompletedPointsAt(
+        sprint.id,
+        startedAt,
+        completedAt,
+        productId ? (task) => task.productId === productId : undefined
+      )
     })));
   }
 
-  async userVelocity(userId: string, viewer: AuthUser, window?: string) {
+  async userVelocity(userId: string, viewer: AuthUser, window?: string, productId?: string, teamId?: string) {
     const scopedTeamIds = await this.getScopedTeamIds(viewer);
     if (!this.teamScopeService.isPlatformAdmin(viewer.role)) {
       await this.teamScopeService.assertCanReadUserActivity(viewer, userId);
@@ -64,10 +188,15 @@ export class IndicatorsService {
 
     const productFilter = await this.getScopedProductFilter(viewer);
     const range = window ? this.resolveWindow(window, await this.resolveLatestUserDate(userId, productFilter)) : null;
+    const visibleTeamIds = teamId
+      ? scopedTeamIds
+        ? scopedTeamIds.filter((entry) => entry === teamId)
+        : [teamId]
+      : scopedTeamIds;
     const completedSprints = await this.prisma.sprint.findMany({
       where: {
         status: "COMPLETED",
-        ...(scopedTeamIds ? { teamId: { in: scopedTeamIds } } : {})
+        ...(visibleTeamIds ? { teamId: { in: visibleTeamIds } } : {})
       },
       orderBy: { endDate: "desc" },
       take: 20
@@ -78,8 +207,16 @@ export class IndicatorsService {
     const points = await Promise.all(latest.map(async ({ sprint, completedAt, startedAt }) => ({
       sprintId: sprint.id,
       sprintName: sprint.name,
-      completedPoints: await this.computeSprintCompletedPointsAt(sprint.id, startedAt, completedAt, (task) => task.assigneeId === userId)
-    })));
+        completedPoints: await this.computeSprintCompletedPointsAt(
+          sprint.id,
+          startedAt,
+          completedAt,
+          (task) =>
+            task.assigneeId === userId
+            && (!productId || task.productId === productId)
+            && (!teamId || sprint.teamId === teamId)
+        )
+      })));
 
     return points.filter((entry) => entry.completedPoints > 0);
   }
@@ -398,7 +535,12 @@ export class IndicatorsService {
     };
   }
 
-  private async buildSprintTimeSeries(sprintId: string, rawFrom: Date, rawTo: Date) {
+  private async buildSprintTimeSeries(
+    sprintId: string,
+    rawFrom: Date,
+    rawTo: Date,
+    filter?: (task: MetricTask) => boolean
+  ) {
     const from = this.startOfDay(rawFrom);
     const [tasks, membershipEvents] = await Promise.all([
       this.loadSprintMetricTasks(sprintId),
@@ -420,6 +562,9 @@ export class IndicatorsService {
       const dayEnd = this.endOfDay(new Date(`${dateKey}T00:00:00.000Z`));
       const totals = tasks.reduce(
         (acc, task) => {
+          if (filter && !filter(task)) {
+            return acc;
+          }
           const points = task.effortPoints ?? task.story.storyPoints;
           const intervals = this.resolveSprintIntervals(task, from, membershipByTaskId.get(task.id) ?? []);
           if (!this.isTaskInSprintAt(intervals, dayEnd)) {
@@ -442,6 +587,55 @@ export class IndicatorsService {
         remainingPoints: Math.max(totals.scopePoints - totals.completedPoints, 0)
       };
     });
+  }
+
+  private async buildSprintBurndownSeries(
+    sprintId: string,
+    rawFrom: Date,
+    rawTo: Date,
+    scope: MetricsScope
+  ) {
+    const sprint = await this.prisma.sprint.findUnique({
+      where: { id: sprintId },
+      select: { id: true, teamId: true, productId: true }
+    });
+    if (!sprint) {
+      return [];
+    }
+
+    const scopedFilter = this.buildScopedTaskFilter(scope);
+    const burnup = await this.buildSprintTimeSeries(sprintId, rawFrom, rawTo, scopedFilter);
+    if (burnup.length === 0) {
+      return [];
+    }
+
+    const sprintTeamIds = scope.teamId
+      ? scope.teamMemberIds ?? []
+      : await this.getTeamMemberIds(sprint.teamId);
+    const teamSeries = await this.buildSprintTimeSeries(
+      sprintId,
+      rawFrom,
+      rawTo,
+      (task) => task.productId === scope.productId && sprintTeamIds.includes(task.assigneeId ?? "")
+    );
+    const userSeries = scope.userId
+      ? await this.buildSprintTimeSeries(
+        sprintId,
+        rawFrom,
+        rawTo,
+        (task) => task.productId === scope.productId && task.assigneeId === scope.userId
+      )
+      : [];
+    const firstScope = burnup[0]?.scopePoints ?? 0;
+    const steps = Math.max(burnup.length - 1, 1);
+
+    return burnup.map((point, index) => ({
+      date: point.date,
+      remainingPoints: point.remainingPoints,
+      idealRemainingPoints: Math.max(Number((firstScope - ((firstScope / steps) * index)).toFixed(2)), 0),
+      teamRemainingPoints: teamSeries[index]?.remainingPoints ?? null,
+      userRemainingPoints: userSeries[index]?.remainingPoints ?? null
+    }));
   }
 
   private async loadSprintMetricTasks(sprintId: string) {
@@ -815,6 +1009,77 @@ export class IndicatorsService {
       return teamProductIds;
     }
     return teamProductIds.filter((productId) => accessibleProducts.includes(productId));
+  }
+
+  private async resolveMetricsScope(
+    user: AuthUser,
+    scope: { productId: string; sprintId?: string; teamId?: string; userId?: string }
+  ): Promise<MetricsScope> {
+    if (scope.teamId) {
+      await this.assertTeamVisible(user, scope.teamId);
+    }
+    if (scope.userId && !this.teamScopeService.isPlatformAdmin(user.role)) {
+      await this.teamScopeService.assertCanReadUserActivity(user, scope.userId);
+    }
+
+    return {
+      ...scope,
+      teamMemberIds: scope.teamId ? await this.getTeamMemberIds(scope.teamId) : undefined
+    };
+  }
+
+  private buildScopedTaskWhere(scope: MetricsScope): Prisma.TaskWhereInput {
+    const assigneeFilters: Prisma.TaskWhereInput[] = [];
+    if (scope.teamMemberIds?.length) {
+      assigneeFilters.push({ assigneeId: { in: scope.teamMemberIds } });
+    }
+    if (scope.userId) {
+      assigneeFilters.push({ assigneeId: scope.userId });
+    }
+
+    return {
+      productId: scope.productId,
+      ...(scope.sprintId ? { sprintId: scope.sprintId } : {}),
+      ...(assigneeFilters.length > 0 ? { AND: assigneeFilters } : {})
+    };
+  }
+
+  private buildScopedActivityActorWhere(scope: MetricsScope): Prisma.ActivityLogWhereInput {
+    const actorFilters: Prisma.ActivityLogWhereInput[] = [];
+    if (scope.teamMemberIds?.length) {
+      actorFilters.push({ actorUserId: { in: scope.teamMemberIds } });
+    }
+    if (scope.userId) {
+      actorFilters.push({ actorUserId: scope.userId });
+    }
+
+    return actorFilters.length > 0 ? { AND: actorFilters } : {};
+  }
+
+  private buildScopedTaskFilter(scope: MetricsScope) {
+    return (task: MetricTask) => {
+      if (task.productId !== scope.productId) {
+        return false;
+      }
+      if (scope.sprintId && task.sprintId !== scope.sprintId) {
+        return false;
+      }
+      if (scope.teamMemberIds?.length && !scope.teamMemberIds.includes(task.assigneeId ?? "")) {
+        return false;
+      }
+      if (scope.userId && task.assigneeId !== scope.userId) {
+        return false;
+      }
+      return true;
+    };
+  }
+
+  private async getTeamMemberIds(teamId: string): Promise<string[]> {
+    const members = await this.prisma.teamMember.findMany({
+      where: { teamId },
+      select: { userId: true }
+    });
+    return members.map((member) => member.userId);
   }
 
   private async getScopedProductFilter(user: AuthUser): Promise<string[] | null | "none"> {

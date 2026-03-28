@@ -64,6 +64,61 @@
   overflow: auto;
 }
 
+.modal-host {
+  position: fixed;
+  inset: 0;
+  z-index: 1600;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  background: color-mix(in srgb, #08111d 58%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.modal-panel {
+  position: relative;
+  width: min(calc(100vw - 2rem), 640px);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-surface);
+  pointer-events: auto;
+}
+
+.modal-panel-sm {
+  width: min(calc(100vw - 2rem), 520px);
+}
+
+.modal-panel-md {
+  width: min(calc(100vw - 2rem), 680px);
+}
+
+.modal-panel-lg {
+  width: min(calc(100vw - 2rem), 820px);
+}
+
+.modal-panel.is-behind {
+  opacity: 0.88;
+  transform: translateY(8px) scale(0.985);
+}
+
+.modal-content {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1.1rem;
+}
+
+.modal-confirm-copy {
+  display: grid;
+  gap: 0.95rem;
+}
+
 @keyframes drawer-fade-in {
   from {
     opacity: 0;

@@ -21,6 +21,24 @@ export class IndicatorsController {
     return this.indicatorsService.burndown(productId, sprintId, user);
   }
 
+  @Get("products/:productId/metrics")
+  @Roles("platform_admin", "product_owner", "scrum_master", "team_member")
+  productMetrics(
+    @CurrentUser() user: AuthUser,
+    @Param("productId") productId: string,
+    @Query("window") window?: string,
+    @Query("sprintId") sprintId?: string,
+    @Query("teamId") teamId?: string,
+    @Query("userId") userId?: string
+  ) {
+    return this.indicatorsService.productMetrics(productId, user, {
+      window,
+      sprintId,
+      teamId,
+      userId
+    });
+  }
+
   @Get("teams/:teamId/velocity")
   @Roles("platform_admin", "product_owner", "scrum_master")
   teamVelocity(@CurrentUser() user: AuthUser, @Param("teamId") teamId: string, @Query("window") window?: string) {

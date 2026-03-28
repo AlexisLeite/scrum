@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ProductController, TeamController } from "../../../controllers";
@@ -10,6 +10,7 @@ import { markdownTruncate } from "../../../util/markdownTruncate";
 import { ProductUpsertionDrawer } from "../backoffice/ProductUpsertionDrawer";
 import { StoryUpsertionDrawer } from "./StoryUpsertionDrawer";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
+import { ImageLightbox } from "./ImageLightbox";
 
 type MarkdownPreviewProps = {
   markdown: string | null | undefined;
@@ -18,67 +19,96 @@ type MarkdownPreviewProps = {
   className?: string;
   title?: string;
   titleLevel?: number;
-  previewSize?: number
+  previewSize?: number;
 };
 
-const defaultPreviewSize = 600;
+const DEFAULT_PREVIEW_SIZE = 600;
 
 export function MarkdownPreview(props: MarkdownPreviewProps) {
   const store = useRootStore();
-  const productController = new ProductController(store);
-  const teamController = new TeamController(store);
-  const [expanded, setExpanded] = useState(false)
-  const previewSize = props.previewSize ?? defaultPreviewSize
-
+  const productController = React.useMemo(() => new ProductController(store), [store]);
+  const teamController = React.useMemo(() => new TeamController(store), [store]);
+  const [expanded, setExpanded] = React.useState(false);
+  const [lightboxImage, setLightboxImage] = React.useState<{ src: string; alt?: string } | null>(null);
+  const previewSize = props.previewSize ?? DEFAULT_PREVIEW_SIZE;
   const { markdown, compact = false, emptyLabel = "Sin contenido.", className = "" } = props;
-  let content = markdownWithTitle(props.title, `${markdown?.trim().slice(0, expanded ? undefined : previewSize)}...`, props?.titleLevel)
 
-  if (!content) {
+  const rawContent = markdownWithTitle(props.title, markdown?.trim() ?? "", props.titleLevel)?.trim() ?? "";
+  if (!rawContent) {
     return <p className={`muted markdown-preview-empty ${className}`.trim()}>{emptyLabel}</p>;
   }
 
-  let mustSlice = content.length > previewSize;
-  if (!expanded) {
-    const sliceIndex = markdownTruncate(content, previewSize)
-  }
+  const truncatedContent = rawContent.length > previewSize ? markdownTruncate(rawContent, previewSize) : rawContent;
+  const mustSlice = truncatedContent.length < rawContent.length;
+  const content = expanded || !mustSlice ? rawContent : truncatedContent.trimEnd();
 
   return (
-    <div className={`markdown-preview ${compact ? "is-compact" : ""} ${className}`.trim()}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        urlTransform={(url) => {
-          if (parseInternalReferenceHref(url)) {
-            return url;
-          }
-
-          return defaultUrlTransform(url);
-        }}
-        components={{
-          a(anchorProps) {
-            const internalReference = parseInternalReferenceHref(anchorProps.href);
-            if (!internalReference) {
-              return <a {...anchorProps} target="_blank" rel="noreferrer" />;
+    <>
+      <div className={`markdown-preview ${compact ? "is-compact" : ""} ${className}`.trim()}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          urlTransform={(url) => {
+            if (parseInternalReferenceHref(url)) {
+              return url;
             }
 
-            return (
-              <a
-                {...anchorProps}
-                href={anchorProps.href}
-                className={`internal-reference-link ${anchorProps.className ?? ""}`.trim()}
-                onClick={(event) => {
-                  event.preventDefault();
-                  void openInternalReference(internalReference, store, productController, teamController);
-                }}
-              />
-            );
-          }
-        }}
-      >
-        {content}
-      </ReactMarkdown>
-      {mustSlice && !expanded && <button className="btn btn-secondary sm" onClick={() => setExpanded(true)}> Expandir</button>}
-      {mustSlice && expanded && <button className="btn btn-secondary sm" onClick={() => setExpanded(false)}> Colapsar</button>}
-    </div >
+            return defaultUrlTransform(url);
+          }}
+          components={{
+            a(anchorProps) {
+              const internalReference = parseInternalReferenceHref(anchorProps.href);
+              if (!internalReference) {
+                return <a {...anchorProps} target="_blank" rel="noreferrer" />;
+              }
+
+              return (
+                <a
+                  {...anchorProps}
+                  href={anchorProps.href}
+                  className={`internal-reference-link ${anchorProps.className ?? ""}`.trim()}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void openInternalReference(internalReference, store, productController, teamController);
+                  }}
+                />
+              );
+            },
+            img(imageProps) {
+              if (!imageProps.src) {
+                return null;
+              }
+
+              return (
+                <button
+                  type="button"
+                  className="markdown-preview-image-button"
+                  onClick={() => setLightboxImage({ src: imageProps.src!, alt: imageProps.alt })}
+                >
+                  <img
+                    src={imageProps.src}
+                    alt={imageProps.alt ?? "Imagen de markdown"}
+                    title={imageProps.title}
+                  />
+                </button>
+              );
+            }
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+        {mustSlice ? (
+          <button className="btn btn-secondary sm" onClick={() => setExpanded((current) => !current)}>
+            {expanded ? "Colapsar" : "Expandir"}
+          </button>
+        ) : null}
+      </div>
+      <ImageLightbox
+        open={Boolean(lightboxImage)}
+        src={lightboxImage?.src ?? ""}
+        alt={lightboxImage?.alt}
+        onClose={() => setLightboxImage(null)}
+      />
+    </>
   );
 }
 
@@ -135,7 +165,10 @@ async function openInternalReference(
         const assignees = Array.from(
           new Map(
             teams.flatMap((team) =>
-              (team.members ?? []).map((member) => [member.userId, { id: member.userId, name: member.user?.name ?? member.userId }])
+              (team.members ?? []).map((member) => [
+                member.userId,
+                { id: member.userId, name: member.user?.name ?? member.userId }
+              ])
             )
           ).values()
         );

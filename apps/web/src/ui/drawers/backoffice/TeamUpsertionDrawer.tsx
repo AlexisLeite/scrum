@@ -6,6 +6,7 @@ import { teamDefinitionPath } from "../../../routes/backoffice-routes";
 import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { RichDescriptionField } from "../product-workspace/RichDescriptionField";
 import { Drawer, DrawerRenderContext } from "../Drawer";
+import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 
 type UserOption = { id: string; name: string; email: string };
 type ProductOption = { id: string; key: string; name: string; description: string | null };
@@ -42,6 +43,9 @@ export class TeamUpsertionDrawer extends Drawer {
         users={this.options.users}
         onSaved={this.options.onSaved}
         close={context.close}
+        requestClose={context.requestClose}
+        drawerController={context.controller}
+        drawerId={context.drawerId}
         definitionHref={this.options.team ? teamDefinitionPath(this.options.team.id) : undefined}
       />
     );
@@ -54,6 +58,9 @@ export function TeamUpsertionForm(props: {
   users: UserOption[];
   onSaved?: SaveHook;
   close: () => void;
+  requestClose?: () => Promise<boolean>;
+  drawerController?: DrawerRenderContext["controller"];
+  drawerId?: string;
   closeLabel?: string;
   definitionHref?: string;
   closeOnSubmit?: boolean;
@@ -65,6 +72,9 @@ export function TeamUpsertionForm(props: {
     users,
     onSaved,
     close,
+    requestClose,
+    drawerController,
+    drawerId,
     closeLabel = "Cancelar",
     definitionHref,
     closeOnSubmit = true,
@@ -79,6 +89,11 @@ export function TeamUpsertionForm(props: {
   const [products, setProducts] = React.useState<ProductOption[]>([]);
   const [linkedProductIds, setLinkedProductIds] = React.useState<string[]>([]);
   const [productsError, setProductsError] = React.useState("");
+  const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
+    name: team?.name ?? "",
+    description: team?.description ?? "",
+    linkedProductIds: [] as string[]
+  }));
   const [activity, setActivity] = React.useState<ActivityItem[]>([]);
   const [activityError, setActivityError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
@@ -148,6 +163,14 @@ export function TeamUpsertionForm(props: {
   }, [readOnly, refresh, team]);
 
   React.useEffect(() => {
+    setCloseBaseline(JSON.stringify({
+      name: team?.name ?? "",
+      description: team?.description ?? "",
+      linkedProductIds: [] as string[]
+    }));
+  }, [team]);
+
+  React.useEffect(() => {
     if (!team) return;
     let active = true;
     void (async () => {
@@ -159,6 +182,11 @@ export function TeamUpsertionForm(props: {
         if (!active) return;
         setProducts(allProducts);
         setLinkedProductIds(teamProducts.map((product) => product.id));
+        setCloseBaseline(JSON.stringify({
+          name: team.name,
+          description: team.description ?? "",
+          linkedProductIds: teamProducts.map((product) => product.id).sort()
+        }));
         setProductsError("");
       } catch (loadError) {
         if (!active) return;
@@ -167,6 +195,22 @@ export function TeamUpsertionForm(props: {
     })();
     return () => { active = false; };
   }, [team]);
+
+  const currentCloseSnapshot = React.useMemo(
+    () => JSON.stringify({
+      name,
+      description,
+      linkedProductIds: [...linkedProductIds].sort()
+    }),
+    [description, linkedProductIds, name]
+  );
+  const hasUnsavedChanges = !saving && currentCloseSnapshot !== closeBaseline;
+
+  useDrawerCloseGuard({
+    controller: drawerController,
+    drawerId,
+    when: hasUnsavedChanges
+  });
 
   React.useEffect(() => {
     if (!team) return;
@@ -296,15 +340,28 @@ export function TeamUpsertionForm(props: {
           <button
             className="btn btn-secondary"
             disabled={saving}
-            onClick={() => {
-              close();
+            onClick={async () => {
+              const closed = requestClose ? await requestClose() : true;
+              if (!closed) {
+                return;
+              }
               navigate(definitionHref);
             }}
           >
             Ver definicion
           </button>
         ) : null}
-        <button className="btn btn-secondary" disabled={saving} onClick={close}>
+        <button
+          className="btn btn-secondary"
+          disabled={saving}
+          onClick={() => {
+            if (requestClose) {
+              void requestClose();
+              return;
+            }
+            close();
+          }}
+        >
           {closeLabel}
         </button>
       </div>

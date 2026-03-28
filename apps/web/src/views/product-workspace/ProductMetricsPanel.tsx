@@ -9,6 +9,14 @@ type BurnupPoint = {
   remainingPoints: number;
 };
 
+type BurndownPoint = {
+  date: string;
+  remainingPoints: number;
+  idealRemainingPoints: number;
+  teamRemainingPoints: number | null;
+  userRemainingPoints: number | null;
+};
+
 type VelocityPoint = {
   sprintName: string;
   completedPoints: number;
@@ -37,6 +45,7 @@ type ProductMetricsPanelProps = {
   userName: string;
   productStats: ProductStatsSummary;
   burnup: BurnupPoint[];
+  burndown: BurndownPoint[];
   teamVelocity: VelocityPoint[];
   userVelocity: VelocityPoint[];
 };
@@ -105,6 +114,7 @@ export function ProductMetricsPanel({
   userName,
   productStats,
   burnup,
+  burndown,
   teamVelocity,
   userVelocity
 }: ProductMetricsPanelProps) {
@@ -163,8 +173,8 @@ export function ProductMetricsPanel({
       <section className="card chart-card">
         <div className="section-head">
           <div>
-            <h3>Burnup / Burndown</h3>
-            <p className="muted">Seguimiento diario de scope, completado y restante para el sprint seleccionado.</p>
+            <h3>Burnup</h3>
+            <p className="muted">Scope, trabajo completado y trabajo restante sobre el conjunto filtrado.</p>
           </div>
           <span className="pill">{burnup.length} dias</span>
         </div>
@@ -181,6 +191,37 @@ export function ProductMetricsPanel({
                 { name: "Completado", type: "line", smooth: true, data: burnup.map((item) => item.completedPoints) },
                 { name: "Scope", type: "line", smooth: true, data: burnup.map((item) => item.scopePoints) },
                 { name: "Restante", type: "line", smooth: true, data: burnup.map((item) => item.remainingPoints) }
+              ]
+            }}
+            style={{ height: 320 }}
+          />
+        ) : (
+          <p className="muted">Aun no hay serie temporal disponible para este sprint.</p>
+        )}
+      </section>
+
+      <section className="card chart-card">
+        <div className="section-head">
+          <div>
+            <h3>Burndown</h3>
+            <p className="muted">Trabajo restante real frente a la linea ideal del sprint seleccionado.</p>
+          </div>
+          <span className="pill">{burndown.length} dias</span>
+        </div>
+        {burndown.length > 0 ? (
+          <ReactECharts
+            option={{
+              animationDuration: 280,
+              tooltip: { trigger: "axis", ...buildTooltipTheme(chartTheme) },
+              legend: { top: 0, ...buildLegendTheme(chartTheme) },
+              grid: { left: 30, right: 24, bottom: 32, top: 42, containLabel: true },
+              xAxis: { type: "category", data: burndown.map((item) => item.date), ...buildAxisTheme(chartTheme) },
+              yAxis: { type: "value", name: "pts", ...buildAxisTheme(chartTheme) },
+              series: [
+                { name: "Restante", type: "line", smooth: true, data: burndown.map((item) => item.remainingPoints) },
+                { name: "Ideal", type: "line", smooth: true, lineStyle: { type: "dashed" }, data: burndown.map((item) => item.idealRemainingPoints) },
+                { name: "Equipo", type: "line", smooth: true, data: burndown.map((item) => item.teamRemainingPoints) },
+                { name: "Usuario", type: "line", smooth: true, data: burndown.map((item) => item.userRemainingPoints) }
               ]
             }}
             style={{ height: 320 }}

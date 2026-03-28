@@ -82,6 +82,13 @@ export class RootStore {
   drawers = new DrawerController();
   board: { sprint: any; columns: Array<{ name: string; tasks: any[] }> } | null = null;
   burnup: Array<{ date: string; completedPoints: number; scopePoints: number; remainingPoints: number }> = [];
+  burndown: Array<{
+    date: string;
+    remainingPoints: number;
+    idealRemainingPoints: number;
+    teamRemainingPoints: number | null;
+    userRemainingPoints: number | null;
+  }> = [];
   teamVelocity: Array<{ sprintName: string; completedPoints: number }> = [];
   userVelocity: Array<{ sprintName: string; completedPoints: number }> = [];
 
@@ -95,6 +102,16 @@ export class RootStore {
 
   setBurnup(points: Array<{ date: string; completedPoints: number; scopePoints: number; remainingPoints: number }>) {
     this.burnup = points;
+  }
+
+  setBurndown(points: Array<{
+    date: string;
+    remainingPoints: number;
+    idealRemainingPoints: number;
+    teamRemainingPoints: number | null;
+    userRemainingPoints: number | null;
+  }>) {
+    this.burndown = points;
   }
 
   setTeamVelocity(points: Array<{ sprintName: string; completedPoints: number }>) {

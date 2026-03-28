@@ -308,12 +308,16 @@ export const FocusedView = observer(function FocusedView() {
   React.useEffect(() => {
     if (!selectedChartProductId || !selectedChartSprintId) {
       store.setBurnup([]);
+      store.setBurndown([]);
       return;
     }
 
     let active = true;
     setChartLoading(true);
-    void productController.loadBurnup(selectedChartProductId, selectedChartSprintId)
+    void Promise.all([
+      productController.loadBurnup(selectedChartProductId, selectedChartSprintId),
+      productController.loadBurndown(selectedChartProductId, selectedChartSprintId)
+    ])
       .catch(() => undefined)
       .finally(() => {
         if (active) {
@@ -480,29 +484,94 @@ export const FocusedView = observer(function FocusedView() {
   }
 
   return (
-    <div className="stack-lg">
+    <div className="stack-lg focused-dashboard">
       <section className="card focused-hero">
         <h2>Focused</h2>
+        <p className="muted">
+          El tablero y la grafica comparten el mismo contexto visible para que el ritmo de ejecucion se lea sobre el mismo sprint.
+        </p>
         {error ? <p className="error-text">{error}</p> : null}
       </section>
 
-      <section className="metrics-grid metrics-summary-grid">
-        <article className="metric metric-kpi">
-          <span className="metric-kpi-label">En tablero</span>
-          <strong>{allTasks.length}</strong>
-        </article>
-        <article className="metric metric-kpi">
-          <span className="metric-kpi-label">Asignadas a ti</span>
-          <strong>{ownTaskCount}</strong>
-        </article>
-        <article className="metric metric-kpi">
-          <span className="metric-kpi-label">Sin responsable</span>
-          <strong>{unassignedTaskCount}</strong>
-        </article>
-        <article className="metric metric-kpi">
-          <span className="metric-kpi-label">Bloqueadas</span>
-          <strong>{blockedTaskCount}</strong>
-        </article>
+      <section className="focused-overview">
+        <div className="focused-kpis metrics-grid metrics-summary-grid">
+          <article className="card metric metric-kpi">
+            <span className="metric-kpi-label">En tablero</span>
+            <strong>{allTasks.length}</strong>
+          </article>
+          <article className="card metric metric-kpi">
+            <span className="metric-kpi-label">Asignadas a ti</span>
+            <strong>{ownTaskCount}</strong>
+          </article>
+          <article className="card metric metric-kpi">
+            <span className="metric-kpi-label">Sin responsable</span>
+            <strong>{unassignedTaskCount}</strong>
+          </article>
+          <article className="card metric metric-kpi">
+            <span className="metric-kpi-label">Bloqueadas</span>
+            <strong>{blockedTaskCount}</strong>
+          </article>
+        </div>
+
+        <section className="card chart-card focused-chart-card">
+          <div className="section-head">
+            <div>
+              <h3>Burndown del sprint</h3>
+              <p className="muted">Trabajo restante real contra linea ideal, con series de equipo y usuario cuando existen.</p>
+            </div>
+            {selectedChartContext ? (
+              <span className="pill">
+                {selectedChartContext.productKey ? `${selectedChartContext.productKey} · ` : ""}
+                {selectedChartContext.sprintName}
+              </span>
+            ) : null}
+          </div>
+
+          {creationContexts.length > 1 ? (
+            <label>
+              Contexto visible
+              <select
+                value={selectedChartContextKey}
+                onChange={(event) => setSelectedChartContextKey(event.target.value)}
+              >
+                {creationContexts.map((context) => (
+                  <option key={`${context.productId}:${context.sprintId}`} value={`${context.productId}:${context.sprintId}`}>
+                    {context.productKey ? `${context.productKey} · ` : ""}{context.productName} / {context.sprintName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          {!selectedChartContext ? (
+            <p className="muted">No hay un sprint activo visible para calcular burnup y burndown.</p>
+          ) : store.burndown.length > 0 ? (
+            <ReactECharts
+              option={{
+                animationDuration: 280,
+                animationDurationUpdate: 220,
+                tooltip: { trigger: "axis", ...buildTooltipTheme(chartTheme) },
+                legend: { top: 0, ...buildLegendTheme(chartTheme) },
+                grid: { left: 30, right: 24, bottom: 32, top: 42, containLabel: true },
+                xAxis: { type: "category", data: store.burndown.map((item) => item.date), ...buildAxisTheme(chartTheme) },
+                yAxis: { type: "value", name: "pts", ...buildAxisTheme(chartTheme) },
+                series: [
+                  { name: "Restante", type: "line", smooth: true, data: store.burndown.map((item) => item.remainingPoints) },
+                  { name: "Ideal", type: "line", smooth: true, lineStyle: { type: "dashed" }, data: store.burndown.map((item) => item.idealRemainingPoints) },
+                  { name: "Equipo", type: "line", smooth: true, data: store.burndown.map((item) => item.teamRemainingPoints) },
+                  { name: "Usuario", type: "line", smooth: true, data: store.burndown.map((item) => item.userRemainingPoints) }
+                ]
+              }}
+              notMerge={false}
+              lazyUpdate
+              style={{ height: 320 }}
+            />
+          ) : chartLoading ? (
+            <p className="muted">Actualizando grafica del sprint...</p>
+          ) : (
+            <p className="muted">Aun no hay serie temporal disponible para este sprint.</p>
+          )}
+        </section>
       </section>
 
       {showNoPendingTasksState ? (
@@ -514,10 +583,11 @@ export const FocusedView = observer(function FocusedView() {
           </p>
         </section>
       ) : (
-        <section className="card">
+        <section className="card focused-board-card">
           <div className="section-head">
             <div>
               <h3>Kanban activo</h3>
+              <p className="muted">El tablero usa todo el ancho disponible y conserva columnas legibles en ventanas estrechas.</p>
             </div>
             {loading &&
               <div className="muted">Cargando tablero visible...</div>
@@ -608,64 +678,6 @@ export const FocusedView = observer(function FocusedView() {
           ) : null}
         </section>
       )}
-
-      <section className="card chart-card">
-        <div className="section-head">
-          <div>
-            <h3>Burnup / Burndown</h3>
-          </div>
-          {selectedChartContext ? (
-            <span className="pill">
-              {selectedChartContext.productKey ? `${selectedChartContext.productKey} Â· ` : ""}
-              {selectedChartContext.sprintName}
-            </span>
-          ) : null}
-        </div>
-
-        {creationContexts.length > 1 ? (
-          <label>
-            Sprint a analizar
-            <select
-              value={selectedChartContextKey}
-              onChange={(event) => setSelectedChartContextKey(event.target.value)}
-            >
-              {creationContexts.map((context) => (
-                <option key={`${context.productId}:${context.sprintId}`} value={`${context.productId}:${context.sprintId}`}>
-                  {context.productKey ? `${context.productKey} Â· ` : ""}{context.productName} / {context.sprintName}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-
-        {!selectedChartContext ? (
-          <p className="muted">No hay un sprint activo visible para calcular burnup y burndown.</p>
-        ) : store.burnup.length > 0 ? (
-          <>
-            <ReactECharts
-              option={{
-                animationDuration: 280,
-                animationDurationUpdate: 220,
-                tooltip: { trigger: "axis", ...buildTooltipTheme(chartTheme) },
-                legend: { top: 0, ...buildLegendTheme(chartTheme) },
-                grid: { left: 30, right: 24, bottom: 32, top: 42, containLabel: true },
-                xAxis: { type: "category", data: store.burnup.map((item) => item.date), ...buildAxisTheme(chartTheme) },
-                yAxis: { type: "value", name: "pts", ...buildAxisTheme(chartTheme) },
-                series: [
-                  { name: "Completado", type: "line", smooth: true, data: store.burnup.map((item) => item.completedPoints) },
-                  { name: "Scope", type: "line", smooth: true, data: store.burnup.map((item) => item.scopePoints) },
-                  { name: "Restante", type: "line", smooth: true, data: store.burnup.map((item) => item.remainingPoints) }
-                ]
-              }}
-              notMerge={false}
-              lazyUpdate
-              style={{ height: 320 }}
-            />
-          </>
-        ) : (
-          <p className="muted">Aun no hay serie temporal disponible para este sprint.</p>
-        )}
-      </section>
     </div>
   );
 });

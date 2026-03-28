@@ -29,6 +29,7 @@ import {
 import "@mdxeditor/editor/style.css";
 import { apiClient } from "../../../api/client";
 import { buildInternalReferenceMarkdown, ReferenceSearchResult } from "../../../lib/internal-references";
+import { ImageLightbox } from "./ImageLightbox";
 import "./rich-description-field.css";
 
 type RichDescriptionFieldProps = {
@@ -38,6 +39,24 @@ type RichDescriptionFieldProps = {
   rows?: number;
   disabled?: boolean;
   productId?: string;
+};
+
+type UploadingImage = {
+  id: string;
+  alt: string;
+  previewUrl: string;
+  placeholderMarkdown: string;
+};
+
+type ActiveAnchor = {
+  token: string;
+  query: string;
+  occurrenceIndex: number;
+  viewport: {
+    top: number;
+    left: number;
+    placement: "top" | "bottom";
+  };
 };
 
 const CODE_BLOCK_LANGUAGES: Record<string, string> = {
@@ -63,10 +82,14 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
   const fieldRef = React.useRef<HTMLDivElement | null>(null);
   const resizeFrameRef = React.useRef<number | null>(null);
   const searchTimeoutRef = React.useRef<number | null>(null);
+  const pendingUploadsRef = React.useRef<Map<string, UploadingImage>>(new Map());
   const [activeAnchor, setActiveAnchor] = React.useState<ActiveAnchor | null>(null);
   const [referenceResults, setReferenceResults] = React.useState<ReferenceSearchResult[]>([]);
   const [referenceLoading, setReferenceLoading] = React.useState(false);
   const [selectedReferenceIndex, setSelectedReferenceIndex] = React.useState(0);
+  const [uploadingImages, setUploadingImages] = React.useState<Array<{ id: string; alt: string }>>([]);
+  const [uploadError, setUploadError] = React.useState("");
+  const [lightboxImage, setLightboxImage] = React.useState<{ src: string; alt?: string } | null>(null);
 
   const syncEditorHeight = React.useCallback(() => {
     const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
@@ -94,6 +117,24 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
     });
   }, [syncEditorHeight]);
 
+  const syncControlledValue = React.useCallback(() => {
+    if (!editorRef.current) {
+      return;
+    }
+    const nextMarkdown = editorRef.current.getMarkdown();
+    onChange(nextMarkdown);
+    scheduleHeightSync();
+  }, [onChange, scheduleHeightSync]);
+
+  const updateEditorMarkdown = React.useCallback((nextMarkdown: string) => {
+    if (!editorRef.current) {
+      return;
+    }
+    editorRef.current.setMarkdown(nextMarkdown);
+    onChange(nextMarkdown);
+    scheduleHeightSync();
+  }, [onChange, scheduleHeightSync]);
+
   React.useEffect(() => {
     if (!editorRef.current) {
       return;
@@ -114,6 +155,69 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [scheduleHeightSync]);
+
+  const replaceActiveAnchor = React.useCallback((reference: ReferenceSearchResult) => {
+    if (!activeAnchor || !editorRef.current) {
+      return;
+    }
+
+    const currentMarkdown = editorRef.current.getMarkdown();
+    const nextMarkdown = replaceAnchorOccurrence(currentMarkdown, activeAnchor, buildInternalReferenceMarkdown(reference));
+    if (nextMarkdown === currentMarkdown) {
+      return;
+    }
+
+    updateEditorMarkdown(nextMarkdown);
+    setActiveAnchor(null);
+    setReferenceResults([]);
+  }, [activeAnchor, updateEditorMarkdown]);
+
+  const handleClipboardImage = React.useCallback(async (file: File) => {
+    if (!editorRef.current) {
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    const upload: UploadingImage = {
+      id: createClientId(),
+      alt: file.name?.trim() || "Imagen pegada",
+      previewUrl,
+      placeholderMarkdown: buildUploadingImageMarkdown(file.name?.trim() || "Imagen pegada", previewUrl)
+    };
+
+    pendingUploadsRef.current.set(upload.id, upload);
+    setUploadingImages((current) => [...current, { id: upload.id, alt: upload.alt }]);
+    setUploadError("");
+
+    editorRef.current.insertMarkdown(`${upload.placeholderMarkdown}\n`);
+    syncControlledValue();
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file, file.name || `image-${upload.id}.png`);
+      const response = await apiClient.postForm<{ url: string }>("/media/images", formData);
+      const currentMarkdown = editorRef.current.getMarkdown();
+      const nextMarkdown = replaceUploadingImageMarkdown(
+        currentMarkdown,
+        upload,
+        buildPersistedImageMarkdown(upload.alt, response.url)
+      );
+      updateEditorMarkdown(nextMarkdown);
+    } catch (error) {
+      const currentMarkdown = editorRef.current.getMarkdown();
+      const nextMarkdown = replaceUploadingImageMarkdown(
+        currentMarkdown,
+        upload,
+        `> No se pudo subir la imagen \`${escapeInlineCode(upload.alt)}\`. Vuelve a pegarla para reintentar.`
+      );
+      updateEditorMarkdown(nextMarkdown);
+      setUploadError(error instanceof Error ? error.message : "No se pudo subir la imagen pegada.");
+    } finally {
+      pendingUploadsRef.current.delete(upload.id);
+      setUploadingImages((current) => current.filter((entry) => entry.id !== upload.id));
+      URL.revokeObjectURL(upload.previewUrl);
+    }
+  }, [syncControlledValue, updateEditorMarkdown]);
 
   React.useEffect(() => {
     const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
@@ -181,6 +285,36 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
       }
       syncAnchor();
     };
+    const handlePaste = (event: ClipboardEvent) => {
+      if (disabled) {
+        return;
+      }
+      const files = extractClipboardImages(event);
+      if (files.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      files.forEach((file) => {
+        void handleClipboardImage(file);
+      });
+    };
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLImageElement)) {
+        return;
+      }
+
+      if (!content.contains(target)) {
+        return;
+      }
+
+      event.preventDefault();
+      setLightboxImage({
+        src: target.currentSrc || target.src,
+        alt: target.alt
+      });
+    };
 
     mutationObserver.observe(content, {
       childList: true,
@@ -194,6 +328,8 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
     content.addEventListener("keyup", syncAnchor);
     content.addEventListener("mouseup", syncAnchor);
     content.addEventListener("focus", syncAnchor);
+    content.addEventListener("paste", handlePaste);
+    content.addEventListener("click", handleClick);
     document.addEventListener("selectionchange", handleSelectionChange);
 
     scheduleHeightSync();
@@ -208,13 +344,23 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
       content.removeEventListener("keyup", syncAnchor);
       content.removeEventListener("mouseup", syncAnchor);
       content.removeEventListener("focus", syncAnchor);
+      content.removeEventListener("paste", handlePaste);
+      content.removeEventListener("click", handleClick);
       document.removeEventListener("selectionchange", handleSelectionChange);
       if (resizeFrameRef.current !== null) {
         window.cancelAnimationFrame(resizeFrameRef.current);
         resizeFrameRef.current = null;
       }
     };
-  }, [activeAnchor, referenceResults, scheduleHeightSync, selectedReferenceIndex]);
+  }, [
+    activeAnchor,
+    disabled,
+    handleClipboardImage,
+    referenceResults,
+    replaceActiveAnchor,
+    scheduleHeightSync,
+    selectedReferenceIndex
+  ]);
 
   React.useEffect(() => {
     setSelectedReferenceIndex(0);
@@ -263,22 +409,14 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
     };
   }, [activeAnchor?.query, productId]);
 
-  const replaceActiveAnchor = React.useCallback((reference: ReferenceSearchResult) => {
-    if (!activeAnchor || !editorRef.current) {
-      return;
-    }
-
-    const currentMarkdown = editorRef.current.getMarkdown();
-    const nextMarkdown = replaceAnchorOccurrence(currentMarkdown, activeAnchor, buildInternalReferenceMarkdown(reference));
-    if (nextMarkdown === currentMarkdown) {
-      return;
-    }
-
-    editorRef.current.setMarkdown(nextMarkdown);
-    onChange(nextMarkdown);
-    setActiveAnchor(null);
-    setReferenceResults([]);
-  }, [activeAnchor, onChange]);
+  React.useEffect(() => {
+    return () => {
+      pendingUploadsRef.current.forEach((upload) => {
+        URL.revokeObjectURL(upload.previewUrl);
+      });
+      pendingUploadsRef.current.clear();
+    };
+  }, []);
 
   return (
     <div className="rich-description-field" ref={fieldRef}>
@@ -329,6 +467,13 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
           })
         ]}
       />
+      {uploadingImages.length > 0 ? (
+        <div className="rich-description-upload-status" aria-live="polite">
+          <strong>Subiendo imagen{uploadingImages.length === 1 ? "" : "es"}...</strong>
+          <span>{uploadingImages.map((entry) => entry.alt).join(", ")}</span>
+        </div>
+      ) : null}
+      {uploadError ? <p className="error-text">{uploadError}</p> : null}
       {activeAnchor
         ? createPortal(
           <div
@@ -371,21 +516,56 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
           document.body
         )
         : null}
+      <ImageLightbox
+        open={Boolean(lightboxImage)}
+        src={lightboxImage?.src ?? ""}
+        alt={lightboxImage?.alt}
+        onClose={() => setLightboxImage(null)}
+      />
       <style>{`.rich-description-content { min-height: ${minHeight}px; max-height: 75vh; }`}</style>
     </div>
   );
 }
 
-type ActiveAnchor = {
-  token: string;
-  query: string;
-  occurrenceIndex: number;
-  viewport: {
-    top: number;
-    left: number;
-    placement: "top" | "bottom";
-  };
-};
+function buildUploadingImageMarkdown(alt: string, previewUrl: string) {
+  return `![${escapeMarkdownLabel(alt)}](${previewUrl})\n\n_Subiendo imagen al servidor..._`;
+}
+
+function buildPersistedImageMarkdown(alt: string, url: string) {
+  return `![${escapeMarkdownLabel(alt)}](${url})`;
+}
+
+function replaceUploadingImageMarkdown(markdown: string, upload: UploadingImage, replacement: string) {
+  if (markdown.includes(upload.placeholderMarkdown)) {
+    return markdown.replace(upload.placeholderMarkdown, replacement);
+  }
+
+  const previewMarkdown = `![${escapeMarkdownLabel(upload.alt)}](${upload.previewUrl})`;
+  if (markdown.includes(previewMarkdown)) {
+    return markdown.replace(previewMarkdown, replacement);
+  }
+
+  return `${markdown.trimEnd()}\n\n${replacement}`.trim();
+}
+
+function escapeInlineCode(value: string) {
+  return value.replace(/`/g, "'");
+}
+
+function createClientId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `upload-${Date.now()}-${Math.round(Math.random() * 10000)}`;
+}
+
+function extractClipboardImages(event: ClipboardEvent) {
+  const items = Array.from(event.clipboardData?.items ?? []);
+  return items
+    .filter((item) => item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file));
+}
 
 function resolveActiveAnchor(root: HTMLElement): ActiveAnchor | null {
   const selection = window.getSelection();
@@ -528,4 +708,8 @@ function iconLabel(icon: ReferenceSearchResult["icon"]) {
   if (icon === "user") return "U";
   if (icon === "story") return "H";
   return "T";
+}
+
+function escapeMarkdownLabel(value: string): string {
+  return value.replace(/[[\]\\]/g, "\\$&");
 }

@@ -2,12 +2,13 @@ import React from "react";
 import { observer } from "mobx-react-lite";
 import { Role } from "@scrum/contracts";
 import { apiClient } from "../../api/client";
-import { AdminController, TeamController } from "../../controllers";
+import { AdminController, ProductController, TeamController } from "../../controllers";
 import { useRootStore } from "../../stores/root-store";
 import { ActivityFeed } from "../../ui/drawers/product-workspace/ActivityFeed";
 
 type TeamLite = { id: string; name: string };
-type UserItem = { id: string; name: string; email: string; role: Role; teams?: TeamLite[] };
+type ProductLite = { id: string; key: string; name: string; role?: Role };
+type UserItem = { id: string; name: string; email: string; role: Role; teams?: TeamLite[]; products?: ProductLite[] };
 type ActivityEntry = {
   id: string;
   action: string;
@@ -43,29 +44,48 @@ function statusClass(status: string): string {
   return `status status-${normalized}`;
 }
 
+function normalizeText(value: string | null | undefined): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase();
+}
+
 export const AdminRolesView = observer(function AdminRolesView() {
   const store = useRootStore();
   const admin = React.useMemo(() => new AdminController(store), [store]);
   const teamsController = React.useMemo(() => new TeamController(store), [store]);
+  const productsController = React.useMemo(() => new ProductController(store), [store]);
   const [selectedUserForTeams, setSelectedUserForTeams] = React.useState<UserItem | null>(null);
   const [teamDraft, setTeamDraft] = React.useState<string[]>([]);
+  const [productDraft, setProductDraft] = React.useState<string[]>([]);
   const [saveTeamsError, setSaveTeamsError] = React.useState("");
+  const [saveProductsError, setSaveProductsError] = React.useState("");
   const [createError, setCreateError] = React.useState("");
   const [createName, setCreateName] = React.useState("");
   const [createEmail, setCreateEmail] = React.useState("");
   const [createPassword, setCreatePassword] = React.useState("");
-  const [createRole, setCreateRole] = React.useState<Role>("team_member");
+  const [createRole, setCreateRole] = React.useState<Role>("scrum_master");
   const [createTeamIds, setCreateTeamIds] = React.useState<string[]>([]);
+  const [createProductIds, setCreateProductIds] = React.useState<string[]>([]);
   const [activityUserId, setActivityUserId] = React.useState("");
   const [activityWindow, setActivityWindow] = React.useState<StatsWindow>("week");
   const [activity, setActivity] = React.useState<ActivityEntry[]>([]);
   const [activityStats, setActivityStats] = React.useState<ActivityStats | null>(null);
   const [activityError, setActivityError] = React.useState("");
+  const [search, setSearch] = React.useState("");
+  const viewerRole = store.session.user?.role;
+  const canEditUsers = viewerRole === "platform_admin" || viewerRole === "product_owner";
+  const canChangeRoles = viewerRole === "platform_admin";
+  const availableRoleOptions = viewerRole === "platform_admin"
+    ? roleOptions
+    : (["scrum_master", "team_member"] satisfies Role[]);
 
   React.useEffect(() => {
     void admin.loadUsers();
     void teamsController.loadTeams();
-  }, [admin, teamsController]);
+    void productsController.loadProducts();
+  }, [admin, productsController, teamsController]);
 
   React.useEffect(() => {
     if (!activityUserId) {
@@ -97,17 +117,37 @@ export const AdminRolesView = observer(function AdminRolesView() {
 
   const users = store.users.items as UserItem[];
   const teams = store.teams.items as TeamLite[];
-  const canEditUsers = store.session.user?.role === "platform_admin";
+  const products = store.products.items as ProductLite[];
+  const filteredUsers = React.useMemo(() => {
+    const query = normalizeText(search.trim());
+    if (!query) {
+      return users;
+    }
+
+    return users.filter((user) => {
+      const teamNames = (user.teams ?? []).map((team) => team.name).join(" ");
+      const productNames = (user.products ?? []).map((product) => `${product.key} ${product.name}`).join(" ");
+      return [user.name, user.email, user.role, teamNames, productNames]
+        .some((value) => normalizeText(value).includes(query));
+    });
+  }, [search, users]);
 
   const openTeamEditor = React.useCallback(async (user: UserItem) => {
     if (!canEditUsers) return;
     setSelectedUserForTeams(user);
     setSaveTeamsError("");
+    setSaveProductsError("");
     try {
-      const currentTeams = await apiClient.get<TeamLite[]>(`/admin/users/${user.id}/teams`);
+      const [currentTeams, currentProducts] = await Promise.all([
+        apiClient.get<TeamLite[]>(`/admin/users/${user.id}/teams`),
+        apiClient.get<ProductLite[]>(`/admin/users/${user.id}/products`)
+      ]);
       setTeamDraft(currentTeams.map((team) => team.id));
+      setProductDraft(currentProducts.map((product) => product.id));
     } catch (error) {
-      setSaveTeamsError(error instanceof Error ? error.message : "No se pudo cargar equipos del usuario.");
+      const message = error instanceof Error ? error.message : "No se pudo cargar asignaciones del usuario.";
+      setSaveTeamsError(message);
+      setSaveProductsError(message);
     }
   }, [canEditUsers]);
 
@@ -122,12 +162,31 @@ export const AdminRolesView = observer(function AdminRolesView() {
     }
   }, [admin, selectedUserForTeams, teamDraft]);
 
+  const saveUserProducts = React.useCallback(async () => {
+    if (!selectedUserForTeams) return;
+    setSaveProductsError("");
+    try {
+      await apiClient.patch(`/admin/users/${selectedUserForTeams.id}/products`, { productIds: productDraft });
+      await admin.loadUsers();
+    } catch (error) {
+      setSaveProductsError(error instanceof Error ? error.message : "No se pudo guardar productos.");
+    }
+  }, [admin, productDraft, selectedUserForTeams]);
+
   const toggleCreateTeamId = React.useCallback((teamId: string) => {
     setCreateTeamIds((prev) => prev.includes(teamId) ? prev.filter((id) => id !== teamId) : [...prev, teamId]);
   }, []);
 
+  const toggleCreateProductId = React.useCallback((productId: string) => {
+    setCreateProductIds((prev) => prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]);
+  }, []);
+
   const toggleTeamDraft = React.useCallback((teamId: string) => {
     setTeamDraft((prev) => prev.includes(teamId) ? prev.filter((id) => id !== teamId) : [...prev, teamId]);
+  }, []);
+
+  const toggleProductDraft = React.useCallback((productId: string) => {
+    setProductDraft((prev) => prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]);
   }, []);
 
   const createUser = React.useCallback(async () => {
@@ -138,23 +197,34 @@ export const AdminRolesView = observer(function AdminRolesView() {
         name: createName,
         password: createPassword,
         role: createRole,
-        teamIds: createTeamIds
+        teamIds: createTeamIds,
+        productIds: createProductIds
       });
       setCreateName("");
       setCreateEmail("");
       setCreatePassword("");
-      setCreateRole("team_member");
+      setCreateRole(viewerRole === "platform_admin" ? "team_member" : "scrum_master");
       setCreateTeamIds([]);
+      setCreateProductIds([]);
       await admin.loadUsers();
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : "No se pudo crear el usuario.");
     }
-  }, [admin, createEmail, createName, createPassword, createRole, createTeamIds]);
+  }, [admin, createEmail, createName, createPassword, createProductIds, createRole, createTeamIds, viewerRole]);
 
   return (
     <div className="stack-lg">
       <section className="card">
         <h2>Usuarios</h2>
+        <label>
+          Filtrar usuarios
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Nombre, email, rol, equipo o producto"
+          />
+        </label>
         <table className="table">
           <thead>
             <tr>
@@ -162,11 +232,12 @@ export const AdminRolesView = observer(function AdminRolesView() {
               <th>Email</th>
               <th>Rol</th>
               <th>Equipos</th>
+              <th>Productos</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
+            {filteredUsers.map((user) => (
               <tr key={user.id}>
                 <td>{user.name}</td>
                 <td>{user.email}</td>
@@ -174,9 +245,10 @@ export const AdminRolesView = observer(function AdminRolesView() {
                   <span className={statusClass(user.role)}>{user.role}</span>
                 </td>
                 <td>{(user.teams ?? []).map((team) => team.name).join(", ") || "-"}</td>
+                <td>{(user.products ?? []).map((product) => product.name).join(", ") || "-"}</td>
                 <td>
                   <div className="row-actions compact">
-                    {canEditUsers ? (
+                    {canChangeRoles ? (
                       <select
                         value={user.role}
                         onChange={(event) => void admin.setRole(user.id, event.target.value as Role)}
@@ -206,6 +278,11 @@ export const AdminRolesView = observer(function AdminRolesView() {
                 </td>
               </tr>
             ))}
+            {users.length > 0 && filteredUsers.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="muted">No hay usuarios que coincidan con el filtro.</td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </section>
@@ -231,7 +308,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
             <label>
               Rol
               <select value={createRole} onChange={(event) => setCreateRole(event.target.value as Role)}>
-                {roleOptions.map((roleOption) => (
+                {availableRoleOptions.map((roleOption) => (
                   <option key={roleOption} value={roleOption}>{roleOption}</option>
                 ))}
               </select>
@@ -247,6 +324,19 @@ export const AdminRolesView = observer(function AdminRolesView() {
                   onChange={() => toggleCreateTeamId(team.id)}
                 />
                 {team.name}
+              </label>
+            ))}
+          </div>
+          <label>Productos visibles</label>
+          <div className="metrics-grid">
+            {products.map((product) => (
+              <label key={product.id} className="check-option">
+                <input
+                  type="checkbox"
+                  checked={createProductIds.includes(product.id)}
+                  onChange={() => toggleCreateProductId(product.id)}
+                />
+                {product.key} - {product.name}
               </label>
             ))}
           </div>
@@ -272,11 +362,26 @@ export const AdminRolesView = observer(function AdminRolesView() {
               </label>
             ))}
           </div>
+          <label>Productos del usuario</label>
+          <div className="metrics-grid">
+            {products.map((product) => (
+              <label key={product.id} className="check-option">
+                <input
+                  type="checkbox"
+                  checked={productDraft.includes(product.id)}
+                  onChange={() => toggleProductDraft(product.id)}
+                />
+                {product.key} - {product.name}
+              </label>
+            ))}
+          </div>
           <div className="row-actions">
             <button className="btn btn-primary" onClick={() => void saveUserTeams()}>Guardar equipos</button>
+            <button className="btn btn-primary" onClick={() => void saveUserProducts()}>Guardar productos</button>
             <button className="btn btn-secondary" onClick={() => setSelectedUserForTeams(null)}>Cerrar</button>
           </div>
           {saveTeamsError ? <p className="error-text">{saveTeamsError}</p> : null}
+          {saveProductsError ? <p className="error-text">{saveProductsError}</p> : null}
         </section>
       ) : null}
 

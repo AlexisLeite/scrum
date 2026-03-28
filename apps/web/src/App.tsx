@@ -20,6 +20,7 @@ import {
 } from "./routes/product-routes";
 import { useRootStore } from "./stores/root-store";
 import { DrawerHost } from "./ui/drawers/DrawerHost";
+import { ModalsController } from "./ui/modals/ModalsController";
 import { FocusedView } from "./views/FocusedView";
 import { administrationDefaultPath, AdministrationView } from "./views/AdministrationView";
 import { SettingsView } from "./views/SettingsView";
@@ -252,6 +253,7 @@ export const App = observer(function App() {
       </main>
 
       <DrawerHost controller={store.drawers} />
+      <ModalsController.Component />
     </div>
   );
 });

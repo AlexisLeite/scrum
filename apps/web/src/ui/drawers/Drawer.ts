@@ -7,6 +7,8 @@ export interface DrawerRenderContext {
   controller: DrawerController;
   drawerId: string;
   close: () => void;
+  requestClose: () => Promise<boolean>;
+  registerCloseGuard: (guard: (() => boolean | Promise<boolean>) | null) => void;
 }
 
 export abstract class Drawer {

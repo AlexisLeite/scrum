@@ -3,8 +3,10 @@ import { NestFactory } from "@nestjs/core";
 import { ExpressAdapter } from "@nestjs/platform-express";
 import cookieParser from "cookie-parser";
 import express, { type Express } from "express";
+import { static as serveStatic } from "express";
 import { Request, Response } from "express";
 import { AppModule } from "./app.module";
+import { resolveMediaRoot } from "./media/media.service";
 import { McpService } from "./mcp/mcp.service";
 
 function normalizeOrigins(rawOrigins: string | undefined): string[] {
@@ -32,6 +34,7 @@ export function ensureDatabaseEnv(): void {
 export async function configureApp(app: INestApplication): Promise<void> {
   app.setGlobalPrefix("api/v1");
   app.use(cookieParser());
+  app.use("/media", serveStatic(resolveMediaRoot()));
   app.enableCors({
     origin: resolveAllowedOrigins(),
     credentials: true

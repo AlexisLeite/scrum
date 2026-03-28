@@ -723,6 +723,13 @@ a.btn-secondary,
   background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
 }
 
+.btn-danger {
+  color: var(--text-contrast);
+  border-color: transparent;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--danger) 92%, #7a0d17), var(--danger));
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
 .btn-ghost {
   color: var(--text-main);
   border-color: var(--border);
@@ -1648,6 +1655,20 @@ html .drawer-content .card {
   border-radius: 12px;
 }
 
+.markdown-preview-image-button {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.markdown-preview-image-button img {
+  display: block;
+  max-width: 100%;
+}
+
 .reference-entity-card {
   display: grid;
   gap: 16px;
@@ -1907,6 +1928,39 @@ th {
 
 .focused-empty-state h3 {
   margin: 0;
+}
+
+.focused-overview {
+  display: flex;
+  flex-direction: column;
+}
+
+.focused-kpis {
+  align-content: start;
+}
+
+.focused-chart-card,
+.focused-board-card {
+  min-width: 0;
+}
+
+.focused-board-card {
+  overflow: hidden;
+}
+
+.focused-board-card .kb-board {
+  gap: 1rem;
+}
+
+.focused-board-card .kb-columns {
+  margin-inline: -0.1rem;
+  padding-inline: 0.1rem;
+}
+
+@media (max-width: 1120px) {
+  .focused-overview {
+    grid-template-columns: 1fr;
+  }
 }
 
 .tabs {

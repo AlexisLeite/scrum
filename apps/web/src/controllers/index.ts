@@ -343,6 +343,12 @@ export class ProductController {
     this.store.setBurnup(points);
   }
 
+  async loadBurndown(productId: string, sprintId: string) {
+    const points = await apiClient.get<any[]>(`/indicators/products/${productId}/burndown?sprintId=${sprintId}`);
+    this.store.setBurndown(points);
+    return points;
+  }
+
   async loadBurnupByWindow(productId: string, sprintId: string, window: "week" | "month" | "semester" | "year") {
     const points = await this.tryGetWithFallback<any[]>(
       `/indicators/products/${productId}/burnup?sprintId=${sprintId}&window=${window}`,
@@ -378,6 +384,35 @@ export class ProductController {
     );
     this.store.setUserVelocity(points);
     return points;
+  }
+
+  async loadProductMetrics(
+    productId: string,
+    params: {
+      sprintId?: string;
+      teamId?: string;
+      userId?: string;
+      window: "week" | "month" | "semester" | "year";
+    }
+  ) {
+    const query = new URLSearchParams();
+    query.set("window", params.window);
+    if (params.sprintId) {
+      query.set("sprintId", params.sprintId);
+    }
+    if (params.teamId) {
+      query.set("teamId", params.teamId);
+    }
+    if (params.userId) {
+      query.set("userId", params.userId);
+    }
+
+    const metrics = await apiClient.get<any>(`/indicators/products/${productId}/metrics?${query.toString()}`);
+    this.store.setBurnup(metrics.burnup ?? []);
+    this.store.setBurndown(metrics.burndown ?? []);
+    this.store.setTeamVelocity(metrics.teamVelocity ?? []);
+    this.store.setUserVelocity(metrics.userVelocity ?? []);
+    return metrics.productStats ?? null;
   }
 
   async loadUserStatsByWindow(userId: string, window: "week" | "month" | "semester" | "year") {

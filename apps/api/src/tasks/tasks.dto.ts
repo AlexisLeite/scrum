@@ -1,11 +1,14 @@
 import { Type } from "class-transformer";
 import {
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
   Min,
   MinLength
 } from "class-validator";
+
+const EFFORT_POINT_VALUES = [1, 2, 3, 5, 8, 13, 21] as const;
 
 export class CreateTaskDto {
   @IsString()
@@ -38,7 +41,7 @@ export class CreateTaskDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(1)
+  @IsIn(EFFORT_POINT_VALUES)
   effortPoints?: number;
 
   @IsOptional()
@@ -67,7 +70,7 @@ export class UpdateTaskDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(1)
+  @IsIn(EFFORT_POINT_VALUES)
   effortPoints?: number;
 
   @IsOptional()
@@ -130,7 +133,7 @@ export class CreateTaskFromMessageDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(1)
+  @IsIn(EFFORT_POINT_VALUES)
   effortPoints?: number;
 
   @IsOptional()
@@ -167,4 +170,3 @@ export class AssignTaskDto {
   @IsString()
   sprintId?: string | null;
 }
-

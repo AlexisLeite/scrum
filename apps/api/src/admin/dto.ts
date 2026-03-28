@@ -31,6 +31,11 @@ export class CreateAdminUserDto {
   @IsString({ each: true })
   @IsOptional()
   teamIds?: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  productIds?: string[];
 }
 
 export class UpdateUserRoleDto {
@@ -42,4 +47,10 @@ export class SetUserTeamsDto {
   @IsArray()
   @IsString({ each: true })
   teamIds!: string[];
+}
+
+export class SetUserProductsDto {
+  @IsArray()
+  @IsString({ each: true })
+  productIds!: string[];
 }

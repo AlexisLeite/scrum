@@ -6,6 +6,7 @@ import { ApiKeysModule } from "./api-keys/api-keys.module";
 import { AuthModule } from "./auth/auth.module";
 import { DraftsModule } from "./drafts/drafts.module";
 import { IndicatorsModule } from "./indicators/indicators.module";
+import { MediaModule } from "./media/media.module";
 import { McpModule } from "./mcp/mcp.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductsModule } from "./products/products.module";
@@ -27,6 +28,7 @@ import { TeamsModule } from "./teams/teams.module";
     AdminModule,
     AuthModule,
     DraftsModule,
+    MediaModule,
     TeamsModule,
     ProductsModule,
     ReferencesModule,

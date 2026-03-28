@@ -332,6 +332,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
   const user = store.session.user;
   const canManageTasks = canCreateTasks(user?.role);
   const [formError, setFormError] = React.useState("");
+  const [search, setSearch] = React.useState("");
   const [updatingTaskId, setUpdatingTaskId] = React.useState("");
   const [completionRequest, setCompletionRequest] = React.useState<{ taskId: string; title: string } | null>(null);
 
@@ -356,6 +357,27 @@ export const StoryTasksView = observer(function StoryTasksView() {
   const statusOptions = Array.from(
     new Set(["Todo", "In Progress", "Blocked", "Done", ...tasks.map((task) => task.status)])
   );
+  const normalizedSearch = React.useMemo(() => normalizeSearchValue(search.trim()), [search]);
+  const filteredTasks = React.useMemo(() => {
+    if (!normalizedSearch) {
+      return tasks;
+    }
+
+    return tasks.filter((task) => {
+      const sprintName = task.sprintId ? sprintNameById.get(task.sprintId) ?? task.sprintId : "backlog";
+      const assigneeName = task.assigneeId ? assigneeNameById.get(task.assigneeId) ?? task.assigneeId : "sin asignar";
+      return [
+        task.title,
+        task.description,
+        task.status,
+        sprintName,
+        assigneeName,
+        task.effortPoints != null ? String(task.effortPoints) : "",
+        task.estimatedHours != null ? String(task.estimatedHours) : "",
+        task.actualHours != null ? String(task.actualHours) : ""
+      ].some((value) => normalizeSearchValue(value).includes(normalizedSearch));
+    });
+  }, [assigneeNameById, normalizedSearch, sprintNameById, tasks]);
 
   const reloadStoryTasks = async () => {
     await Promise.all([controller.loadTasks(storyId), controller.loadStories(productId)]);
@@ -420,6 +442,15 @@ export const StoryTasksView = observer(function StoryTasksView() {
             </button>
           ) : null}
         </div>
+        <label>
+          Filtrar tareas
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Titulo, descripcion, estado, sprint o asignado"
+          />
+        </label>
 
         <table className="table story__tasks__table">
           <thead>
@@ -433,7 +464,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
             </tr>
           </thead>
           <tbody>
-            {tasks.map((task) => (
+            {filteredTasks.map((task) => (
               <tr key={task.id}>
                 <td>
                   <MarkdownPreview markdown={markdownWithTitle(task.title, task.description, 4)} compact className="muted" emptyLabel="Sin descripcion" />
@@ -478,6 +509,11 @@ export const StoryTasksView = observer(function StoryTasksView() {
             {tasks.length === 0 ? (
               <tr>
                 <td colSpan={6} className="muted">Esta historia aun no tiene tareas. Crea una tarea para comenzar.</td>
+              </tr>
+            ) : null}
+            {tasks.length > 0 && filteredTasks.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="muted">No hay tareas que coincidan con el filtro.</td>
               </tr>
             ) : null}
           </tbody>
@@ -823,14 +859,13 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
     if (productId) void controller.loadSprints(productId);
     void teamController.loadTeams();
   }, [controller, teamController, productId]);
-
-  if (!productId) return null;
   const sprints = store.sprints.items as SprintItem[];
   const teams = store.teams.items as TeamItem[];
   const assignableUsers = buildAssignableUsers(teams);
   const selectedSprint = sprints.find((sprint) => sprint.id === sprintId);
   const selectedTeam = teams.find((team) => team.id === teamId);
-  const selectedUser = assignableUsers.find((user) => user.id === userId);
+  const visibleUsers = teamId && selectedTeam ? buildAssignableUsers([selectedTeam]) : assignableUsers;
+  const selectedUser = visibleUsers.find((user) => user.id === userId) ?? assignableUsers.find((user) => user.id === userId);
 
   React.useEffect(() => {
     if (sprints.length === 0 || sprintId) return;
@@ -838,20 +873,11 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
   }, [sprintId, sprints]);
 
   React.useEffect(() => {
-    if (teams.length === 0 || teamId) return;
-    setTeamId(teams[0].id);
-  }, [teamId, teams]);
-
-  React.useEffect(() => {
-    if (assignableUsers.length === 0 || userId) return;
-    setUserId(assignableUsers[0].id);
-  }, [assignableUsers, userId]);
-
-  React.useEffect(() => {
-    if (selectedSprint?.teamId && selectedSprint.teamId !== teamId) {
-      setTeamId(selectedSprint.teamId);
+    if (!teamId || visibleUsers.some((user) => user.id === userId)) {
+      return;
     }
-  }, [selectedSprint?.teamId, teamId]);
+    setUserId("");
+  }, [teamId, userId, visibleUsers]);
 
   React.useEffect(() => {
     let active = true;
@@ -859,25 +885,15 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
     const loadMetrics = async () => {
       setStatsError("");
       try {
-        const jobs: Array<Promise<unknown>> = [
-          controller.loadProductStatsByWindow(productId, windowSize).then((stats) => {
-            if (active) {
-              setProductStats(stats);
-            }
-          })
-        ];
-
-        if (sprintId) {
-          jobs.push(controller.loadBurnupByWindow(productId, sprintId, windowSize));
+        const stats = await controller.loadProductMetrics(productId!, {
+          window: windowSize,
+          sprintId: sprintId || undefined,
+          teamId: teamId || undefined,
+          userId: userId || undefined
+        });
+        if (active) {
+          setProductStats(stats);
         }
-        if (teamId) {
-          jobs.push(controller.loadTeamVelocityByWindow(teamId, windowSize));
-        }
-        if (userId) {
-          jobs.push(controller.loadUserVelocityByWindow(userId, windowSize));
-        }
-
-        await Promise.all(jobs);
       } catch (error) {
         if (active) {
           setStatsError(getErrorMessage(error));
@@ -891,6 +907,8 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
       active = false;
     };
   }, [controller, productId, sprintId, teamId, userId, windowSize]);
+
+  if (!productId) return null;
 
   return (
     <div className="stack-lg">
@@ -932,7 +950,7 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
             Usuario
             <select value={userId} onChange={(event) => setUserId(event.target.value)}>
               <option value="">Seleccionar usuario</option>
-              {assignableUsers.map((user) => (
+              {visibleUsers.map((user) => (
                 <option key={user.id} value={user.id}>
                   {user.name}
                 </option>
@@ -941,6 +959,7 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
           </label>
         </div>
         <p className="muted">Las metricas se actualizan automaticamente cuando cambias la ventana, sprint, equipo o usuario.</p>
+        <p className="muted">Los filtros son acumulativos: producto + sprint + equipo + usuario.</p>
         {statsError ? <p className="error-text">{statsError}</p> : null}
       </section>
       <ProductMetricsPanel
@@ -950,13 +969,10 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
         userName={selectedUser?.name ?? ""}
         productStats={productStats}
         burnup={store.burnup}
+        burndown={store.burndown}
         teamVelocity={store.teamVelocity}
         userVelocity={store.userVelocity}
       />
     </div>
   );
 });
-
-
-
-
