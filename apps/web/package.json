@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.app.json && vite build",
+    "build": "tsc -p tsconfig.app.json && vite build --mode development",
     "vercel-build": "pnpm build",
     "preview": "vite preview",
     "lint": "echo web lint",
