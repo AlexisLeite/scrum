@@ -30,7 +30,9 @@ class ModalsState {
       return false;
     }
 
-    this.close(modalId);
+    this.close(modalId); 
+    document.body.style.overflow = "";
+
     return true;
   }
 
@@ -53,7 +55,6 @@ const ModalsHost = observer(function ModalsHost() {
       return undefined;
     }
 
-    const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -70,7 +71,6 @@ const ModalsHost = observer(function ModalsHost() {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.body.style.overflow = previous;
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [modals.length]);

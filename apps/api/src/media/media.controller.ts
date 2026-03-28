@@ -39,9 +39,12 @@ export class MediaController {
 }
 
 function buildPublicUrl(request: Request, publicPath: string) {
-  const forwardedProto = request.headers["x-forwarded-proto"];
-  const protocol = Array.isArray(forwardedProto)
-    ? forwardedProto[0]
-    : forwardedProto?.split(",")[0]?.trim() || request.protocol;
-  return `${protocol}://${request.get("host")}${publicPath}`;
+  const base = process.env.PUBLIC_API_URL;
+
+  if (!base) {
+    throw new Error("PUBLIC_API_URL is not defined");
+  }
+
+  return `${base}${publicPath}`;
+
 }
