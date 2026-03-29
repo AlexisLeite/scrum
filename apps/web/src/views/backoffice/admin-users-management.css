@@ -92,3 +92,8 @@
     grid-template-columns: 1fr;
   }
 }
+
+.admin-users-detail {
+  position: sticky;
+  top: 0;
+}
