@@ -1366,6 +1366,7 @@ a.btn-secondary,
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 1fr);
   gap: 0.9rem;
+  align-items: start;
   padding-top: 0.35rem;
 }
 
@@ -1387,7 +1388,10 @@ a.btn-secondary,
 }
 
 .story-task-summary-panel {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
   gap: 0.75rem;
   padding: 0.9rem;
   border: 1px solid color-mix(in srgb, var(--border-soft) 80%, transparent);
@@ -2310,7 +2314,7 @@ th {
   overflow: hidden;
 }
 
-.focused-chart-card .echarts-for-react > div {
+.focused-chart-card .echarts-for-react>div {
   max-width: 100%;
 }
 
