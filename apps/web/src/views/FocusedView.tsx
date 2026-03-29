@@ -212,6 +212,36 @@ function patchTaskInBoard(board: FocusedBoard, updatedTask: FocusedTask): Focuse
   return { ...board, columns: nextColumns };
 }
 
+function placeTaskInBoard(board: FocusedBoard, updatedTask: FocusedTask, targetStatus: string, targetPosition: number): FocusedBoard {
+  const nextColumns = board.columns.map((column) => ({
+    ...column,
+    tasks: column.tasks.filter((task) => task.id !== updatedTask.id)
+  }));
+
+  const targetColumn = nextColumns.find((column) => column.name === targetStatus);
+  if (!targetColumn) {
+    return board;
+  }
+
+  const boundedPosition = Math.max(0, Math.min(targetPosition, targetColumn.tasks.length));
+  targetColumn.tasks.splice(boundedPosition, 0, {
+    ...updatedTask,
+    status: targetStatus
+  });
+
+  return {
+    ...board,
+    columns: nextColumns.map((column) => ({
+      ...column,
+      tasks: column.tasks.map((task, index) => ({
+        ...task,
+        status: column.name,
+        boardOrder: index + 1
+      }))
+    }))
+  };
+}
+
 function buildCreationContexts(tasks: FocusedTask[]): FocusedCreationContext[] {
   return Array.from(
     new Map(
@@ -727,7 +757,7 @@ export const FocusedView = observer(function FocusedView() {
           return;
         }
         const updatedTask = await productController.moveBoardTask(sprintId, taskId, { status, position, actualHours });
-        setBoard((current) => patchTaskInBoard(current, updatedTask as FocusedTask));
+        setBoard((current) => placeTaskInBoard(current, updatedTask as FocusedTask, status, position));
       }),
     [board, productController, user, withPendingTask]
   );
