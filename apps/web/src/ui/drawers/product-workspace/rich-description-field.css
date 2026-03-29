@@ -52,9 +52,9 @@
 
 .rich-description-content img {
   display: block;
-  width: 30%;
-  max-width: 30%;
-  max-height: 80px;
+  width: 30vw;
+  max-width: 30vw;
+  max-height: 30vw;
   height: auto;
   object-fit: contain;
   cursor: zoom-in;
