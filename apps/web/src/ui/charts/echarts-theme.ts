@@ -1,6 +1,6 @@
 import React from "react";
 
-type ChartTheme = {
+export type ChartTheme = {
   text: string;
   muted: string;
   border: string;

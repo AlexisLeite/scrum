@@ -628,15 +628,17 @@ export class IndicatorsService {
         (task) => task.productId === scope.productId && task.assigneeId === scope.userId
       )
       : [];
-    const firstScope = burnup[0]?.scopePoints ?? 0;
+    const totalScope = burnup.reduce((max, point) => Math.max(max, point.scopePoints), 0);
     const steps = Math.max(burnup.length - 1, 1);
+    const todayKey = new Date().toISOString().slice(0, 10);
 
     return burnup.map((point, index) => ({
       date: point.date,
       remainingPoints: point.remainingPoints,
-      idealRemainingPoints: Math.max(Number((firstScope - ((firstScope / steps) * index)).toFixed(2)), 0),
+      idealRemainingPoints: Math.max(Number((totalScope - ((totalScope / steps) * index)).toFixed(2)), 0),
       teamRemainingPoints: teamSeries[index]?.remainingPoints ?? null,
-      userRemainingPoints: userSeries[index]?.remainingPoints ?? null
+      userRemainingPoints: userSeries[index]?.remainingPoints ?? null,
+      isToday: point.date === todayKey
     }));
   }
 

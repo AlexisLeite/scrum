@@ -12,7 +12,8 @@ import {
 import { canCommentOnVisibleTask, canCreateTaskFromMessage, canCreateTasks, canEditTaskFields } from "../lib/permissions";
 import { useRootStore } from "../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../ui/drawers/Drawer";
-import { buildAxisTheme, buildLegendTheme, buildTooltipTheme, useEChartsTheme } from "../ui/charts/echarts-theme";
+import { useEChartsTheme } from "../ui/charts/echarts-theme";
+import { buildBurndownOption } from "../ui/charts/burndown-chart";
 import { TaskUpsertionDrawer } from "../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { KanbanBoard } from "../ui/kanban";
 
@@ -791,21 +792,7 @@ export const FocusedView = observer(function FocusedView() {
             <p className="muted">No hay un sprint activo visible para calcular burnup y burndown.</p>
           ) : store.burndown.length > 0 ? (
             <ReactECharts
-              option={{
-                animationDuration: 280,
-                animationDurationUpdate: 220,
-                tooltip: { trigger: "axis", ...buildTooltipTheme(chartTheme) },
-                legend: { top: 0, ...buildLegendTheme(chartTheme) },
-                grid: { left: 30, right: 24, bottom: 32, top: 42, containLabel: true },
-                xAxis: { type: "category", data: store.burndown.map((item) => item.date), ...buildAxisTheme(chartTheme) },
-                yAxis: { type: "value", name: "pts", ...buildAxisTheme(chartTheme) },
-                series: [
-                  { name: "Restante", type: "line", smooth: true, data: store.burndown.map((item) => item.remainingPoints) },
-                  { name: "Ideal", type: "line", smooth: true, lineStyle: { type: "dashed" }, data: store.burndown.map((item) => item.idealRemainingPoints) },
-                  { name: "Equipo", type: "line", smooth: true, data: store.burndown.map((item) => item.teamRemainingPoints) },
-                  { name: "Usuario", type: "line", smooth: true, data: store.burndown.map((item) => item.userRemainingPoints) }
-                ]
-              }}
+              option={buildBurndownOption(store.burndown, chartTheme)}
               notMerge={false}
               lazyUpdate
               style={{ height: 320 }}

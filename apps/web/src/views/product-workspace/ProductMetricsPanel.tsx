@@ -1,20 +1,13 @@
 import React from "react";
 import ReactECharts from "echarts-for-react";
 import { buildAxisTheme, buildLegendTheme, buildTooltipTheme, useEChartsTheme } from "../../ui/charts/echarts-theme";
+import { buildBurndownOption, type BurndownPoint } from "../../ui/charts/burndown-chart";
 
 type BurnupPoint = {
   date: string;
   completedPoints: number;
   scopePoints: number;
   remainingPoints: number;
-};
-
-type BurndownPoint = {
-  date: string;
-  remainingPoints: number;
-  idealRemainingPoints: number;
-  teamRemainingPoints: number | null;
-  userRemainingPoints: number | null;
 };
 
 type VelocityPoint = {
@@ -210,20 +203,7 @@ export function ProductMetricsPanel({
         </div>
         {burndown.length > 0 ? (
           <ReactECharts
-            option={{
-              animationDuration: 280,
-              tooltip: { trigger: "axis", ...buildTooltipTheme(chartTheme) },
-              legend: { top: 0, ...buildLegendTheme(chartTheme) },
-              grid: { left: 30, right: 24, bottom: 32, top: 42, containLabel: true },
-              xAxis: { type: "category", data: burndown.map((item) => item.date), ...buildAxisTheme(chartTheme) },
-              yAxis: { type: "value", name: "pts", ...buildAxisTheme(chartTheme) },
-              series: [
-                { name: "Restante", type: "line", smooth: true, data: burndown.map((item) => item.remainingPoints) },
-                { name: "Ideal", type: "line", smooth: true, lineStyle: { type: "dashed" }, data: burndown.map((item) => item.idealRemainingPoints) },
-                { name: "Equipo", type: "line", smooth: true, data: burndown.map((item) => item.teamRemainingPoints) },
-                { name: "Usuario", type: "line", smooth: true, data: burndown.map((item) => item.userRemainingPoints) }
-              ]
-            }}
+            option={buildBurndownOption(burndown, chartTheme)}
             style={{ height: 320 }}
           />
         ) : (
