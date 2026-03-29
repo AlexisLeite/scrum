@@ -201,7 +201,7 @@ function resolveDragPreview(
   columns: KanbanColumn[],
   activeDrag: ActiveDragState,
   overId: string,
-  translatedTop?: number | null,
+  translatedCenter?: number | null,
   overTop?: number | null,
   overHeight?: number | null
 ): DragPreviewState | null {
@@ -211,34 +211,27 @@ function resolveDragPreview(
   }
 
   const targetTasks = columns.find((column) => column.name === targetColumnName)?.tasks ?? [];
+  const visibleTargetTasks = targetTasks.filter((task) => task.id !== activeDrag.taskId);
   let targetIndex: number;
 
   if (overId === targetColumnName) {
-    targetIndex = targetTasks.length;
+    targetIndex = visibleTargetTasks.length;
   } else {
-    const overIndex = targetTasks.findIndex((task) => task.id === overId);
+    const overIndex = visibleTargetTasks.findIndex((task) => task.id === overId);
     if (overIndex < 0) {
-      targetIndex = targetTasks.length;
+      targetIndex = visibleTargetTasks.length;
     } else {
-      const isBelowOverTask = translatedTop != null
+      const isBelowOverTask = translatedCenter != null
         && overTop != null
         && overHeight != null
-        && translatedTop > overTop + overHeight / 2;
+        && translatedCenter > overTop + overHeight / 2;
       targetIndex = overIndex + (isBelowOverTask ? 1 : 0);
     }
   }
 
-  if (targetColumnName === activeDrag.fromColumn && activeDrag.sourceIndex < targetIndex) {
-    targetIndex -= 1;
-  }
-
-  const maxIndex = targetColumnName === activeDrag.fromColumn
-    ? Math.max(targetTasks.length - 1, 0)
-    : targetTasks.length;
-
   return {
     columnName: targetColumnName,
-    index: Math.max(0, Math.min(targetIndex, maxIndex))
+    index: Math.max(0, Math.min(targetIndex, visibleTargetTasks.length))
   };
 }
 
@@ -786,11 +779,15 @@ export function KanbanBoard({
     if (!activeDrag || !event.over) {
       return;
     }
+    const translatedTop = event.active.rect.current.translated?.top ?? null;
+    const translatedCenter = translatedTop != null && activeDrag.overlayHeight != null
+      ? translatedTop + activeDrag.overlayHeight / 2
+      : translatedTop;
     const nextPreview = resolveDragPreview(
       activeDrag.snapshot,
       activeDrag,
       String(event.over.id),
-      event.active.rect.current.translated?.top ?? null,
+      translatedCenter,
       event.over.rect.top,
       event.over.rect.height
     );
@@ -825,7 +822,9 @@ export function KanbanBoard({
       snapshot,
       activeDrag,
       overId,
-      event.active.rect.current.translated?.top ?? null,
+      event.active.rect.current.translated?.top != null && activeDrag.overlayHeight != null
+        ? event.active.rect.current.translated.top + activeDrag.overlayHeight / 2
+        : event.active.rect.current.translated?.top ?? null,
       event.over?.rect.top ?? null,
       event.over?.rect.height ?? null
     );
