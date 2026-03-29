@@ -100,6 +100,21 @@ export class DraftsService {
     return { ok: true };
   }
 
+  async cleanupExpiredDraftsForAllUsers(now = new Date()) {
+    const cutoff = new Date(now.getTime() - DRAFT_RETENTION_MS);
+    const result = await this.prisma.userDraft.deleteMany({
+      where: {
+        updatedAt: {
+          lt: cutoff
+        }
+      }
+    });
+    return {
+      deletedCount: result.count,
+      cutoff
+    };
+  }
+
   private parseEntityType(rawValue: string): DraftEntityType {
     const normalized = rawValue.trim().toUpperCase().replace(/[-\s]/g, "_");
     if (!(normalized in DraftEntityType)) {

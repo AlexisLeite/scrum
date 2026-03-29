@@ -11,6 +11,7 @@ import { McpModule } from "./mcp/mcp.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductsModule } from "./products/products.module";
 import { ReferencesModule } from "./references/references.module";
+import { SchedulerModule } from "./scheduler/scheduler.module";
 import { SprintsModule } from "./sprints/sprints.module";
 import { StoriesModule } from "./stories/stories.module";
 import { TasksModule } from "./tasks/tasks.module";
@@ -32,6 +33,7 @@ import { TeamsModule } from "./teams/teams.module";
     TeamsModule,
     ProductsModule,
     ReferencesModule,
+    SchedulerModule,
     StoriesModule,
     TasksModule,
     SprintsModule,

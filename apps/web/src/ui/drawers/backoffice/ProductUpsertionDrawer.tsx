@@ -17,6 +17,27 @@ type ProductItem = {
   description: string | null;
 };
 type TeamOption = { id: string; name: string; description: string | null };
+type ProductCloseSnapshot = {
+  name: string;
+  key: string;
+  description: string;
+  linkedTeamIds: string[];
+};
+
+function normalizeProductCloseSnapshot(snapshot: ProductCloseSnapshot): ProductCloseSnapshot {
+  return {
+    ...snapshot,
+    linkedTeamIds: [...snapshot.linkedTeamIds].sort()
+  };
+}
+
+function productSnapshotsEqual(left: ProductCloseSnapshot, right: ProductCloseSnapshot) {
+  return left.name === right.name
+    && left.key === right.key
+    && left.description === right.description
+    && left.linkedTeamIds.length === right.linkedTeamIds.length
+    && left.linkedTeamIds.every((teamId, index) => teamId === right.linkedTeamIds[index]);
+}
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
@@ -91,7 +112,7 @@ export function ProductUpsertionForm(props: {
   const [teams, setTeams] = React.useState<TeamOption[]>([]);
   const [linkedTeamIds, setLinkedTeamIds] = React.useState<string[]>([]);
   const [teamsError, setTeamsError] = React.useState("");
-  const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
+  const [closeBaseline, setCloseBaseline] = React.useState<ProductCloseSnapshot>(() => normalizeProductCloseSnapshot({
     name: product?.name ?? "",
     key: product?.key ?? "",
     description: product?.description ?? "",
@@ -114,7 +135,7 @@ export function ProductUpsertionForm(props: {
   const description = typeof form.description === "string" ? form.description : "";
   const formDisabled = saving || isHydratingRemote;
   const currentCloseSnapshot = React.useMemo(
-    () => JSON.stringify({
+    () => normalizeProductCloseSnapshot({
       name,
       key,
       description,
@@ -122,7 +143,7 @@ export function ProductUpsertionForm(props: {
     }),
     [description, key, linkedTeamIds, name]
   );
-  const hasUnsavedChanges = !isHydratingRemote && currentCloseSnapshot !== closeBaseline;
+  const hasUnsavedChanges = !isHydratingRemote && !productSnapshotsEqual(currentCloseSnapshot, closeBaseline);
 
   useDrawerCloseGuard({
     controller: drawerController,
@@ -131,13 +152,13 @@ export function ProductUpsertionForm(props: {
   });
 
   React.useEffect(() => {
-    setCloseBaseline(JSON.stringify({
+    setCloseBaseline(normalizeProductCloseSnapshot({
       name: product?.name ?? "",
       key: product?.key ?? "",
       description: product?.description ?? "",
       linkedTeamIds: [] as string[]
     }));
-  }, [product]);
+  }, [product?.id]);
 
   React.useEffect(() => {
     if (!product) return;
@@ -170,11 +191,9 @@ export function ProductUpsertionForm(props: {
         if (!active) return;
         setTeams(allTeams);
         setLinkedTeamIds(productTeams.map((team) => team.id));
-        setCloseBaseline(JSON.stringify({
-          name: product.name,
-          key: product.key,
-          description: product.description ?? "",
-          linkedTeamIds: productTeams.map((team) => team.id).sort()
+        setCloseBaseline((currentBaseline) => normalizeProductCloseSnapshot({
+          ...currentBaseline,
+          linkedTeamIds: productTeams.map((team) => team.id)
         }));
         setTeamsError("");
       } catch (loadError) {
@@ -195,7 +214,6 @@ export function ProductUpsertionForm(props: {
           name,
           description
         });
-        await controller.loadProducts();
       } else {
         await controller.createProduct({
           name,
@@ -204,6 +222,15 @@ export function ProductUpsertionForm(props: {
         });
       }
 
+      setCloseBaseline((currentBaseline) => normalizeProductCloseSnapshot({
+        ...currentBaseline,
+        name,
+        key,
+        description
+      }));
+      if (isEditing) {
+        await controller.loadProducts();
+      }
       await clearDraft();
       if (onSaved) await onSaved();
       if (closeOnSubmit) {
@@ -229,6 +256,10 @@ export function ProductUpsertionForm(props: {
     setTeamsError("");
     try {
       await apiClient.patch(`/products/${product.id}/teams`, { teamIds: linkedTeamIds });
+      setCloseBaseline((currentBaseline) => normalizeProductCloseSnapshot({
+        ...currentBaseline,
+        linkedTeamIds
+      }));
       if (onSaved) await onSaved();
     } catch (saveError) {
       setTeamsError(errorMessage(saveError));

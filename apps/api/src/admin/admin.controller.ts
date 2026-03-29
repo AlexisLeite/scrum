@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { BackupsService } from "../backups/backups.service";
 import { AuthUser, CurrentUser } from "../common/current-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
 import { Roles } from "../common/roles.decorator";
@@ -13,7 +14,10 @@ import { AdminService } from "./admin.service";
 @Controller("admin")
 @UseGuards(JwtAuthGuard)
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly backupsService: BackupsService
+  ) {}
 
   @Get("users")
   @Roles("platform_admin", "product_owner")
@@ -70,5 +74,17 @@ export class AdminController {
     @Body() body: UpdateUserRoleDto
   ) {
     return this.adminService.updateRole(id, body.role, user.sub);
+  }
+
+  @Get("backups")
+  @Roles("platform_admin")
+  listBackups() {
+    return this.backupsService.listRecent();
+  }
+
+  @Post("backups")
+  @Roles("platform_admin")
+  runBackup(@CurrentUser() user: AuthUser) {
+    return this.backupsService.runManualBackup(user);
   }
 }

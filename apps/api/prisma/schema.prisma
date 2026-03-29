@@ -46,6 +46,29 @@ enum DraftEntityType {
   TASK_MESSAGE
 }
 
+enum ScheduledJobFailurePolicy {
+  RETRY
+  FAIL
+}
+
+enum ScheduledJobState {
+  IDLE
+  RUNNING
+  FAILED
+}
+
+enum ScheduledJobRunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum BackupStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
@@ -64,6 +87,7 @@ model User {
   activityLogsAsActor ActivityLog[] @relation("ActivityActor")
   apiKeys       ApiKey[]
   drafts        UserDraft[]
+  backupsInitiated BackupRecord[]
 }
 
 model ApiKey {
@@ -336,4 +360,62 @@ model UserDraft {
   @@index([userId, updatedAt])
   @@index([entityType, entityId, updatedAt])
   @@index([productId, updatedAt])
+}
+
+model ScheduledJob {
+  id                String                    @id @default(cuid())
+  key               String                    @unique
+  name              String
+  handler           String
+  enabled           Boolean                   @default(true)
+  state             ScheduledJobState         @default(IDLE)
+  intervalMinutes   Int
+  priority          Int                       @default(0)
+  nextRunAt         DateTime?
+  retryDelayMinutes Int                       @default(15)
+  failurePolicy     ScheduledJobFailurePolicy @default(RETRY)
+  lastRunAt         DateTime?
+  lastSuccessAt     DateTime?
+  lastFailureAt     DateTime?
+  lastError         String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  runs              ScheduledJobRun[]
+
+  @@index([enabled, nextRunAt, priority])
+}
+
+model ScheduledJobRun {
+  id            String               @id @default(cuid())
+  jobId         String
+  attempt       Int                  @default(1)
+  scheduledFor  DateTime
+  startedAt     DateTime             @default(now())
+  finishedAt    DateTime?
+  status        ScheduledJobRunStatus @default(RUNNING)
+  logFilePath   String?
+  outputSummary String?
+  error         String?
+  createdAt     DateTime             @default(now())
+  job           ScheduledJob         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+}
+
+model BackupRecord {
+  id                String       @id @default(cuid())
+  initiatedByUserId String
+  status            BackupStatus @default(RUNNING)
+  filename          String
+  storageProvider   String
+  uploadedLocation  String?
+  error             String?
+  startedAt         DateTime     @default(now())
+  finishedAt        DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  initiatedBy       User         @relation(fields: [initiatedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([status, startedAt])
+  @@index([initiatedByUserId, startedAt])
 }

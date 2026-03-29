@@ -519,18 +519,20 @@ export class IndicatorsService {
     const completedAt = logs.find((log) => log.action === "SPRINT_COMPLETED")?.createdAt ?? null;
     const from = sprint.startDate ?? startedAt ?? sprint.createdAt;
     const now = new Date();
+    const plannedEnd = sprint.endDate ?? completedAt ?? sprint.updatedAt;
 
     if (sprint.status === "COMPLETED") {
       return {
         from,
-        to: sprint.endDate ?? completedAt ?? sprint.updatedAt,
-        completedAt: sprint.endDate ?? completedAt ?? sprint.updatedAt
+        to: plannedEnd,
+        completedAt: plannedEnd
       };
     }
 
     return {
       from,
-      to: this.minDate(sprint.endDate ?? now, now),
+      // Keep the sprint range complete so the chart can show the full planned horizon.
+      to: sprint.endDate ?? now,
       completedAt
     };
   }
@@ -546,10 +548,8 @@ export class IndicatorsService {
       this.loadSprintMetricTasks(sprintId),
       this.loadSprintMembershipEvents(sprintId)
     ]);
-    const now = new Date();
-    const plannedEnd = rawTo > now ? now : rawTo;
     const latestMetricDate = this.resolveLatestMetricDate(tasks, membershipEvents);
-    const lastDay = this.startOfDay(this.maxDate(from, plannedEnd, latestMetricDate));
+    const lastDay = this.startOfDay(this.maxDate(from, rawTo, latestMetricDate));
 
     const membershipByTaskId = new Map<string, SprintMembershipEvent[]>();
     for (const event of membershipEvents) {

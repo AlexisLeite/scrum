@@ -26,5 +26,8 @@ export default defineConfig(() => ({
   },
   server: {
     port: 5173
+  },
+  preview: {
+    allowedHosts: ["vmi3181573.contaboserver.net"]
   }
 }));

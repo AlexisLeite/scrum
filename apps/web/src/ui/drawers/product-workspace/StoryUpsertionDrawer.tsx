@@ -144,15 +144,12 @@ export function StoryUpsertionForm(props: {
   const storyPoints = typeof form.storyPoints === "string" ? form.storyPoints : "3";
   const status = form.status === "READY" ? "READY" : "DRAFT";
   const formDisabled = saving || isHydratingRemote;
-  const initialCloseSnapshot = React.useMemo(
-    () => JSON.stringify({
-      title: story?.title ?? "",
-      description: story?.description ?? "",
-      storyPoints: String(story?.storyPoints ?? 3),
-      status: story?.status === "READY" ? "READY" : "DRAFT"
-    }),
-    [story]
-  );
+  const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
+    title: story?.title ?? "",
+    description: story?.description ?? "",
+    storyPoints: String(story?.storyPoints ?? 3),
+    status: story?.status === "READY" ? "READY" : "DRAFT"
+  }));
   const currentCloseSnapshot = React.useMemo(
     () => JSON.stringify({
       title,
@@ -162,7 +159,7 @@ export function StoryUpsertionForm(props: {
     }),
     [description, status, storyPoints, title]
   );
-  const hasUnsavedChanges = !isHydratingRemote && currentCloseSnapshot !== initialCloseSnapshot;
+  const hasUnsavedChanges = !isHydratingRemote && currentCloseSnapshot !== closeBaseline;
 
   useDrawerCloseGuard({
     controller: drawerController,
@@ -246,6 +243,7 @@ export function StoryUpsertionForm(props: {
         await controller.createStory(productId, payload);
       }
 
+      setCloseBaseline(currentCloseSnapshot);
       await clearDraft();
       if (onDone) {
         await onDone();

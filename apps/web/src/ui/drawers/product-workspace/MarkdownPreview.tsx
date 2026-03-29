@@ -31,9 +31,10 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
   const [expanded, setExpanded] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<{ src: string; alt?: string } | null>(null);
   const previewSize = props.previewSize ?? DEFAULT_PREVIEW_SIZE;
+  const resolvedTitleLevel = Math.max(2, Math.min(6, props.titleLevel ?? 2));
   const { markdown, compact = false, emptyLabel = "Sin contenido.", className = "" } = props;
 
-  const rawContent = markdownWithTitle(props.title, markdown?.trim() ?? "", props.titleLevel)?.trim() ?? "";
+  const rawContent = markdownWithTitle(props.title, markdown?.trim() ?? "", resolvedTitleLevel)?.trim() ?? "";
   if (!rawContent) {
     return <p className={`muted markdown-preview-empty ${className}`.trim()}>{emptyLabel}</p>;
   }
@@ -82,6 +83,7 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
                 <button
                   type="button"
                   className="markdown-preview-image-button"
+                  aria-label={`Ver imagen ${imageProps.alt?.trim() || ""}`.trim()}
                   onClick={() => setLightboxImage({ src: imageProps.src!, alt: imageProps.alt })}
                 >
                   <img

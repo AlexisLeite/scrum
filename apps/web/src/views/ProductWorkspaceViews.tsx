@@ -169,6 +169,23 @@ function sortStories(stories: StoryItem[], sortBy: StorySortOption): StoryItem[]
   return sortedStories;
 }
 
+function getStoryTaskCounts(stories: StoryItem[]) {
+  const totals = stories.reduce(
+    (acc, story) => {
+      const tasks = story.tasks ?? [];
+      const closed = tasks.filter((task) => task.status === "Done").length;
+      const total = tasks.length;
+      acc.total += total;
+      acc.closed += closed;
+      acc.pending += Math.max(total - closed, 0);
+      return acc;
+    },
+    { pending: 0, closed: 0, total: 0 }
+  );
+
+  return totals;
+}
+
 export const ProductOverviewView = observer(function ProductOverviewView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
@@ -223,6 +240,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
     () => sortStories(stories.filter((story) => matchesStorySearch(story, normalizedSearch)), sortBy),
     [normalizedSearch, sortBy, stories]
   );
+  const storyTaskCounts = React.useMemo(() => getStoryTaskCounts(stories), [stories]);
 
   if (!productId) return null;
 
@@ -250,6 +268,23 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
             </button>
           ) : null}
         </div>
+        <section className="metrics-grid metrics-summary-grid story-list-kpis">
+          <article className="metric card metric-kpi">
+            <span className="metric-kpi-label">Pendientes</span>
+            <strong>{storyTaskCounts.pending}</strong>
+            <small>Tareas por cerrar</small>
+          </article>
+          <article className="metric card metric-kpi">
+            <span className="metric-kpi-label">Cerradas</span>
+            <strong>{storyTaskCounts.closed}</strong>
+            <small>Tareas en Done</small>
+          </article>
+          <article className="metric card metric-kpi">
+            <span className="metric-kpi-label">Total</span>
+            <strong>{storyTaskCounts.total}</strong>
+            <small>Tareas asociadas a historias</small>
+          </article>
+        </section>
         <div className="story-list-toolbar">
           <label className="story-list-search">
             Buscar historia

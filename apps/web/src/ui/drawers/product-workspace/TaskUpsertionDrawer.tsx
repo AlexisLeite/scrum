@@ -191,6 +191,18 @@ export function TaskUpsertionForm(props: {
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false);
+  const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
+    title: task?.title ?? "",
+    description: task?.description ?? "",
+    storyId: task?.storyId ?? defaultStoryId ?? "",
+    status: task?.status ?? defaultStatus ?? statusOptions[0] ?? "Todo",
+    sprintId: task?.sprintId ?? fixedSprintId ?? "",
+    assigneeId: task?.assigneeId ?? "",
+    effortPoints: task?.effortPoints != null ? String(task.effortPoints) : "",
+    selectedEstimatedPreset: initialEstimatedHours.preset,
+    customEstimatedHours: initialEstimatedHours.custom,
+    actualHours: task?.actualHours != null ? String(task.actualHours) : ""
+  }));
   const draft = useDraftPersistence({
     userId: store.session.user?.id,
     entityType: "TASK",
@@ -293,6 +305,20 @@ export function TaskUpsertionForm(props: {
         await controller.createTask(selectedStoryId, payload);
       }
 
+      const nextActualHours = payload.actualHours !== undefined ? String(payload.actualHours) : actualHours;
+      setCloseBaseline(JSON.stringify({
+        title: title.trim(),
+        description: description.trim(),
+        storyId: selectedStoryId,
+        status,
+        sprintId: canChangeSprint ? (sprintId || "") : fixedSprintId || "",
+        assigneeId,
+        effortPoints,
+        selectedEstimatedPreset,
+        customEstimatedHours,
+        actualHours: nextActualHours
+      }));
+
       if (payload.actualHours !== undefined) {
         setForm((current) => ({ ...current, actualHours: String(payload.actualHours) }));
       }
@@ -315,21 +341,6 @@ export function TaskUpsertionForm(props: {
   };
 
   const showActualHoursField = status === "Done" || task?.actualHours != null;
-  const initialCloseSnapshot = React.useMemo(
-    () => JSON.stringify({
-      title: task?.title ?? "",
-      description: task?.description ?? "",
-      storyId: task?.storyId ?? defaultStoryId ?? "",
-      status: task?.status ?? defaultStatus ?? statusOptions[0] ?? "Todo",
-      sprintId: task?.sprintId ?? fixedSprintId ?? "",
-      assigneeId: task?.assigneeId ?? "",
-      effortPoints: task?.effortPoints != null ? String(task.effortPoints) : "",
-      selectedEstimatedPreset: initialEstimatedHours.preset,
-      customEstimatedHours: initialEstimatedHours.custom,
-      actualHours: task?.actualHours != null ? String(task.actualHours) : ""
-    }),
-    [defaultStatus, defaultStoryId, fixedSprintId, initialEstimatedHours.custom, initialEstimatedHours.preset, statusOptions, task]
-  );
   const currentCloseSnapshot = React.useMemo(
     () => JSON.stringify({
       title,
@@ -345,7 +356,7 @@ export function TaskUpsertionForm(props: {
     }),
     [actualHours, assigneeId, customEstimatedHours, description, effortPoints, selectedEstimatedPreset, sprintId, status, storyId, title]
   );
-  const hasUnsavedChanges = !readOnly && !isHydratingRemote && currentCloseSnapshot !== initialCloseSnapshot;
+  const hasUnsavedChanges = !readOnly && !isHydratingRemote && currentCloseSnapshot !== closeBaseline;
 
   useDrawerCloseGuard({
     controller: drawerController,

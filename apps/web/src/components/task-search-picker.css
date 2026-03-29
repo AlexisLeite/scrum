@@ -25,48 +25,153 @@
   right: 0;
   z-index: 30;
   display: grid;
-  gap: 0.65rem;
-  padding: 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
-  box-shadow: var(--shadow-surface);
+  gap: 0.75rem;
+  padding: 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--accent-c) 18%, var(--border));
+  border-radius: calc(var(--radius-lg) + 4px);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, transparent), color-mix(in srgb, var(--bg-soft) 88%, transparent));
+  box-shadow: 0 24px 56px rgba(8, 15, 31, 0.22);
   backdrop-filter: blur(18px);
+}
+
+.task-search-picker-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.task-search-picker-panel-head strong {
+  display: block;
+  font-size: 0.98rem;
+}
+
+.task-search-picker-panel-head p {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+}
+
+.task-search-picker-panel-head .pill {
+  align-self: center;
+  min-width: 2.8rem;
+  justify-content: center;
 }
 
 .task-search-picker-list {
   display: grid;
-  gap: 0.55rem;
-  max-height: 80vh;
+  gap: 0.75rem;
+  max-height: 76vh;
   overflow: auto;
 }
 
 .task-search-picker-option {
   display: grid;
-  gap: 0.38rem;
+  gap: 0;
   width: 100%;
-  padding: 0.8rem 0.85rem;
+  padding: 0;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
+  border-radius: 18px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--bg-card) 98%, transparent), color-mix(in srgb, var(--bg-soft) 88%, transparent));
   color: var(--text-primary);
   text-align: left;
+  overflow: hidden;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
 }
 
 .task-search-picker-option:hover,
 .task-search-picker-option.is-active {
   border-color: color-mix(in srgb, var(--accent-a) 42%, var(--border));
-  background: color-mix(in srgb, var(--bg-hover) 88%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-a) 12%, transparent);
+  box-shadow: 0 16px 30px rgba(8, 15, 31, 0.14);
+  transform: translateY(-1px);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--bg-card) 98%, transparent), color-mix(in srgb, var(--accent-c) 8%, var(--bg-soft)));
 }
 
 .task-search-picker-option-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 0.7rem;
+  gap: 0.85rem;
+}
+
+.task-search-picker-option-inner {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem;
+}
+
+.task-search-picker-title-block {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.task-search-picker-title-block strong {
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.task-search-picker-title-block .muted {
+  font-size: 0.77rem;
+}
+
+.task-search-picker-preview.markdown-preview {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.task-search-picker-preview.markdown-preview > * {
+  margin-bottom: 0.55rem;
+}
+
+.task-search-picker-preview.markdown-preview p,
+.task-search-picker-preview.markdown-preview li,
+.task-search-picker-preview.markdown-preview code,
+.task-search-picker-preview.markdown-preview a,
+.task-search-picker-preview.markdown-preview blockquote {
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.task-search-picker-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.task-search-picker-actions {
+  justify-content: flex-end;
 }
 
 .task-search-picker-option .status {
   justify-self: flex-start;
+}
+
+.task-search-picker-option .pill,
+.task-search-picker-option .status {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .task-search-picker-panel {
+    padding: 0.8rem;
+  }
+
+  .task-search-picker-option-inner {
+    padding: 0.85rem 0.9rem;
+  }
+
+  .task-search-picker-option-top {
+    flex-direction: column;
+  }
+
+  .task-search-picker-actions {
+    justify-content: stretch;
+  }
+
+  .task-search-picker-actions .btn {
+    width: 100%;
+  }
 }

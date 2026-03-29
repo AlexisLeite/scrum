@@ -75,6 +75,8 @@ const CODE_BLOCK_LANGUAGES: Record<string, string> = {
   yaml: "YAML"
 };
 
+const ALLOWED_HEADING_LEVELS = [2, 3, 4, 5, 6] as const;
+
 export function RichDescriptionField(props: RichDescriptionFieldProps) {
   const { label, value, onChange, rows = 6, disabled = false, productId } = props;
   const minHeight = Math.max(rows, 4) * 24;
@@ -197,19 +199,11 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
       formData.append("file", file, file.name || `image-${upload.id}.png`);
       const response = await apiClient.postForm<{ url: string }>("/media/images", formData);
       const currentMarkdown = editorRef.current.getMarkdown();
-      const nextMarkdown = replaceUploadingImageMarkdown(
-        currentMarkdown,
-        upload,
-        buildPersistedImageMarkdown(upload.alt, response.url)
-      );
+      const nextMarkdown = replaceUploadingImageMarkdown(currentMarkdown, upload, buildPersistedImageMarkdown(upload.alt, response.url));
       updateEditorMarkdown(nextMarkdown);
     } catch (error) {
       const currentMarkdown = editorRef.current.getMarkdown();
-      const nextMarkdown = replaceUploadingImageMarkdown(
-        currentMarkdown,
-        upload,
-        `> No se pudo subir la imagen \`${escapeInlineCode(upload.alt)}\`. Vuelve a pegarla para reintentar.`
-      );
+      const nextMarkdown = replaceUploadingImageMarkdown(currentMarkdown, upload, `> No se pudo subir la imagen \`${escapeInlineCode(upload.alt)}\`. Vuelve a pegarla para reintentar.`);
       updateEditorMarkdown(nextMarkdown);
       setUploadError(error instanceof Error ? error.message : "No se pudo subir la imagen pegada.");
     } finally {
@@ -432,7 +426,7 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
         contentEditableClassName="rich-description-content"
         readOnly={disabled}
         plugins={[
-          headingsPlugin(),
+          headingsPlugin({ allowedHeadingLevels: ALLOWED_HEADING_LEVELS }),
           quotePlugin(),
           listsPlugin(),
           linkPlugin(),
@@ -528,7 +522,7 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
 }
 
 function buildUploadingImageMarkdown(alt: string, previewUrl: string) {
-  return `![${escapeMarkdownLabel(alt)}](${previewUrl})\n\n_Subiendo imagen al servidor..._`;
+  return `![${escapeMarkdownLabel(alt)}](${previewUrl})`;
 }
 
 function buildPersistedImageMarkdown(alt: string, url: string) {

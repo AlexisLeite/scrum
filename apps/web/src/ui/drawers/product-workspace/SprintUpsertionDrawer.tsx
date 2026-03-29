@@ -7,6 +7,7 @@ import { TaskSearchPicker } from "../../../components/TaskSearchPicker";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { ActivityTimeline } from "./ActivityTimeline";
+import { MarkdownPreview } from "./MarkdownPreview";
 import { RichDescriptionField } from "./RichDescriptionField";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import "./sprint-upsertion-form.css";
@@ -118,17 +119,14 @@ export function SprintUpsertionForm(props: {
   const [sprintTasks, setSprintTasks] = React.useState<PendingTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(false);
   const [sprintTaskQuery, setSprintTaskQuery] = React.useState("");
+  const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
+    name: sprint?.name ?? "",
+    goal: sprint?.goal ?? "",
+    teamId: sprint?.teamId ?? "",
+    startDate: asDateInput(sprint?.startDate),
+    endDate: asDateInput(sprint?.endDate)
+  }));
   const canManageTasks = Boolean(sprint && (sprint.status === "PLANNED" || sprint.status === "ACTIVE"));
-  const initialCloseSnapshot = React.useMemo(
-    () => JSON.stringify({
-      name: sprint?.name ?? "",
-      goal: sprint?.goal ?? "",
-      teamId: sprint?.teamId ?? "",
-      startDate: asDateInput(sprint?.startDate),
-      endDate: asDateInput(sprint?.endDate)
-    }),
-    [sprint]
-  );
   const currentCloseSnapshot = React.useMemo(
     () => JSON.stringify({
       name,
@@ -139,7 +137,7 @@ export function SprintUpsertionForm(props: {
     }),
     [endDate, goal, name, startDate, teamId]
   );
-  const hasUnsavedChanges = !saving && currentCloseSnapshot !== initialCloseSnapshot;
+  const hasUnsavedChanges = !saving && currentCloseSnapshot !== closeBaseline;
 
   useDrawerCloseGuard({
     controller: drawerController,
@@ -176,16 +174,35 @@ export function SprintUpsertionForm(props: {
     void loadTaskPools();
   }, [loadTaskPools, sprint]);
 
-  const submit = async () => {
+  const isDateRangeInvalid = Boolean(startDate && endDate && startDate > endDate);
+
+  const submit = async (event?: React.FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
     setError("");
+    if (!name.trim()) {
+      setError("El sprint necesita un nombre.");
+      return;
+    }
+    if (!teamId) {
+      setError("Debes seleccionar un equipo.");
+      return;
+    }
+    if (!startDate || !endDate) {
+      setError("Las fechas de inicio y fin son obligatorias.");
+      return;
+    }
+    if (isDateRangeInvalid) {
+      setError("La fecha de fin debe ser igual o posterior a la fecha de inicio.");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
         name: name.trim(),
         goal: goal.trim(),
         teamId,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined
+        startDate,
+        endDate
       };
 
       if (sprint) {
@@ -194,6 +211,7 @@ export function SprintUpsertionForm(props: {
         await controller.createSprint(productId, payload);
       }
 
+      setCloseBaseline(currentCloseSnapshot);
       if (onDone) {
         await onDone();
       }
@@ -275,15 +293,15 @@ export function SprintUpsertionForm(props: {
   );
 
   return (
-    <div className="form-grid">
+    <form className="form-grid" onSubmit={(event) => void submit(event)}>
       <div className="form-grid two-columns">
         <label>
           Nombre
-          <input value={name} onChange={(event) => setName(event.target.value)} />
+          <input value={name} onChange={(event) => setName(event.target.value)} required />
         </label>
         <label>
           Equipo
-          <select value={teamId} onChange={(event) => setTeamId(event.target.value)}>
+          <select value={teamId} onChange={(event) => setTeamId(event.target.value)} required>
             <option value="">Seleccionar equipo</option>
             {teams.map((team) => (
               <option key={team.id} value={team.id}>
@@ -299,16 +317,16 @@ export function SprintUpsertionForm(props: {
       <div className="form-grid two-columns">
         <label>
           Fecha inicio
-          <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
         </label>
         <label>
           Fecha fin
-          <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+          <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} required />
         </label>
       </div>
 
       <div className="row-actions compact">
-        <button type="button" className="btn btn-primary" onClick={() => void submit()} disabled={saving}>
+        <button type="submit" className="btn btn-primary" disabled={saving}>
           {sprint ? "Guardar sprint" : "Crear sprint"}
         </button>
         {sprint && definitionHref ? (
@@ -362,29 +380,48 @@ export function SprintUpsertionForm(props: {
               loading={tasksLoading}
               placeholder="Busca por tarea, historia o responsable. Enter agrega la seleccionada"
               onPick={addTaskToSprint}
+              onOpenTask={(taskId) => {
+                const task = pendingTasks.find((entry) => entry.id === taskId);
+                if (task) {
+                  openTaskDetail(task);
+                }
+              }}
             />
             {pendingTasks.length > 0 ? (
               <div className="sprint-task-suggestions">
-                <p className="muted">Sugeridas</p>
+                <div className="sprint-task-suggestions-head">
+                  <div>
+                    <p className="sprint-task-suggestions-kicker">Sugeridas para este sprint</p>
+                    <p className="muted">Las primeras tarjetas priorizan tareas recientes y muestran contexto para decidir rapido.</p>
+                  </div>
+                  <span className="pill">{pendingTasks.length} candidatas</span>
+                </div>
                 <div className="sprint-task-suggestion-list">
                   {pendingTasks.slice(0, 5).map((task) => (
-                    <article key={task.id} className="sprint-task-suggestion">
-                      <strong>{task.title}</strong>
-                      {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
-                      <span>{task.story?.title ?? "Sin historia"}</span>
+                    <article key={task.id} className="sprint-task-suggestion card">
+                      <div className="sprint-task-suggestion-top">
+                        <div className="sprint-task-suggestion-heading">
+                          <strong>{task.title}</strong>
+                          <span className={`status status-${task.status.toLowerCase().replace(/\s+/g, "-")}`}>{task.status}</span>
+                        </div>
+                        <div className="sprint-task-suggestion-meta">
+                          <span className="pill">Historia: {task.story?.title ?? "Sin historia"}</span>
+                          {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
+                          <span className="pill">Creada {new Date(task.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      <MarkdownPreview
+                        markdown={task.description}
+                        compact
+                        previewSize={120}
+                        emptyLabel="Sin descripcion"
+                        className="sprint-task-suggestion-preview"
+                      />
                       <div className="row-actions compact sprint-task-suggestion-actions">
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={() => openTaskDetail(task)}
-                        >
+                        <button type="button" className="btn btn-secondary" onClick={() => openTaskDetail(task)}>
                           Ver detalle
                         </button>
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          onClick={() => void addTaskToSprint(task.id)}
-                        >
+                        <button type="button" className="btn btn-primary" onClick={() => void addTaskToSprint(task.id)}>
                           Agregar
                         </button>
                       </div>
@@ -457,6 +494,6 @@ export function SprintUpsertionForm(props: {
 
       {sprint ? <ActivityTimeline controller={controller} entityType="SPRINT" entityId={sprint.id} /> : null}
       {error ? <p className="error-text">{error}</p> : null}
-    </div>
+    </form>
   );
 }

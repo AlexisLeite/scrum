@@ -2,23 +2,24 @@
   position: fixed;
   inset: 0;
   z-index: 1400;
-  display: grid;
-  place-items: center;
-  padding: 24px;
+  display: block;
   background: rgba(15, 23, 42, 0.78);
   backdrop-filter: blur(10px);
 }
 
 .image-lightbox-shell {
   display: grid;
-  gap: 12px;
-  width: min(1100px, 100%);
-  max-height: min(92vh, 920px);
-  padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--panel) 92%, #f4efe4);
-  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+  grid-template-rows: auto 1fr;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 36%),
+    linear-gradient(180deg, rgba(8, 15, 28, 0.96), rgba(12, 18, 32, 0.98));
+  box-shadow: none;
+  color: var(--text-main);
 }
 
 .image-lightbox-toolbar {
@@ -26,6 +27,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.72));
+  backdrop-filter: blur(18px);
+  z-index: 2;
 }
 
 .image-lightbox-meta {
@@ -34,20 +40,21 @@
 }
 
 .image-lightbox-meta span {
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text-main) 72%, transparent);
   font-size: 0.9rem;
 }
 
 .image-lightbox-stage {
   position: relative;
   overflow: hidden;
-  min-height: 320px;
-  max-height: calc(92vh - 96px);
-  border-radius: 14px;
+  min-height: 0;
+  padding: clamp(12px, 3vw, 40px);
   background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.34), transparent 46%),
-    linear-gradient(160deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.96));
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.08), transparent 42%),
+    linear-gradient(160deg, rgba(9, 14, 24, 0.78), rgba(15, 23, 42, 0.94));
   cursor: zoom-in;
+  display: grid;
+  place-items: center;
 }
 
 .image-lightbox-stage.is-draggable {
@@ -61,14 +68,24 @@
 .image-lightbox-image {
   position: absolute;
   inset: 0;
-  max-width: 100%;
-  max-height: 100%;
+  max-width: calc(100vw - 96px);
+  max-height: calc(100vh - 120px);
   width: auto;
   height: auto;
   margin: auto;
   transform-origin: center center;
   user-select: none;
   pointer-events: auto;
+  touch-action: none;
   will-change: transform;
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.3);
+}
+
+.image-lightbox-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.image-lightbox-shell:focus {
+  outline: none;
 }

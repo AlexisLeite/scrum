@@ -126,7 +126,8 @@ function ConfirmModalBody(props: {
         </button>
         <button
           type="button"
-          className="btn btn-secondary"
+          className="btn btn-secondary modal-confirm-dismiss"
+          data-modal-autofocus
           disabled={submitting}
           onClick={() => {
             void requestClose();

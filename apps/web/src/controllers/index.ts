@@ -83,6 +83,14 @@ export class AdminController {
     const user = await apiClient.patch<any>(`/admin/users/${userId}/role`, { role });
     this.store.users.upsert(user);
   }
+
+  async listBackups() {
+    return apiClient.get<any[]>("/admin/backups");
+  }
+
+  async runBackup() {
+    return apiClient.post<any>("/admin/backups");
+  }
 }
 
 export class TeamController {
@@ -91,6 +99,7 @@ export class TeamController {
   async loadTeams() {
     const teams = await this.store.wrap(this.store.teams, () => apiClient.get<any[]>("/teams"));
     this.store.teams.setItems(teams);
+    return teams;
   }
 
   async createTeam(payload: { name: string; description?: string }) {
@@ -168,6 +177,7 @@ export class ProductController {
       apiClient.get<any[]>(`/products/${productId}/stories`)
     );
     this.store.stories.setItems(stories);
+    return stories;
   }
 
   async createStory(productId: string, payload: { title: string; description?: string; storyPoints: number; status: string }) {
@@ -271,6 +281,7 @@ export class ProductController {
       apiClient.get<any[]>(`/products/${productId}/sprints`)
     );
     this.store.sprints.setItems(sprints);
+    return sprints;
   }
 
   async createSprint(productId: string, payload: any) {

@@ -1,6 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import {
+  pointerWithin,
   DndContext,
   DragOverlay,
   PointerSensor,
@@ -14,7 +15,6 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MarkdownPreview } from "../drawers/product-workspace/MarkdownPreview";
 import { TaskCompletionDialog } from "../drawers/product-workspace/TaskCompletionDialog";
 import "./kanban.css";
 import { KanbanAssignee, KanbanColumn, KanbanTask } from "./types";
@@ -28,6 +28,12 @@ type ActiveDragState = {
   task: KanbanTask;
   overlayWidth: number | null;
   overlayHeight: number | null;
+  sourceIndex: number;
+};
+
+type DragPreviewState = {
+  columnName: string;
+  index: number;
 };
 
 type CompletionRequest =
@@ -181,6 +187,61 @@ function moveTaskInColumns(
   return next;
 }
 
+function assigneeOptionsEqual(left: KanbanAssignee[], right: KanbanAssignee[]) {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((entry, index) => entry.id === right[index]?.id && entry.name === right[index]?.name);
+}
+
+function resolveDragPreview(
+  columns: KanbanColumn[],
+  activeDrag: ActiveDragState,
+  overId: string,
+  translatedTop?: number | null,
+  overTop?: number | null,
+  overHeight?: number | null
+): DragPreviewState | null {
+  const targetColumnName = findContainer(columns, overId) ?? activeDrag.fromColumn;
+  if (!targetColumnName) {
+    return null;
+  }
+
+  const targetTasks = columns.find((column) => column.name === targetColumnName)?.tasks ?? [];
+  let targetIndex: number;
+
+  if (overId === targetColumnName) {
+    targetIndex = targetTasks.length;
+  } else {
+    const overIndex = targetTasks.findIndex((task) => task.id === overId);
+    if (overIndex < 0) {
+      targetIndex = targetTasks.length;
+    } else {
+      const isBelowOverTask = translatedTop != null
+        && overTop != null
+        && overHeight != null
+        && translatedTop > overTop + overHeight / 2;
+      targetIndex = overIndex + (isBelowOverTask ? 1 : 0);
+    }
+  }
+
+  if (targetColumnName === activeDrag.fromColumn && activeDrag.sourceIndex < targetIndex) {
+    targetIndex -= 1;
+  }
+
+  const maxIndex = targetColumnName === activeDrag.fromColumn
+    ? Math.max(targetTasks.length - 1, 0)
+    : targetTasks.length;
+
+  return {
+    columnName: targetColumnName,
+    index: Math.max(0, Math.min(targetIndex, maxIndex))
+  };
+}
+
 const TaskCardContent = React.memo(function TaskCardContent(props: {
   task: KanbanTask;
   assignees: KanbanAssignee[];
@@ -273,13 +334,14 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
       </div>
 
       <div className={`kb-description-shell ${descriptionExpanded ? "is-expanded" : ""}`} title={description}>
-        <MarkdownPreview
-          markdown={task.description}
-          compact
-          className={`kb-description-markdown ${descriptionExpanded ? "is-expanded" : ""}`}
-          emptyLabel="Sin descripcion"
-          previewSize={255}
-        />
+        <p className={`kb-description ${descriptionExpanded ? "is-expanded" : ""}`}>
+          {descriptionExpanded || !truncatedDescription.truncated ? description : truncatedDescription.value}
+        </p>
+        {truncatedDescription.truncated ? (
+          <button type="button" className="kb-more-btn" onClick={() => onExpandDescription?.(task.id)}>
+            {descriptionExpanded ? "Ver menos" : "Ver mas"}
+          </button>
+        ) : null}
       </div>
 
       <div className="kb-meta-row">
@@ -366,7 +428,22 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
       />
     </article>
   );
-});
+}, (prev, next) => (
+  prev.task === next.task
+  && assigneeOptionsEqual(prev.assignees, next.assignees)
+  && prev.statusOptions === next.statusOptions
+  && prev.pending === next.pending
+  && prev.dragDisabled === next.dragDisabled
+  && prev.allowAssigneeChange === next.allowAssigneeChange
+  && prev.allowEditTask === next.allowEditTask
+  && prev.allowStatusChange === next.allowStatusChange
+  && prev.editActionLabel === next.editActionLabel
+  && prev.descriptionExpanded === next.descriptionExpanded
+  && prev.onExpandDescription === next.onExpandDescription
+  && prev.onAssigneeChange === next.onAssigneeChange
+  && prev.onStatusChange === next.onStatusChange
+  && prev.onEditTask === next.onEditTask
+));
 
 function GhostTaskCard(props: { task: KanbanTask; height?: number | null }) {
   const { task, height } = props;
@@ -414,6 +491,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
   expandedTaskIds: Set<string>;
   onExpandDescription: (taskId: string) => void;
   activeDrag: ActiveDragState | null;
+  dragPreview: DragPreviewState | null;
   onCreateTask: (defaultStatus: string) => void;
   onEditTask: (task: KanbanTask) => void;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
@@ -437,25 +515,28 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
     expandedTaskIds,
     onExpandDescription,
     activeDrag,
+    dragPreview,
     onCreateTask,
     onEditTask,
     onAssigneeChange,
     onStatusChange
   } = props;
   const { setNodeRef, isOver } = useDroppable({ id: column.name, disabled: !canReorder });
-  const showGhost = Boolean(
-    activeDrag
-    && column.name === activeDrag.fromColumn
-    && !column.tasks.some((task) => task.id === activeDrag.taskId)
-  );
-  const ghostIndex = activeDrag ? findTaskIndex(activeDrag.snapshot, activeDrag.fromColumn, activeDrag.taskId) : -1;
-  const renderItems: { kind: 'task' | 'ghost', task: KanbanTask }[] = column.tasks.map((task) => ({ kind: "task" as const, task }));
+  const showGhost = Boolean(activeDrag && dragPreview && column.name === dragPreview.columnName);
+  const ghostIndex = showGhost && dragPreview ? dragPreview.index : -1;
+  const renderItems: { kind: "task" | "ghost"; task: KanbanTask }[] = column.tasks
+    .filter((task) => task.id !== activeDrag?.taskId)
+    .map((task) => ({ kind: "task" as const, task }));
   if (showGhost && activeDrag && ghostIndex >= 0) {
     renderItems.splice(Math.min(ghostIndex, renderItems.length), 0, { kind: "ghost", task: activeDrag.task });
   }
+  const sortableTaskIds = React.useMemo(
+    () => renderItems.filter((entry) => entry.kind === "task").map((entry) => entry.task.id),
+    [renderItems]
+  );
 
   return (
-    <section ref={setNodeRef} className={`kb-column ${isOver ? "is-drop-column" : ""}`}>
+    <section ref={setNodeRef} className={`kb-column ${isOver || showGhost ? "is-drop-column" : ""}`}>
       <header className="kb-column-head">
         <h4>{column.name}</h4>
         <div className="row-actions compact">
@@ -474,8 +555,8 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
         </div>
       </header>
 
-      <SortableContext items={column.tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-        <div className="kb-task-list">
+      <SortableContext items={sortableTaskIds} strategy={verticalListSortingStrategy}>
+        <div className={`kb-task-list ${showGhost ? "is-previewing-drop" : ""}`}>
           {renderItems.map((entry, index) => {
             if (entry.kind === "ghost") {
               return (
@@ -509,7 +590,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
               />
             );
           })}
-          {column.tasks.length === 0 ? <p className="muted">Sin tareas en esta columna.</p> : null}
+          {renderItems.length === 0 ? <p className="muted">Sin tareas en esta columna.</p> : null}
         </div>
       </SortableContext>
     </section>
@@ -524,26 +605,22 @@ function KanbanDragOverlay(props: { task: KanbanTask | null; width?: number | nu
 
   return (
     <article className="kb-card kb-card-overlay" style={width ? { width } : undefined}>
-      <div className="kb-title-row">
-        <div className="kb-title-main">
-          <span className="kb-drag-handle is-static">::</span>
-          <h5>{task.title}</h5>
-        </div>
-      </div>
-      <MarkdownPreview
-        markdown={task.description}
-        compact
-        className="kb-description-markdown"
-        emptyLabel="Sin descripcion"
-        previewSize={255}
+      <TaskCardContent
+        task={task}
+        assignees={[]}
+        statusOptions={[task.status]}
+        pending={false}
+        dragDisabled
+        allowAssigneeChange={false}
+        allowEditTask={false}
+        allowStatusChange={false}
+        editActionLabel=""
+        descriptionExpanded={false}
+        dragHandleProps={undefined}
+        onAssigneeChange={async () => undefined}
+        onStatusChange={async () => undefined}
+        onEditTask={() => undefined}
       />
-      <div className="kb-meta-row">
-        <span className="kb-story" title={task.story?.title ?? "Sin historia"}>
-          {task.story?.title ?? "Sin historia"}
-        </span>
-        <span className="kb-date muted">{formatUpdatedAt(task.updatedAt)}</span>
-        <span className="pill">SP {task.effortPoints ?? "-"}</span>
-      </div>
     </article>
   );
 }
@@ -576,6 +653,7 @@ export function KanbanBoard({
   const [assigneeFilter, setAssigneeFilter] = React.useState<AssigneeFilter>("all");
   const [localColumns, setLocalColumns] = React.useState<KanbanColumn[]>(() => copyColumns(columns));
   const [activeDrag, setActiveDrag] = React.useState<ActiveDragState | null>(null);
+  const [dragPreview, setDragPreview] = React.useState<DragPreviewState | null>(null);
   const [completionRequest, setCompletionRequest] = React.useState<CompletionRequest | null>(null);
   const [expandedTaskIds, setExpandedTaskIds] = React.useState<Set<string>>(() => new Set());
 
@@ -598,6 +676,9 @@ export function KanbanBoard({
 
   const filteredColumns = React.useMemo(() => {
     const q = normalizeText(search);
+    if (!q && assigneeFilter === "all") {
+      return localColumns;
+    }
     return localColumns.map((column) => ({
       ...column,
       tasks: column.tasks.filter((task) => {
@@ -621,6 +702,10 @@ export function KanbanBoard({
     [localColumns]
   );
   const canReorder = !readOnly && allowStatusChange;
+  const collisionDetection = React.useCallback<typeof closestCorners>((args) => {
+    const pointerMatches = pointerWithin(args);
+    return pointerMatches.length > 0 ? pointerMatches : closestCorners(args);
+  }, []);
   const expandDescription = React.useCallback((taskId: string) => {
     setExpandedTaskIds((current: Set<string>) => {
       if (current.has(taskId)) {
@@ -670,6 +755,7 @@ export function KanbanBoard({
 
   const clearDrag = () => {
     setActiveDrag(null);
+    setDragPreview(null);
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -679,21 +765,44 @@ export function KanbanBoard({
     const taskId = String(event.active.id);
     const fromColumn = findTaskColumn(localColumns, taskId);
     const task = findTask(localColumns, taskId);
-    if (!fromColumn || !task || !canMoveTask(task)) {
+    const sourceIndex = fromColumn ? findTaskIndex(localColumns, fromColumn, taskId) : -1;
+    if (!fromColumn || !task || sourceIndex < 0 || !canMoveTask(task)) {
       return;
     }
-    setActiveDrag({
+    const nextActiveDrag = {
       taskId,
       fromColumn,
       snapshot: copyColumns(localColumns),
       task: { ...task },
       overlayWidth: event.active.rect.current.initial?.width ?? null,
-      overlayHeight: event.active.rect.current.initial?.height ?? null
-    });
+      overlayHeight: event.active.rect.current.initial?.height ?? null,
+      sourceIndex
+    } satisfies ActiveDragState;
+    setActiveDrag(nextActiveDrag);
+    setDragPreview({ columnName: fromColumn, index: sourceIndex });
   };
 
-  const handleDragOver = (_event: DragOverEvent) => {
-    // Keep board state stable while dragging to avoid re-render storms on large boards.
+  const handleDragOver = (event: DragOverEvent) => {
+    if (!activeDrag || !event.over) {
+      return;
+    }
+    const nextPreview = resolveDragPreview(
+      activeDrag.snapshot,
+      activeDrag,
+      String(event.over.id),
+      event.active.rect.current.translated?.top ?? null,
+      event.over.rect.top,
+      event.over.rect.height
+    );
+    setDragPreview((current) => {
+      if (
+        current?.columnName === nextPreview?.columnName
+        && current?.index === nextPreview?.index
+      ) {
+        return current;
+      }
+      return nextPreview;
+    });
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -712,7 +821,15 @@ export function KanbanBoard({
     }
 
     const sourceColumn = activeDrag.fromColumn;
-    const targetColumn = findContainer(snapshot, overId) ?? sourceColumn;
+    const preview = dragPreview ?? resolveDragPreview(
+      snapshot,
+      activeDrag,
+      overId,
+      event.active.rect.current.translated?.top ?? null,
+      event.over?.rect.top ?? null,
+      event.over?.rect.height ?? null
+    );
+    const targetColumn = preview?.columnName ?? sourceColumn;
     if (!sourceColumn || !targetColumn) {
       setLocalColumns(snapshot);
       clearDrag();
@@ -720,7 +837,6 @@ export function KanbanBoard({
     }
 
     const sourceTasks = snapshot.find((column) => column.name === sourceColumn)?.tasks ?? [];
-    const targetTasks = snapshot.find((column) => column.name === targetColumn)?.tasks ?? [];
     const sourceIndex = sourceTasks.findIndex((task) => task.id === taskId);
 
     if (sourceIndex < 0) {
@@ -729,17 +845,7 @@ export function KanbanBoard({
       return;
     }
 
-    let targetIndex =
-      overId === targetColumn
-        ? targetTasks.length
-        : targetTasks.findIndex((task) => task.id === overId);
-    if (targetIndex < 0) {
-      targetIndex = targetTasks.length;
-    }
-
-    if (sourceColumn === targetColumn && overId !== targetColumn && targetIndex > sourceIndex) {
-      targetIndex -= 1;
-    }
+    const targetIndex = preview?.index ?? sourceIndex;
 
     const nextColumns = moveTaskInColumns(snapshot, taskId, sourceColumn, targetColumn, targetIndex);
 
@@ -799,7 +905,7 @@ export function KanbanBoard({
 
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetection}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragEnd={(event) => void handleDragEnd(event)}
@@ -831,6 +937,7 @@ export function KanbanBoard({
                 expandedTaskIds={expandedTaskIds}
                 onExpandDescription={expandDescription}
                 activeDrag={activeDrag}
+                dragPreview={dragPreview}
                 onCreateTask={onCreateTask}
                 onEditTask={onEditTask}
                 onAssigneeChange={onAssigneeChange}

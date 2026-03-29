@@ -21,6 +21,25 @@ type ActivityItem = {
   detail?: { summary?: string; details?: string };
 };
 type ActivityListResult = { items: ActivityItem[]; page: number; pageSize: number; total: number };
+type TeamCloseSnapshot = {
+  name: string;
+  description: string;
+  linkedProductIds: string[];
+};
+
+function normalizeTeamCloseSnapshot(snapshot: TeamCloseSnapshot): TeamCloseSnapshot {
+  return {
+    ...snapshot,
+    linkedProductIds: [...snapshot.linkedProductIds].sort()
+  };
+}
+
+function teamSnapshotsEqual(left: TeamCloseSnapshot, right: TeamCloseSnapshot) {
+  return left.name === right.name
+    && left.description === right.description
+    && left.linkedProductIds.length === right.linkedProductIds.length
+    && left.linkedProductIds.every((productId, index) => productId === right.linkedProductIds[index]);
+}
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
@@ -89,7 +108,7 @@ export function TeamUpsertionForm(props: {
   const [products, setProducts] = React.useState<ProductOption[]>([]);
   const [linkedProductIds, setLinkedProductIds] = React.useState<string[]>([]);
   const [productsError, setProductsError] = React.useState("");
-  const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
+  const [closeBaseline, setCloseBaseline] = React.useState<TeamCloseSnapshot>(() => normalizeTeamCloseSnapshot({
     name: team?.name ?? "",
     description: team?.description ?? "",
     linkedProductIds: [] as string[]
@@ -114,6 +133,11 @@ export function TeamUpsertionForm(props: {
       } else {
         await controller.createTeam({ name, description });
       }
+      setCloseBaseline((currentBaseline) => normalizeTeamCloseSnapshot({
+        ...currentBaseline,
+        name,
+        description
+      }));
       await refresh();
       if (closeOnSubmit) {
         close();
@@ -163,12 +187,12 @@ export function TeamUpsertionForm(props: {
   }, [readOnly, refresh, team]);
 
   React.useEffect(() => {
-    setCloseBaseline(JSON.stringify({
+    setCloseBaseline(normalizeTeamCloseSnapshot({
       name: team?.name ?? "",
       description: team?.description ?? "",
       linkedProductIds: [] as string[]
     }));
-  }, [team]);
+  }, [team?.id]);
 
   React.useEffect(() => {
     if (!team) return;
@@ -182,10 +206,9 @@ export function TeamUpsertionForm(props: {
         if (!active) return;
         setProducts(allProducts);
         setLinkedProductIds(teamProducts.map((product) => product.id));
-        setCloseBaseline(JSON.stringify({
-          name: team.name,
-          description: team.description ?? "",
-          linkedProductIds: teamProducts.map((product) => product.id).sort()
+        setCloseBaseline((currentBaseline) => normalizeTeamCloseSnapshot({
+          ...currentBaseline,
+          linkedProductIds: teamProducts.map((product) => product.id)
         }));
         setProductsError("");
       } catch (loadError) {
@@ -197,14 +220,14 @@ export function TeamUpsertionForm(props: {
   }, [team]);
 
   const currentCloseSnapshot = React.useMemo(
-    () => JSON.stringify({
+    () => normalizeTeamCloseSnapshot({
       name,
       description,
       linkedProductIds: [...linkedProductIds].sort()
     }),
     [description, linkedProductIds, name]
   );
-  const hasUnsavedChanges = !saving && currentCloseSnapshot !== closeBaseline;
+  const hasUnsavedChanges = !saving && !teamSnapshotsEqual(currentCloseSnapshot, closeBaseline);
 
   useDrawerCloseGuard({
     controller: drawerController,
@@ -244,6 +267,10 @@ export function TeamUpsertionForm(props: {
     setProductsError("");
     try {
       await apiClient.patch(`/teams/${team.id}/products`, { productIds: linkedProductIds });
+      setCloseBaseline((currentBaseline) => normalizeTeamCloseSnapshot({
+        ...currentBaseline,
+        linkedProductIds
+      }));
       await refresh();
     } catch (saveError) {
       setProductsError(errorMessage(saveError));
