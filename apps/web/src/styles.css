@@ -918,95 +918,6 @@ a.btn-secondary,
   margin-top: 0.1rem;
 }
 
-.admin-users-layout {
-  display: grid;
-  grid-template-columns: minmax(300px, 0.88fr) minmax(0, 1.12fr);
-  gap: 1rem;
-  align-items: start;
-}
-
-.admin-users-sidebar,
-.admin-users-detail {
-  min-width: 0;
-}
-
-.admin-user-list {
-  display: grid;
-  gap: 0.65rem;
-}
-
-.admin-user-list-item {
-  appearance: none;
-  display: block;
-  width: 100%;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--border-soft) 92%, transparent);
-  padding: 0.92rem 1rem;
-  background: color-mix(in srgb, var(--bg-card) 92%, var(--bg-soft));
-  box-shadow: none;
-}
-
-.admin-user-list-item:hover {
-  border-color: color-mix(in srgb, var(--accent-c) 36%, var(--border-soft));
-  background: color-mix(in srgb, var(--bg-hover) 36%, var(--bg-card));
-  transform: translateY(-1px);
-}
-
-.admin-user-list-item.is-selected {
-  border-color: color-mix(in srgb, var(--accent-c) 50%, var(--border));
-  background: color-mix(in srgb, var(--bg-card) 96%, var(--bg-soft));
-  box-shadow: 0 12px 26px rgba(9, 28, 52, 0.1);
-}
-
-.admin-user-list-item-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.65rem;
-}
-
-.admin-user-list-item-meta,
-.admin-user-summary-pills,
-.admin-user-breadcrumbs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.admin-user-summary-pills {
-  justify-content: flex-end;
-  align-items: center;
-}
-
-.admin-user-breadcrumbs {
-  align-items: center;
-  color: var(--text-muted);
-  font-size: 0.94rem;
-}
-
-.admin-user-tabs {
-  margin-top: 0;
-}
-
-.admin-user-section-card {
-  gap: 0.9rem;
-}
-
-.admin-user-access-grid,
-.admin-user-create-grid {
-  gap: 0.9rem;
-}
-
-.admin-user-window-select {
-  display: grid;
-  gap: 0.35rem;
-  min-width: 160px;
-}
-
 .tab {
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
@@ -2578,10 +2489,6 @@ th {
 
   .focused-topbar {
     top: 0.35rem;
-  }
-
-  .admin-users-layout {
-    grid-template-columns: 1fr;
   }
 }
 
