@@ -247,7 +247,7 @@ export function TaskUpsertionForm(props: {
   const formDisabled = readOnly || saving || isHydratingRemote;
 
   const shouldSelectStory = !defaultStoryId || Boolean(fixedSprintId) || Boolean(task);
-  const storySelectionLocked = Boolean(defaultStoryId) || Boolean(task);
+  const storySelectionLocked = Boolean(defaultStoryId);
   const canChangeSprint = allowSprintChange && !fixedSprintId;
   const selectedStoryId = (defaultStoryId || storyId || "").trim();
   const estimatedHours =
