@@ -137,7 +137,7 @@ export function StoryUpsertionForm(props: {
       storyPoints: String(story?.storyPoints ?? 3),
       status: story?.status === "READY" ? "READY" : "DRAFT"
     },
-    enabled: !saving
+    enabled: true
   });
   const { value: form, setValue: setForm, isHydratingRemote, saveError, clearDraft } = draft;
   const title = typeof form.title === "string" ? form.title : "";
@@ -428,7 +428,9 @@ export function StoryUpsertionForm(props: {
           className="btn btn-primary"
           onClick={() => void submit()}
           disabled={formDisabled || !title.trim()}
+          aria-busy={saving}
         >
+          {saving ? <span className="submit-loading-indicator" aria-hidden="true" /> : null}
           {story ? "Guardar historia" : "Crear historia"}
         </button>
         {story && definitionHref ? (

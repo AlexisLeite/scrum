@@ -227,7 +227,7 @@ export function TaskUpsertionForm(props: {
       customEstimatedHours: initialEstimatedHours.custom,
       actualHours: task?.actualHours != null ? String(task.actualHours) : ""
     },
-    enabled: !readOnly && !saving
+    enabled: !readOnly
   });
   const { value: form, setValue: setForm, isHydratingRemote, saveError, clearDraft } = draft;
   const title = typeof form.title === "string" ? form.title : "";
@@ -564,7 +564,14 @@ export function TaskUpsertionForm(props: {
 
         <div className="row-actions compact">
           {!readOnly ? (
-            <button type="button" className="btn btn-primary" onClick={() => void persistTask()} disabled={formDisabled}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void persistTask()}
+              disabled={formDisabled}
+              aria-busy={saving}
+            >
+              {saving ? <span className="submit-loading-indicator" aria-hidden="true" /> : null}
               {task ? "Guardar tarea" : "Crear tarea"}
             </button>
           ) : null}

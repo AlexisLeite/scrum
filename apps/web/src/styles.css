@@ -711,6 +711,23 @@ a.btn:active {
   transform: translateY(0);
 }
 
+.submit-loading-indicator {
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.45rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  animation: submit-loading-spin 0.75s linear infinite;
+  flex: none;
+}
+
+@keyframes submit-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .btn-primary {
   color: var(--text-contrast);
   background: color-mix(in srgb, var(--accent-a) 76%, var(--accent-b));
@@ -2284,6 +2301,16 @@ th {
 .focused-chart-card,
 .focused-board-card {
   min-width: 0;
+}
+
+.focused-chart-card .echarts-for-react {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.focused-chart-card .echarts-for-react > div {
+  max-width: 100%;
 }
 
 .focused-board-card {

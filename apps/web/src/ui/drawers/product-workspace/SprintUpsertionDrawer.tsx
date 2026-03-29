@@ -314,7 +314,14 @@ export function SprintUpsertionForm(props: {
           readOnly: !canEditTask,
           definitionReadOnly: !canEditTask,
           allowTaskCreation: canCreateTaskFromMessage(user?.role),
-          allowMessageCreation: canCommentOnVisibleTask(user?.role, task, user?.id),
+          allowMessageCreation: canCommentOnVisibleTask(
+            user?.role,
+            {
+              assigneeId: task.assignee?.id ?? null,
+              sprintId: sprint?.id ?? null
+            },
+            user?.id
+          ),
           task: {
             id: task.id,
             title: task.title,
@@ -365,7 +372,8 @@ export function SprintUpsertionForm(props: {
       </div>
 
       <div className="row-actions compact">
-        <button type="submit" className="btn btn-primary" disabled={saving}>
+        <button type="submit" className="btn btn-primary" disabled={saving} aria-busy={saving}>
+          {saving ? <span className="submit-loading-indicator" aria-hidden="true" /> : null}
           {sprint ? "Guardar sprint" : "Crear sprint"}
         </button>
         {sprint ? (
