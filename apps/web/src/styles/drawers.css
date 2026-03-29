@@ -122,20 +122,12 @@
 .modal-confirm-copy .modal-confirm-dismiss {
   color: color-mix(in srgb, var(--text-main) 92%, #0b1520);
   border-color: color-mix(in srgb, var(--border) 88%, #9aa8b8);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-card) 96%, #eef3f8),
-    color-mix(in srgb, var(--bg-card) 88%, #dfe6ee)
-  );
+  background: color-mix(in srgb, var(--bg-card) 92%, #e7edf4);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.54);
 }
 
 .modal-confirm-copy .modal-confirm-dismiss:hover {
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-card) 92%, #e1e8f0),
-    color-mix(in srgb, var(--bg-card) 84%, #d5dde7)
-  );
+  background: color-mix(in srgb, var(--bg-card) 88%, #dde5ee);
 }
 
 @keyframes drawer-fade-in {

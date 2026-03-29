@@ -7,6 +7,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TasksService } from "../tasks/tasks.service";
 import { CreateSprintDto, CreateSprintTaskDto, MoveSprintTaskDto, UpdateSprintDto } from "./sprints.dto";
 
+const TERMINAL_TASK_STATUSES = ["Done", "Closed"] as const;
+
 @Injectable()
 export class SprintsService {
   constructor(
@@ -117,6 +119,66 @@ export class SprintsService {
     return updated;
   }
 
+  async remove(id: string, user: AuthUser) {
+    const sprint = await this.getSprintOrThrow(id);
+    await this.assertSprintAccess(user, sprint);
+
+    const tasksInSprint = await this.prisma.task.findMany({
+      where: { sprintId: id },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        storyId: true
+      }
+    });
+    const affectedStoryIds = Array.from(new Set(tasksInSprint.map((task) => task.storyId)));
+
+    await this.prisma.$transaction(async (tx) => {
+      if (tasksInSprint.length > 0) {
+        await tx.task.updateMany({
+          where: { sprintId: id },
+          data: {
+            sprintId: null,
+            boardOrder: 0
+          }
+        });
+      }
+
+      await tx.sprint.delete({
+        where: { id }
+      });
+    });
+
+    for (const storyId of affectedStoryIds) {
+      await this.tasksService.recomputeStoryStatus(storyId);
+    }
+
+    await this.activityService.record({
+      actorUserId: user.sub,
+      teamId: sprint.teamId,
+      productId: sprint.productId,
+      entityType: ActivityEntityType.SPRINT,
+      entityId: sprint.id,
+      action: "SPRINT_DELETED",
+      metadataJson: {
+        removedPendingTaskCount: tasksInSprint.length,
+        removedPendingTaskIds: tasksInSprint.map((task) => task.id)
+      },
+      beforeJson: sprint,
+      afterJson: {
+        id: sprint.id,
+        deleted: true
+      }
+    });
+
+    return {
+      ...sprint,
+      deleted: true,
+      removedPendingTaskCount: tasksInSprint.length
+    };
+  }
+
   async start(id: string, user: AuthUser) {
     const sprint = await this.getSprintOrThrow(id);
     await this.assertSprintAccess(user, sprint);
@@ -164,7 +226,7 @@ export class SprintsService {
     const unfinishedTasks = await this.prisma.task.findMany({
       where: {
         sprintId: id,
-        status: { not: "Done" }
+        status: { notIn: [...TERMINAL_TASK_STATUSES] }
       },
       include: {
         story: {
@@ -331,7 +393,7 @@ export class SprintsService {
           })
         : [];
 
-    const columns = sprint.product.workflow.map((column) => {
+    const columns = this.resolveWorkflowColumns(sprint.product.id, sprint.product.workflow).map((column) => {
       const activeTasks = tasks
         .filter((task) =>
           user.role === "team_member"
@@ -379,7 +441,7 @@ export class SprintsService {
       where: {
         productId: sprint.productId,
         sprintId: null,
-        status: { not: "Done" }
+        status: { notIn: [...TERMINAL_TASK_STATUSES] }
       },
       include: {
         story: {
@@ -529,7 +591,7 @@ export class SprintsService {
     await this.assertSprintAccess(user, sprint);
     this.assertSprintIsMutable(sprint.status);
 
-    const allowedStatuses = sprint.product.workflow.map((column) => column.name);
+    const allowedStatuses = this.resolveWorkflowColumns(sprint.product.id, sprint.product.workflow).map((column) => column.name);
     if (!allowedStatuses.includes(dto.status)) {
       throw new BadRequestException("Task status is not part of sprint workflow");
     }
@@ -699,6 +761,34 @@ export class SprintsService {
       unfinishedSprintCount: snapshot.task?._count?.unfinishedSprintSnapshots ?? 0,
       isHistoricalUnfinished: true
     };
+  }
+
+  private resolveWorkflowColumns(
+    productId: string,
+    workflow: Array<{
+      id: string;
+      productId: string;
+      name: string;
+      sortOrder: number;
+      isDone: boolean;
+      isBlocked: boolean;
+    }>
+  ) {
+    if (workflow.some((column) => column.name === "Closed")) {
+      return workflow;
+    }
+
+    return [
+      ...workflow,
+      {
+        id: `virtual-closed-${productId}`,
+        productId,
+        name: "Closed",
+        sortOrder: 50,
+        isDone: true,
+        isBlocked: false
+      }
+    ].sort((left, right) => left.sortOrder - right.sortOrder);
   }
 
   private async getSprintOrThrow(id: string) {

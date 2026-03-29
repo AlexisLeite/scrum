@@ -27,6 +27,12 @@ export class SprintsController {
     return this.sprintsService.update(id, dto, user);
   }
 
+  @Delete("sprints/:id")
+  @Roles("platform_admin", "scrum_master")
+  remove(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.sprintsService.remove(id, user);
+  }
+
   @Post("sprints/:id/start")
   @Roles("platform_admin", "scrum_master")
   start(@CurrentUser() user: AuthUser, @Param("id") id: string) {

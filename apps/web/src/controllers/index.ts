@@ -295,6 +295,15 @@ export class ProductController {
     return sprint;
   }
 
+  async deleteSprint(sprintId: string) {
+    const sprint = await apiClient.del<any>(`/sprints/${sprintId}`);
+    this.store.sprints.remove(sprintId);
+    if (this.store.board?.sprint?.id === sprintId) {
+      this.store.setBoard(null);
+    }
+    return sprint;
+  }
+
   async startSprint(sprintId: string) {
     const sprint = await apiClient.post<any>(`/sprints/${sprintId}/start`);
     this.store.sprints.upsert(sprint);

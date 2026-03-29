@@ -16,6 +16,7 @@ import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPrev
 import { TaskUpsertionDrawer, TaskUpsertionForm } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { RichDescriptionField } from "../../ui/drawers/product-workspace/RichDescriptionField";
 import { canCommentOnVisibleTask, canCreateTaskFromMessage, canEditTaskFields } from "../../lib/permissions";
+import { buildStatusOptions, isTaskTerminalStatus } from "./ProductWorkspaceViewShared";
 
 type ProductItem = {
   id: string;
@@ -502,17 +503,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
   }, [taskDetail?.sprint?.teamId, teams]);
 
   const statusOptions = React.useMemo(
-    () =>
-      Array.from(
-        new Set([
-          taskDetail?.status ?? "",
-          ...(store.board?.columns ?? []).map((column) => column.name),
-          "Todo",
-          "In Progress",
-          "Blocked",
-          "Done"
-        ].filter(Boolean))
-      ),
+    () => buildStatusOptions(taskDetail?.status, ...(store.board?.columns ?? []).map((column) => column.name)),
     [store.board?.columns, taskDetail?.status]
   );
   const forcedReadonly = searchParams.get("mode") === "readonly";
@@ -825,8 +816,8 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
                     className="task-child-open"
                     onClick={() => void openChildTaskDrawer(child.id)}
                   >
-                    <span className={`task-child-check ${child.status === "Done" ? "is-done" : ""}`}>
-                      {child.status === "Done" ? "?" : "·"}
+                    <span className={`task-child-check ${isTaskTerminalStatus(child.status) ? "is-done" : ""}`}>
+                      {isTaskTerminalStatus(child.status) ? "?" : "·"}
                     </span>
                     <span>{child.title}</span>
                   </button>
@@ -903,4 +894,3 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
     </div>
   );
 });
-

@@ -11,6 +11,7 @@ import { ProductUpsertionDrawer } from "../backoffice/ProductUpsertionDrawer";
 import { StoryUpsertionDrawer } from "./StoryUpsertionDrawer";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import { ImageLightbox } from "./ImageLightbox";
+import { buildStatusOptions } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 
 type MarkdownPreviewProps = {
   markdown: string | null | undefined;
@@ -175,7 +176,7 @@ async function openInternalReference(
           ).values()
         );
 
-        const statusOptions = Array.from(new Set(["Todo", "In Progress", "Blocked", "Done", detail.status]));
+        const statusOptions = buildStatusOptions(detail.status);
         const stories = (store.stories.items as Array<{ id: string; title: string }>).map((entry) => ({ id: entry.id, title: entry.title }));
         const sprints = (store.sprints.items as Array<{ id: string; name: string }>).map((entry) => ({ id: entry.id, name: entry.name }));
 

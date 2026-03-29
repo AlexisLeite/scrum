@@ -7,7 +7,6 @@ import { TaskSearchPicker } from "../../../components/TaskSearchPicker";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { ActivityTimeline } from "./ActivityTimeline";
-import { MarkdownPreview } from "./MarkdownPreview";
 import { RichDescriptionField } from "./RichDescriptionField";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import "./sprint-upsertion-form.css";
@@ -59,6 +58,28 @@ function taskMatchesQuery(task: PendingTask, query: string): boolean {
     .map(normalize)
     .join(" ")
     .includes(normalizedQuery);
+}
+
+function getSuggestionImage(markdown: string | null | undefined): string {
+  return markdown?.match(/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/)?.[1] ?? "";
+}
+
+function getSuggestionPreview(markdown: string | null | undefined): string {
+  const normalized = (markdown ?? "")
+    .replace(/!\[[^\]]*\]\((?:[^)\s]+)(?:\s+"[^"]*")?\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/`{1,3}([^`]*)`{1,3}/g, "$1")
+    .replace(/^[\s>*#+-]+/gm, " ")
+    .replace(/^\d+\.\s+/gm, " ")
+    .replace(/<\/?[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.length > 140 ? `${normalized.slice(0, 137).trimEnd()}...` : normalized;
 }
 
 export class SprintUpsertionDrawer extends Drawer {
@@ -257,6 +278,15 @@ export function SprintUpsertionForm(props: {
     () => sprintTasks.filter((task) => taskMatchesQuery(task, sprintTaskQuery)),
     [sprintTaskQuery, sprintTasks]
   );
+  const suggestedTasks = React.useMemo(
+    () =>
+      pendingTasks.slice(0, 5).map((task) => ({
+        task,
+        imageSrc: getSuggestionImage(task.description),
+        preview: getSuggestionPreview(task.description)
+      })),
+    [pendingTasks]
+  );
 
   const openTaskDetail = React.useCallback(
     (task: PendingTask) => {
@@ -329,6 +359,36 @@ export function SprintUpsertionForm(props: {
         <button type="submit" className="btn btn-primary" disabled={saving}>
           {sprint ? "Guardar sprint" : "Crear sprint"}
         </button>
+        {sprint ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={async () => {
+              const confirmed = window.confirm(
+                "Eliminar este sprint quitara sus tareas del sprint y las dejara disponibles para reasignar. Deseas continuar?"
+              );
+              if (!confirmed) {
+                return;
+              }
+              setSaving(true);
+              setError("");
+              try {
+                await controller.deleteSprint(sprint.id);
+                if (onDone) {
+                  await onDone();
+                }
+                close();
+              } catch (deleteError) {
+                setError(deleteError instanceof Error ? deleteError.message : "No se pudo eliminar el sprint.");
+              } finally {
+                setSaving(false);
+              }
+            }}
+            disabled={saving}
+          >
+            Eliminar sprint
+          </button>
+        ) : null}
         {sprint && definitionHref ? (
           <button
             type="button"
@@ -397,7 +457,7 @@ export function SprintUpsertionForm(props: {
                   <span className="pill">{pendingTasks.length} candidatas</span>
                 </div>
                 <div className="sprint-task-suggestion-list">
-                  {pendingTasks.slice(0, 5).map((task) => (
+                  {suggestedTasks.map(({ task, imageSrc, preview }) => (
                     <article key={task.id} className="sprint-task-suggestion card">
                       <div className="sprint-task-suggestion-top">
                         <div className="sprint-task-suggestion-heading">
@@ -410,13 +470,19 @@ export function SprintUpsertionForm(props: {
                           <span className="pill">Creada {new Date(task.createdAt).toLocaleDateString()}</span>
                         </div>
                       </div>
-                      <MarkdownPreview
-                        markdown={task.description}
-                        compact
-                        previewSize={120}
-                        emptyLabel="Sin descripcion"
-                        className="sprint-task-suggestion-preview"
-                      />
+                      <div className="sprint-task-suggestion-summary">
+                        {imageSrc ? (
+                          <img
+                            className="sprint-task-suggestion-image"
+                            src={imageSrc}
+                            alt={`Imagen adjunta de ${task.title}`}
+                            loading="lazy"
+                          />
+                        ) : null}
+                        <p className={`sprint-task-suggestion-preview ${preview ? "" : "is-empty"}`.trim()}>
+                          {preview || "Sin descripcion"}
+                        </p>
+                      </div>
                       <div className="row-actions compact sprint-task-suggestion-actions">
                         <button type="button" className="btn btn-secondary" onClick={() => openTaskDetail(task)}>
                           Ver detalle

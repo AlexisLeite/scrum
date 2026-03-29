@@ -29,8 +29,7 @@
   padding: 0.95rem;
   border: 1px solid color-mix(in srgb, var(--accent-c) 18%, var(--border));
   border-radius: calc(var(--radius-lg) + 4px);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, transparent), color-mix(in srgb, var(--bg-soft) 88%, transparent));
+  background: color-mix(in srgb, var(--bg-card) 92%, var(--bg-soft));
   box-shadow: 0 24px 56px rgba(8, 15, 31, 0.22);
   backdrop-filter: blur(18px);
 }
@@ -72,7 +71,7 @@
   padding: 0;
   border: 1px solid var(--border-soft);
   border-radius: 18px;
-  background: linear-gradient(160deg, color-mix(in srgb, var(--bg-card) 98%, transparent), color-mix(in srgb, var(--bg-soft) 88%, transparent));
+  background: color-mix(in srgb, var(--bg-card) 90%, var(--bg-soft));
   color: var(--text-primary);
   text-align: left;
   overflow: hidden;
@@ -84,7 +83,7 @@
   border-color: color-mix(in srgb, var(--accent-a) 42%, var(--border));
   box-shadow: 0 16px 30px rgba(8, 15, 31, 0.14);
   transform: translateY(-1px);
-  background: linear-gradient(160deg, color-mix(in srgb, var(--bg-card) 98%, transparent), color-mix(in srgb, var(--accent-c) 8%, var(--bg-soft)));
+  background: color-mix(in srgb, var(--bg-card) 84%, color-mix(in srgb, var(--accent-c) 8%, var(--bg-soft)));
 }
 
 .task-search-picker-option-top {

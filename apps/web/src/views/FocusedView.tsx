@@ -377,7 +377,7 @@ export const FocusedView = observer(function FocusedView() {
   const statusOptions = React.useMemo(
     () => board.columns.length > 0
       ? board.columns.map((column) => column.name)
-      : ["Todo", "In Progress", "Blocked", "Done"],
+      : ["Todo", "In Progress", "Blocked", "Done", "Closed"],
     [board.columns]
   );
   const allTasks = React.useMemo(() => board.columns.flatMap((column) => column.tasks), [board.columns]);

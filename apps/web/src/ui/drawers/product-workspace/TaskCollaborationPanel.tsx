@@ -6,6 +6,7 @@ import { useRootStore } from "../../../stores/root-store";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { RichDescriptionField } from "./RichDescriptionField";
+import { isTaskTerminalStatus } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 
 type StoryOption = { id: string; title: string };
 type SprintOption = { id: string; name: string };
@@ -428,8 +429,8 @@ export function TaskCollaborationPanel(props: {
         {detail?.childTasks.map((child) => (
           <article key={child.id} className="task-child-card">
             <button type="button" className="task-child-open" onClick={() => void openChildTaskDrawer(child.id)}>
-              <span className={`task-child-check ${child.status === "Done" ? "is-done" : ""}`}>
-                {child.status === "Done" ? "?" : "·"}
+              <span className={`task-child-check ${isTaskTerminalStatus(child.status) ? "is-done" : ""}`}>
+                {isTaskTerminalStatus(child.status) ? "?" : "·"}
               </span>
               <span>{child.title}</span>
             </button>

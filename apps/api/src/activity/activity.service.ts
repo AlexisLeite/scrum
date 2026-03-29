@@ -515,6 +515,9 @@ export class ActivityService {
     if (action === "SPRINT_COMPLETED") {
       return `Se completo el sprint "${detail.entityLabel}".`;
     }
+    if (action === "SPRINT_DELETED") {
+      return `Se elimino el sprint "${detail.entityLabel}".`;
+    }
     return action;
   }
 
@@ -589,7 +592,7 @@ export class ActivityService {
       lines.push(`Tarea origen: ${detail.sourceTask.title}`);
     }
 
-    if (action === "SPRINT_COMPLETED" && lines.length === 0) {
+    if ((action === "SPRINT_COMPLETED" || action === "SPRINT_DELETED") && lines.length === 0) {
       lines.push(`Sprint finalizado: ${detail.entityLabel}`);
     }
 

@@ -30,6 +30,9 @@ type TaskCreationInput = {
   metadataJson?: Record<string, unknown>;
 };
 
+const DEFAULT_TASK_STATUS_ORDER = ["Todo", "In Progress", "Blocked", "Done", "Closed"] as const;
+const TERMINAL_TASK_STATUSES = ["Done", "Closed"] as const;
+
 @Injectable()
 export class TasksService {
   constructor(
@@ -157,11 +160,12 @@ export class TasksService {
       orderBy: [{ status: "asc" }, { boardOrder: "asc" }, { createdAt: "asc" }]
     });
 
-    const defaultStatusOrder = ["Todo", "In Progress", "Blocked", "Done"];
     const discoveredStatuses = Array.from(new Set(tasks.map((task) => task.status)));
     const columnNames = [
-      ...defaultStatusOrder,
-      ...discoveredStatuses.filter((status) => !defaultStatusOrder.includes(status)).sort((left, right) => left.localeCompare(right))
+      ...DEFAULT_TASK_STATUS_ORDER,
+      ...discoveredStatuses
+        .filter((status) => !DEFAULT_TASK_STATUS_ORDER.includes(status as (typeof DEFAULT_TASK_STATUS_ORDER)[number]))
+        .sort((left, right) => left.localeCompare(right))
     ];
 
     return {
@@ -184,7 +188,7 @@ export class TasksService {
       ...this.withUnfinishedSprintCount(task),
       childSummary: {
         total: task.childTasks.length,
-        completed: task.childTasks.filter((child) => child.status === "Done").length
+        completed: task.childTasks.filter((child) => TERMINAL_TASK_STATUSES.includes(child.status as (typeof TERMINAL_TASK_STATUSES)[number])).length
       },
       conversation
     };
@@ -336,14 +340,12 @@ export class TasksService {
 
     if (hasSprintId && dto.sprintId) {
       const sprint = await this.validateSprintForProduct(dto.sprintId, current.productId);
-      this.assertSprintStatusAllowsChanges(sprint.status);
       targetTeamId = sprint.teamId;
     } else if (current.sprintId) {
       const currentSprint = await this.prisma.sprint.findUnique({
         where: { id: current.sprintId },
         select: { teamId: true, status: true }
       });
-      this.assertSprintStatusAllowsChanges(currentSprint?.status);
       targetTeamId = currentSprint?.teamId;
     }
 
@@ -582,7 +584,7 @@ export class TasksService {
 
     const [taskCount, doneCount, inSprintCount] = await Promise.all([
       this.prisma.task.count({ where: { storyId } }),
-      this.prisma.task.count({ where: { storyId, status: "Done" } }),
+      this.prisma.task.count({ where: { storyId, status: { in: [...TERMINAL_TASK_STATUSES] } } }),
       this.prisma.task.count({ where: { storyId, sprintId: { not: null } } })
     ]);
 

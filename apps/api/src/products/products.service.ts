@@ -42,7 +42,8 @@ export class ProductsService {
               { name: "Todo", sortOrder: 10, isDone: false, isBlocked: false },
               { name: "In Progress", sortOrder: 20, isDone: false, isBlocked: false },
               { name: "Blocked", sortOrder: 30, isDone: false, isBlocked: true },
-              { name: "Done", sortOrder: 40, isDone: true, isBlocked: false }
+              { name: "Done", sortOrder: 40, isDone: true, isBlocked: false },
+              { name: "Closed", sortOrder: 50, isDone: true, isBlocked: false }
             ]
           }
         }

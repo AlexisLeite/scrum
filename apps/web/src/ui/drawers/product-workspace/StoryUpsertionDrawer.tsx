@@ -11,6 +11,7 @@ import { ActivityTimeline } from "./ActivityTimeline";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { RichDescriptionField } from "./RichDescriptionField";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
+import { buildStatusOptions } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 
 type EditableStory = {
   id: string;
@@ -173,9 +174,7 @@ export function StoryUpsertionForm(props: {
   const assignees = buildAssignableUsers(teams);
   const sprintNameById = new Map(sprints.map((entry) => [entry.id, entry.name]));
   const assigneeNameById = new Map(assignees.map((entry) => [entry.id, entry.name]));
-  const statusOptions = Array.from(
-    new Set(["Todo", "In Progress", "Blocked", "Done", ...tasks.map((task) => task.status)])
-  );
+  const statusOptions = buildStatusOptions(...tasks.map((task) => task.status));
   const orderedTasks = React.useMemo(() => [...tasks].sort(compareStoryTasks), [tasks]);
   const backlogTasks = orderedTasks.filter((task) => !task.sprintId);
   const sprintTaskGroups = orderedTasks.reduce<Array<{ sprintId: string; sprintName: string; tasks: StoryTask[] }>>(
