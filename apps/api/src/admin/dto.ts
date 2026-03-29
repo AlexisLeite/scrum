@@ -43,6 +43,12 @@ export class UpdateUserRoleDto {
   role!: Role;
 }
 
+export class UpdateUserPasswordDto {
+  @IsString()
+  @MinLength(8)
+  password!: string;
+}
+
 export class SetUserTeamsDto {
   @IsArray()
   @IsString({ each: true })

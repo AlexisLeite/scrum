@@ -57,10 +57,16 @@ export const AdminRolesView = observer(function AdminRolesView() {
   const teamsController = React.useMemo(() => new TeamController(store), [store]);
   const productsController = React.useMemo(() => new ProductController(store), [store]);
   const [selectedUserForTeams, setSelectedUserForTeams] = React.useState<UserItem | null>(null);
+  const [selectedUserForPassword, setSelectedUserForPassword] = React.useState<UserItem | null>(null);
   const [teamDraft, setTeamDraft] = React.useState<string[]>([]);
   const [productDraft, setProductDraft] = React.useState<string[]>([]);
   const [saveTeamsError, setSaveTeamsError] = React.useState("");
   const [saveProductsError, setSaveProductsError] = React.useState("");
+  const [passwordDraft, setPasswordDraft] = React.useState("");
+  const [passwordConfirm, setPasswordConfirm] = React.useState("");
+  const [passwordError, setPasswordError] = React.useState("");
+  const [passwordSuccess, setPasswordSuccess] = React.useState("");
+  const [passwordSaving, setPasswordSaving] = React.useState(false);
   const [createError, setCreateError] = React.useState("");
   const [createName, setCreateName] = React.useState("");
   const [createEmail, setCreateEmail] = React.useState("");
@@ -151,6 +157,15 @@ export const AdminRolesView = observer(function AdminRolesView() {
     }
   }, [canEditUsers]);
 
+  const openPasswordEditor = React.useCallback((user: UserItem) => {
+    if (!canEditUsers) return;
+    setSelectedUserForPassword(user);
+    setPasswordDraft("");
+    setPasswordConfirm("");
+    setPasswordError("");
+    setPasswordSuccess("");
+  }, [canEditUsers]);
+
   const saveUserTeams = React.useCallback(async () => {
     if (!selectedUserForTeams) return;
     setSaveTeamsError("");
@@ -172,6 +187,35 @@ export const AdminRolesView = observer(function AdminRolesView() {
       setSaveProductsError(error instanceof Error ? error.message : "No se pudo guardar productos.");
     }
   }, [admin, productDraft, selectedUserForTeams]);
+
+  const saveUserPassword = React.useCallback(async () => {
+    if (!selectedUserForPassword) return;
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    const nextPassword = passwordDraft.trim();
+    const nextConfirm = passwordConfirm.trim();
+    if (nextPassword.length < 8) {
+      setPasswordError("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    if (nextPassword !== nextConfirm) {
+      setPasswordError("Las contraseñas no coinciden.");
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      await admin.updatePassword(selectedUserForPassword.id, nextPassword);
+      setPasswordDraft("");
+      setPasswordConfirm("");
+      setPasswordSuccess(`La contraseña de ${selectedUserForPassword.name} fue actualizada.`);
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : "No se pudo actualizar la contraseña.");
+    } finally {
+      setPasswordSaving(false);
+    }
+  }, [admin, passwordConfirm, passwordDraft, selectedUserForPassword]);
 
   const toggleCreateTeamId = React.useCallback((teamId: string) => {
     setCreateTeamIds((prev) => prev.includes(teamId) ? prev.filter((id) => id !== teamId) : [...prev, teamId]);
@@ -263,6 +307,11 @@ export const AdminRolesView = observer(function AdminRolesView() {
                     {canEditUsers ? (
                       <button className="btn btn-secondary" onClick={() => void openTeamEditor(user)}>
                         Equipos
+                      </button>
+                    ) : null}
+                    {canEditUsers ? (
+                      <button className="btn btn-secondary" onClick={() => openPasswordEditor(user)}>
+                        Cambiar contraseña
                       </button>
                     ) : null}
                     <button
@@ -382,6 +431,57 @@ export const AdminRolesView = observer(function AdminRolesView() {
           </div>
           {saveTeamsError ? <p className="error-text">{saveTeamsError}</p> : null}
           {saveProductsError ? <p className="error-text">{saveProductsError}</p> : null}
+        </section>
+      ) : null}
+
+      {canEditUsers && selectedUserForPassword ? (
+        <section className="card">
+          <h3>Cambiar contraseña de {selectedUserForPassword.name}</h3>
+          <div className="form-grid two-columns">
+            <label>
+              Nueva contraseña
+              <input
+                type="password"
+                value={passwordDraft}
+                onChange={(event) => setPasswordDraft(event.target.value)}
+                autoComplete="new-password"
+                placeholder="Al menos 8 caracteres"
+                disabled={passwordSaving}
+              />
+            </label>
+            <label>
+              Confirmar contraseña
+              <input
+                type="password"
+                value={passwordConfirm}
+                onChange={(event) => setPasswordConfirm(event.target.value)}
+                autoComplete="new-password"
+                placeholder="Repetir contraseña"
+                disabled={passwordSaving}
+              />
+            </label>
+          </div>
+          <p className="muted">La nueva contraseña debe tener al menos 8 caracteres y coincidir en ambos campos.</p>
+          <div className="row-actions">
+            <button className="btn btn-primary" onClick={() => void saveUserPassword()} disabled={passwordSaving}>
+              {passwordSaving ? "Guardando..." : "Actualizar contraseña"}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setSelectedUserForPassword(null);
+                setPasswordDraft("");
+                setPasswordConfirm("");
+                setPasswordError("");
+                setPasswordSuccess("");
+              }}
+              disabled={passwordSaving}
+            >
+              Cerrar
+            </button>
+          </div>
+          {passwordSuccess ? <p className="success-text">{passwordSuccess}</p> : null}
+          {passwordError ? <p className="error-text">{passwordError}</p> : null}
         </section>
       ) : null}
 

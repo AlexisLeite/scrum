@@ -84,6 +84,11 @@ export class AdminController {
     this.store.users.upsert(user);
   }
 
+  async updatePassword(userId: string, password: string) {
+    const user = await apiClient.patch<any>(`/admin/users/${userId}/password`, { password });
+    this.store.users.upsert(user);
+  }
+
   async listBackups() {
     return apiClient.get<any[]>("/admin/backups");
   }

@@ -189,6 +189,65 @@ export class AdminService {
     return updated;
   }
 
+  async updatePassword(id: string, password: string, actor: AuthUser) {
+    this.assertCanManageUsers(actor);
+
+    const before = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true, email: true }
+    });
+    if (!before) {
+      throw new NotFoundException("User not found");
+    }
+
+    this.assertCanManageTargetUser(actor, before.role);
+    await this.assertUserVisible(actor, id);
+
+    const passwordHash = await argon2.hash(password);
+    await this.prisma.user.update({
+      where: { id },
+      data: { passwordHash }
+    });
+
+    const updated = await this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        teamMembers: {
+          include: {
+            team: {
+              select: { id: true, name: true }
+            }
+          }
+        },
+        productMember: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                key: true,
+                name: true
+              }
+            }
+          }
+        }
+      }
+    });
+    if (!updated) {
+      throw new NotFoundException("User could not be loaded after password update");
+    }
+
+    await this.activityService.record({
+      actorUserId: actor.sub,
+      entityType: ActivityEntityType.USER,
+      entityId: id,
+      action: "admin.user.password.update",
+      beforeJson: { email: before.email, role: before.role },
+      afterJson: { email: updated.email, role: updated.role }
+    });
+
+    return this.mapUser(updated);
+  }
+
   async listUserTeams(userId: string, viewer?: AuthUser) {
     if (viewer) {
       await this.assertUserVisible(viewer, userId);

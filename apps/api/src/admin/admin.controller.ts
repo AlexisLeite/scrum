@@ -7,6 +7,7 @@ import {
   CreateAdminUserDto,
   SetUserProductsDto,
   SetUserTeamsDto,
+  UpdateUserPasswordDto,
   UpdateUserRoleDto
 } from "./dto";
 import { AdminService } from "./admin.service";
@@ -74,6 +75,16 @@ export class AdminController {
     @Body() body: UpdateUserRoleDto
   ) {
     return this.adminService.updateRole(id, body.role, user.sub);
+  }
+
+  @Patch("users/:id/password")
+  @Roles("platform_admin", "product_owner")
+  updatePassword(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body() body: UpdateUserPasswordDto
+  ) {
+    return this.adminService.updatePassword(id, body.password, user);
   }
 
   @Get("backups")

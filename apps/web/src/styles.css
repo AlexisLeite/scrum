@@ -1398,6 +1398,11 @@ a.btn-secondary,
   font-weight: 650;
 }
 
+.success-text {
+  color: var(--ok-text);
+  font-weight: 650;
+}
+
 .pill {
   border-radius: var(--radius-pill);
   border: 1px solid var(--pill-border);
