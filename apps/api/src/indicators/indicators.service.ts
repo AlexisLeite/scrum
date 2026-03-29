@@ -16,6 +16,8 @@ type MetricsScope = {
   teamMemberIds?: string[];
 };
 
+const COMPLETED_TASK_STATUSES: string[] = ["Done", "Closed"];
+
 @Injectable()
 export class IndicatorsService {
   constructor(
@@ -403,7 +405,7 @@ export class IndicatorsService {
   private async findCompletedTaskIds(where: Prisma.TaskStatusHistoryWhereInput): Promise<string[]> {
     const rows = await this.prisma.taskStatusHistory.findMany({
       where: {
-        toStatus: "Done",
+        toStatus: { in: COMPLETED_TASK_STATUSES },
         ...where
       },
       distinct: ["taskId"],
@@ -572,7 +574,7 @@ export class IndicatorsService {
           }
 
           acc.scopePoints += points;
-          if (this.resolveTaskStatusAt(task, dayEnd) === "Done") {
+          if (this.isCompletedTaskStatus(this.resolveTaskStatusAt(task, dayEnd))) {
             acc.completedPoints += points;
           }
           return acc;
@@ -975,11 +977,15 @@ export class IndicatorsService {
       if (!this.isTaskInSprintAt(intervals, at)) {
         return acc;
       }
-      if (this.resolveTaskStatusAt(task, at) !== "Done") {
+      if (!this.isCompletedTaskStatus(this.resolveTaskStatusAt(task, at))) {
         return acc;
       }
       return acc + (task.effortPoints ?? task.story.storyPoints);
     }, 0);
+  }
+
+  private isCompletedTaskStatus(status: string) {
+    return COMPLETED_TASK_STATUSES.includes(status);
   }
 
   private async getScopedTeamIds(user: AuthUser): Promise<string[] | null> {
