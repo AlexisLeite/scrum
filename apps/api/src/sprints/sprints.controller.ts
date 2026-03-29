@@ -45,6 +45,12 @@ export class SprintsController {
     return this.sprintsService.complete(id, user);
   }
 
+  @Post("sprints/:id/release-open-tasks")
+  @Roles("platform_admin", "scrum_master")
+  releaseOpenTasks(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.sprintsService.releaseOpenTasks(id, user);
+  }
+
   @Get("sprints/:id/board")
   board(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.sprintsService.board(id, user);

@@ -59,6 +59,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const sprints = store.sprints.items as SprintItem[];
   const teams = store.teams.items as TeamItem[];
   const currentSprint = sprints.find((sprint) => sprint.id === sprintId);
+  const isClosedSprint = currentSprint?.status === "COMPLETED" || currentSprint?.status === "CANCELLED";
   const boardReadOnly = currentSprint?.status !== "ACTIVE" || !canManageSprintBoard;
   const assignees = buildAssignableUsers(teams);
   const boardAssignees = currentSprint
@@ -163,7 +164,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
       <section className="card">
         <div className="section-head">
           <h2>Ejecucion del sprint {currentSprint ? `"${currentSprint.name}"` : ""}</h2>
-          {canManageSprintBoard ? (
+          {canManageSprintBoard && !isClosedSprint ? (
             <button
               className="btn btn-secondary"
               onClick={async () => {
@@ -179,6 +180,25 @@ export const SprintBoardView = observer(function SprintBoardView() {
         </div>
         <div className="row-actions compact">
           {currentSprint ? <span className={statusClass(currentSprint.status)}>{currentSprint.status}</span> : null}
+          {canManageSprintBoard && isClosedSprint ? (
+            <button
+              className="btn btn-secondary"
+              onClick={async () => {
+                if (!window.confirm("Se liberaran todas las tareas del sprint cuyo estado no sea Closed, incluyendo las que esten en Done. Deseas continuar?")) {
+                  return;
+                }
+                try {
+                  setBoardError("");
+                  await controller.releaseOpenTasksFromSprint(sprintId);
+                  await Promise.all([reloadBoardData(), controller.loadStories(productId), controller.loadSprints(productId)]);
+                } catch (releaseError) {
+                  setBoardError(getErrorMessage(releaseError));
+                }
+              }}
+            >
+              Liberar todas las tareas que no se cerraron
+            </button>
+          ) : null}
         </div>
         <p className="muted">
           {boardReadOnly

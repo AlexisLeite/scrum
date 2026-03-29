@@ -314,6 +314,12 @@ export class ProductController {
     this.store.sprints.upsert(sprint);
   }
 
+  async releaseOpenTasksFromSprint(sprintId: string) {
+    return apiClient.post<{ sprintId: string; releasedTaskCount: number; releasedTaskIds: string[] }>(
+      `/sprints/${sprintId}/release-open-tasks`
+    );
+  }
+
   async loadBoard(sprintId: string) {
     const board = await apiClient.get<any>(`/sprints/${sprintId}/board`);
     this.store.setBoard(board);

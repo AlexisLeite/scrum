@@ -515,6 +515,9 @@ export class ActivityService {
     if (action === "SPRINT_COMPLETED") {
       return `Se completo el sprint "${detail.entityLabel}".`;
     }
+    if (action === "SPRINT_OPEN_TASKS_RELEASED") {
+      return `Se liberaron las tareas no cerradas del sprint "${detail.entityLabel}".`;
+    }
     if (action === "SPRINT_DELETED") {
       return `Se elimino el sprint "${detail.entityLabel}".`;
     }
@@ -592,7 +595,12 @@ export class ActivityService {
       lines.push(`Tarea origen: ${detail.sourceTask.title}`);
     }
 
-    if ((action === "SPRINT_COMPLETED" || action === "SPRINT_DELETED") && lines.length === 0) {
+    const releasedTaskCount = typeof metadata.releasedTaskCount === "number" ? metadata.releasedTaskCount : 0;
+    if (releasedTaskCount > 0) {
+      lines.push(`Tareas liberadas: ${releasedTaskCount}`);
+    }
+
+    if ((action === "SPRINT_COMPLETED" || action === "SPRINT_OPEN_TASKS_RELEASED" || action === "SPRINT_DELETED") && lines.length === 0) {
       lines.push(`Sprint finalizado: ${detail.entityLabel}`);
     }
 

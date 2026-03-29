@@ -308,17 +308,22 @@ export class TasksService {
       throw new BadRequestException("Task not found");
     }
     await this.assertProductAccess(user, current.productId);
-    await this.assertSprintIsMutable(current.sprintId);
 
     const hasStatus = dto.status !== undefined;
     const hasAssigneeId = dto.assigneeId !== undefined;
     const hasSprintId = dto.sprintId !== undefined;
+    const nextSprintId = hasSprintId ? dto.sprintId ?? null : current.sprintId;
+    const isLeavingCurrentSprint = hasSprintId && nextSprintId !== current.sprintId;
+
+    if (!isLeavingCurrentSprint) {
+      await this.assertSprintIsMutable(current.sprintId);
+    }
 
     this.assertCanTeamMemberMutateTask(
       user,
       {
         assigneeId: hasAssigneeId ? dto.assigneeId ?? current.assigneeId : current.assigneeId,
-        sprintId: hasSprintId ? dto.sprintId ?? null : current.sprintId
+        sprintId: nextSprintId
       },
       {
         ...options,
@@ -333,13 +338,13 @@ export class TasksService {
 
     let targetTeamId: string | undefined;
     const nextStatus = hasStatus ? dto.status ?? current.status : current.status;
-    const nextSprintId = hasSprintId ? dto.sprintId ?? null : current.sprintId;
     const movesBoardColumn = current.sprintId !== nextSprintId || current.status !== nextStatus;
     const nextBoardOrder =
       nextSprintId && movesBoardColumn ? await this.getNextBoardOrder(nextSprintId, nextStatus) : current.boardOrder;
 
     if (hasSprintId && dto.sprintId) {
       const sprint = await this.validateSprintForProduct(dto.sprintId, current.productId);
+      this.assertSprintStatusAllowsChanges(sprint.status);
       targetTeamId = sprint.teamId;
     } else if (current.sprintId) {
       const currentSprint = await this.prisma.sprint.findUnique({

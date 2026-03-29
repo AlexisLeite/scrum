@@ -1904,7 +1904,6 @@ html {
 body {
   position: relative;
   isolation: isolate;
-  background: color-mix(in srgb, var(--bg-main) 94%, #ffffff);
 }
 
 body::before {

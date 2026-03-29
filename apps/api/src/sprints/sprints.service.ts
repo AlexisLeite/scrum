@@ -331,6 +331,94 @@ export class SprintsService {
     return updated;
   }
 
+  async releaseOpenTasks(id: string, user: AuthUser) {
+    const sprint = await this.getSprintOrThrow(id);
+    await this.assertSprintAccess(user, sprint);
+    this.assertSprintIsClosed(sprint.status);
+
+    const releasableTasks = await this.prisma.task.findMany({
+      where: {
+        sprintId: id,
+        status: { not: "Closed" }
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        storyId: true
+      }
+    });
+
+    if (releasableTasks.length === 0) {
+      return {
+        sprintId: id,
+        releasedTaskCount: 0,
+        releasedTaskIds: []
+      };
+    }
+
+    await this.prisma.task.updateMany({
+      where: {
+        id: { in: releasableTasks.map((task) => task.id) }
+      },
+      data: {
+        status: "Pending",
+        assigneeId: null,
+        sprintId: null,
+        boardOrder: 0
+      }
+    });
+
+    const affectedStoryIds = Array.from(new Set(releasableTasks.map((task) => task.storyId)));
+    for (const storyId of affectedStoryIds) {
+      await this.tasksService.recomputeStoryStatus(storyId);
+    }
+
+    for (const task of releasableTasks) {
+      await this.activityService.record({
+        actorUserId: user.sub,
+        teamId: sprint.teamId,
+        productId: sprint.productId,
+        entityType: ActivityEntityType.SPRINT,
+        entityId: sprint.id,
+        action: "SPRINT_TASK_REMOVED",
+        metadataJson: {
+          taskId: task.id,
+          reason: "SPRINT_OPEN_TASKS_RELEASED",
+          taskStatus: "Pending"
+        },
+        afterJson: {
+          id: task.id,
+          title: task.title,
+          sprintId: null,
+          assigneeId: null,
+          status: "Pending"
+        }
+      });
+    }
+
+    await this.activityService.record({
+      actorUserId: user.sub,
+      teamId: sprint.teamId,
+      productId: sprint.productId,
+      entityType: ActivityEntityType.SPRINT,
+      entityId: sprint.id,
+      action: "SPRINT_OPEN_TASKS_RELEASED",
+      metadataJson: {
+        releasedTaskCount: releasableTasks.length,
+        releasedTaskIds: releasableTasks.map((task) => task.id)
+      },
+      beforeJson: sprint,
+      afterJson: sprint
+    });
+
+    return {
+      sprintId: id,
+      releasedTaskCount: releasableTasks.length,
+      releasedTaskIds: releasableTasks.map((task) => task.id)
+    };
+  }
+
   async board(id: string, user: AuthUser) {
     const sprint = await this.prisma.sprint.findUnique({
       where: { id },
@@ -853,6 +941,12 @@ export class SprintsService {
   private assertSprintIsMutable(status: SprintStatus) {
     if (status === SprintStatus.COMPLETED || status === SprintStatus.CANCELLED) {
       throw new BadRequestException("This sprint is closed and can no longer be modified");
+    }
+  }
+
+  private assertSprintIsClosed(status: SprintStatus) {
+    if (status !== SprintStatus.COMPLETED && status !== SprintStatus.CANCELLED) {
+      throw new BadRequestException("Only closed sprints can release open tasks");
     }
   }
 
