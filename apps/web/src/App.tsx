@@ -39,6 +39,7 @@ import {
   TaskDefinitionView
 } from "./views/product-workspace/ProductDefinitionViews";
 import { AdminRolesView } from "./views/backoffice/AdminRolesView";
+import { AdminBackupsView } from "./views/backoffice/AdminBackupsView";
 import { ProductsBackofficeView } from "./views/backoffice/ProductsBackofficeView";
 import { TeamDefinitionView } from "./views/backoffice/TeamDefinitionView";
 import { TeamsBackofficeView } from "./views/backoffice/TeamsBackofficeView";
@@ -138,6 +139,14 @@ export const App = observer(function App() {
             <Route index element={<AdministrationIndexRedirect />} />
             <Route path="products" element={<ProductsBackofficeView />} />
             <Route path="teams" element={<TeamsBackofficeView />} />
+            <Route
+              path="backups"
+              element={
+                <ProtectedRoles roles={["platform_admin"]}>
+                  <AdminBackupsView />
+                </ProtectedRoles>
+              }
+            />
             <Route
               path="users"
               element={
