@@ -3,6 +3,37 @@ import { StoryInfoPopover } from "./StoryInfoPopover";
 import { BacklogTaskItem } from "./BacklogTaskItem";
 import { StoryItem, sortStoryTasks } from "../ProductWorkspaceViewShared";
 
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path
+        d="M11.9 1.6a2.1 2.1 0 0 1 3 3L6.1 13.4 2 14l.6-4.1 9.3-9.3Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="m10.3 3.2 2.5 2.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" className={expanded ? "is-expanded" : ""}>
+      <path d="m5 3.5 6 4.5-6 4.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 type BacklogStoryCardProps = {
   story: StoryItem;
   expanded: boolean;
@@ -33,29 +64,35 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
   } = props;
   const panelId = React.useId();
   const orderedTasks = React.useMemo(() => sortStoryTasks(story.tasks ?? []), [story.tasks]);
+  const taskCount = orderedTasks.length;
+  const storyStatusClass = `status status-${story.status.toLowerCase().replace(/\s+/g, "-").replace(/_/g, "-")}`;
 
   return (
     <article className="story-card">
       <div className="story-card-header">
-        <button
-          type="button"
-          className="story-card-title-button"
-          aria-expanded={expanded}
-          aria-controls={panelId}
-          onClick={() => onToggleStory(story.id)}
-        >
-          {story.title}
+        <button type="button" className="story-card-title-button" aria-expanded={expanded} aria-controls={panelId} onClick={() => onToggleStory(story.id)}>
+          <span className="story-card-title-copy">
+            <span className="story-card-title-topline">
+              <span className="story-card-title-badge">Historia</span>
+              <span className={storyStatusClass}>{story.status}</span>
+            </span>
+            <span className="story-card-title-text">{story.title}</span>
+            <span className="story-card-title-subcopy">
+              {taskCount} {taskCount === 1 ? "tarea" : "tareas"} · {story.storyPoints} puntos
+            </span>
+          </span>
         </button>
         <div className="story-card-actions">
+          <StoryInfoPopover story={story} />
           <button
             type="button"
-            className="btn btn-secondary story-card-edit-button"
+            className="btn btn-secondary btn-icon story-list-icon-button story-card-edit-button"
             onClick={() => onEditStory(story)}
             disabled={!canManageStories}
+            aria-label={`Editar historia ${story.title}`}
           >
-            Editar
+            <PencilIcon />
           </button>
-          <StoryInfoPopover story={story} />
           <button
             type="button"
             className="btn btn-secondary btn-icon story-list-icon-button"
@@ -63,7 +100,7 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
             onClick={() => onCreateTask(story)}
             disabled={!canManageTasks}
           >
-            +
+            <PlusIcon />
           </button>
           <button
             type="button"
@@ -73,9 +110,7 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
             aria-controls={panelId}
             onClick={() => onToggleStory(story.id)}
           >
-            <span className={`story-card-arrow ${expanded ? "is-expanded" : ""}`.trim()} aria-hidden="true">
-              &gt;
-            </span>
+            <ChevronIcon expanded={expanded} />
           </button>
         </div>
       </div>

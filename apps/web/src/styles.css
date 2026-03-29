@@ -1087,21 +1087,130 @@ a.btn-secondary,
   justify-content: flex-end;
 }
 
+.backlog-page {
+  position: relative;
+}
+
+.backlog-shell {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent-c) 9%, transparent), transparent 32%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 98%, transparent), color-mix(in srgb, var(--bg-soft) 88%, transparent));
+}
+
+.story-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.story-card {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid color-mix(in srgb, var(--border-soft) 80%, transparent);
+  border-radius: calc(var(--radius-md) + 2px);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 98%, transparent), color-mix(in srgb, var(--bg-soft) 88%, transparent)),
+    var(--bg-card);
+  box-shadow: 0 10px 26px rgba(4, 12, 22, 0.05);
+}
+
+.story-card-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.9rem;
+}
+
+.story-card-title-button {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+}
+
+.story-card-title-copy {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.story-card-title-topline {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.story-card-title-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent-c) 12%, transparent);
+  color: var(--accent-c);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.story-card-title-text {
+  display: block;
+  font-size: 1.12rem;
+  line-height: 1.3;
+  font-weight: 750;
+}
+
+.story-card-title-subcopy {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.story-card-title-button:hover .story-card-title-text {
+  color: var(--accent-c);
+}
+
+.story-card-title-button:focus-visible,
+.story-task-title-button:focus-visible,
+.story-card-actions .btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-c) 55%, white);
+  outline-offset: 2px;
+}
+
 .story-card-edit-button {
-  min-width: 6.5rem;
+  min-width: 2.7rem;
+  width: 2.7rem;
+  height: 2.7rem;
+  padding: 0;
 }
 
 .story-list-icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 2.7rem;
+  height: 2.7rem;
+  padding: 0;
   font-size: 0.98rem;
   font-weight: 700;
+}
+
+.story-list-icon-button svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 .story-card-arrow {
   display: inline-flex;
   transition: transform var(--trans);
+}
+
+.story-list-icon-button svg.is-expanded,
+.story-card-arrow.is-expanded {
+  transform: rotate(90deg);
 }
 
 .story-card-arrow.is-expanded {
@@ -1112,7 +1221,7 @@ a.btn-secondary,
   display: grid;
   gap: 0.85rem;
   padding-top: 0.9rem;
-  border-top: 1px solid var(--border-soft);
+  border-top: 1px solid color-mix(in srgb, var(--border-soft) 70%, transparent);
 }
 
 .story-card-empty {
@@ -1183,9 +1292,12 @@ a.btn-secondary,
   display: grid;
   gap: 0.7rem;
   padding: 0.9rem 0.95rem;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-soft) 82%, transparent);
+  border-radius: calc(var(--radius-md) + 1px);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 99%, transparent), color-mix(in srgb, var(--bg-soft) 86%, transparent)),
+    var(--bg-card);
+  box-shadow: 0 8px 20px rgba(4, 12, 22, 0.04);
 }
 
 .story-task-row[aria-busy="true"] {
@@ -1221,13 +1333,61 @@ a.btn-secondary,
   color: var(--text-muted);
 }
 
+.story-task-title-text {
+  display: block;
+}
+
 .story-task-expand-button {
   align-self: start;
 }
 
 .story-task-description {
-  padding-top: 0.65rem;
-  border-top: 1px solid var(--border-soft);
+  min-width: 0;
+}
+
+.story-task-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 1fr);
+  gap: 0.9rem;
+  padding-top: 0.35rem;
+}
+
+.story-task-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  margin-bottom: 0.7rem;
+}
+
+.story-task-detail-kicker {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.story-task-summary-panel {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--border-soft) 80%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
+}
+
+.story-task-summary-panel .story-task-meta-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.story-task-summary-panel .story-task-meta-item {
+  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+}
+
+.story-task-summary-panel .status {
+  align-self: start;
 }
 
 .story-detail-strip {
@@ -1356,6 +1516,14 @@ a.btn-secondary,
 
   .story-card-actions {
     justify-content: flex-start;
+  }
+
+  .story-card-header {
+    gap: 0.7rem;
+  }
+
+  .story-task-detail-grid {
+    grid-template-columns: 1fr;
   }
 
   .story-info-popover-panel {

@@ -178,8 +178,8 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   };
 
   return (
-    <div className="stack-lg">
-      <section className="card">
+    <div className="stack-lg backlog-page">
+      <section className="card backlog-shell">
         <div className="stack-h mb-4">
           <h3>Historias</h3>
           {canManageStories ? (
