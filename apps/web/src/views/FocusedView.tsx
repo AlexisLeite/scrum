@@ -833,7 +833,7 @@ export const FocusedView = observer(function FocusedView() {
               option={buildBurndownOption(store.burndown, chartTheme)}
               notMerge={false}
               lazyUpdate
-              style={{ height: 320 }}
+              style={{ height: 320, width: "100%" }}
             />
           ) : chartLoading ? (
             <p className="muted">Actualizando grafica del sprint...</p>
