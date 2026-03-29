@@ -25,6 +25,27 @@ export function StoryInfoPopover(props: StoryInfoPopoverProps) {
   const panelId = React.useId();
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const panelRef = React.useRef<HTMLDivElement | null>(null);
+  const closeTimeoutRef = React.useRef<number | null>(null);
+
+  const clearCloseTimeout = React.useCallback(() => {
+    if (closeTimeoutRef.current !== null) {
+      window.clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  }, []);
+
+  const openPopover = React.useCallback(() => {
+    clearCloseTimeout();
+    setOpen(true);
+  }, [clearCloseTimeout]);
+
+  const scheduleClosePopover = React.useCallback(() => {
+    clearCloseTimeout();
+    closeTimeoutRef.current = window.setTimeout(() => {
+      setOpen(false);
+      closeTimeoutRef.current = null;
+    }, 90);
+  }, [clearCloseTimeout]);
 
   const updatePlacement = React.useCallback(() => {
     if (typeof window === "undefined") {
@@ -98,18 +119,27 @@ export function StoryInfoPopover(props: StoryInfoPopoverProps) {
     };
   }, [open, updatePlacement]);
 
+  React.useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current !== null) {
+        window.clearTimeout(closeTimeoutRef.current);
+        closeTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   return (
     <div
       className="story-info-popover"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocusCapture={() => setOpen(true)}
+      onMouseEnter={openPopover}
+      onMouseLeave={scheduleClosePopover}
+      onFocusCapture={openPopover}
       onBlurCapture={(event) => {
         const nextTarget = event.relatedTarget;
         if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
           return;
         }
-        setOpen(false);
+        scheduleClosePopover();
       }}
     >
       <button
@@ -127,6 +157,8 @@ export function StoryInfoPopover(props: StoryInfoPopoverProps) {
           ref={panelRef}
           className="story-info-popover-panel"
           role="tooltip"
+          onMouseEnter={openPopover}
+          onMouseLeave={scheduleClosePopover}
           data-side={placement.vertical}
           data-align={placement.horizontal}
           style={{ maxHeight: `${placement.maxHeight}px`, maxWidth: `${placement.maxWidth}px` }}
