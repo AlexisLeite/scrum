@@ -137,7 +137,16 @@ export class McpService {
                 inputSchema: {
                   type: "object",
                   additionalProperties: false,
-                  properties: {}
+                  properties: {
+                    offset: {
+                      type: "number",
+                      description: "Offset sobre el listado visible de tareas."
+                    },
+                    limit: {
+                      type: "number",
+                      description: "Cantidad maxima de tareas visibles a devolver."
+                    }
+                  }
                 }
               },
               {
@@ -280,26 +289,41 @@ export class McpService {
 
     switch (name) {
       case "list_pending_tasks": {
+        const offset = this.readOptionalIntegerArgument(args, "offset") ?? 0;
+        const requestedLimit = this.readOptionalIntegerArgument(args, "limit");
+        if (offset < 0) {
+          throw new BadRequestException("offset must be >= 0");
+        }
+        if (requestedLimit !== undefined && requestedLimit < 1) {
+          throw new BadRequestException("limit must be >= 1");
+        }
+
         const board = await this.tasksService.listFocused(user);
-        const normalizedBoard = {
-          ...board,
-          columns: board.columns.map((column) => ({
-            ...column,
-            tasks: column.tasks.map((task) => ({
-              ...task,
-              parentMessageId: task.sourceMessage?.id ?? task.sourceMessageId ?? null,
-              parentMessage: task.sourceMessage ?? null
-            }))
-          }))
-        };
+        const normalizedBoard = this.normalizeFocusedBoard(board);
+        const flattenedTasks = this.flattenFocusedBoard(normalizedBoard);
+        const total = flattenedTasks.length;
+        const limit = requestedLimit ?? Math.max(total - offset, 0);
+        const paginatedTasks = flattenedTasks.slice(offset, offset + limit);
+        const paginatedBoard = this.rebuildFocusedBoard(normalizedBoard, paginatedTasks);
+        const returned = paginatedTasks.length;
+        const hasMore = offset + returned < total;
         return {
           content: [
             {
               type: "text",
-              text: `Se devolvieron ${normalizedBoard.columns.reduce((total, column) => total + column.tasks.length, 0)} tareas visibles en Focused.`
+              text: `Se devolvieron ${returned} de ${total} tareas visibles en Focused. offset=${offset} limit=${limit} hasMore=${hasMore}`
             }
           ],
-          structuredContent: normalizedBoard
+          structuredContent: {
+            ...paginatedBoard,
+            pagination: {
+              offset,
+              limit,
+              total,
+              returned,
+              hasMore
+            }
+          }
         };
       }
       case "take_task": {
@@ -532,6 +556,43 @@ export class McpService {
       throw new BadRequestException(`Invalid argument: ${key}`);
     }
     return value;
+  }
+
+  private normalizeFocusedBoard(board: Awaited<ReturnType<TasksService["listFocused"]>>) {
+    return {
+      ...board,
+      columns: board.columns.map((column) => ({
+        ...column,
+        tasks: column.tasks.map((task) => ({
+          ...task,
+          parentMessageId: task.sourceMessage?.id ?? task.sourceMessageId ?? null,
+          parentMessage: task.sourceMessage ?? null
+        }))
+      }))
+    };
+  }
+
+  private flattenFocusedBoard(board: ReturnType<McpService["normalizeFocusedBoard"]>) {
+    return board.columns.flatMap((column) =>
+      column.tasks.map((task) => ({
+        columnName: column.name,
+        task
+      }))
+    );
+  }
+
+  private rebuildFocusedBoard(
+    board: ReturnType<McpService["normalizeFocusedBoard"]>,
+    tasks: Array<ReturnType<McpService["flattenFocusedBoard"]>[number]>
+  ) {
+    const taskIds = new Set(tasks.map((entry) => entry.task.id));
+    return {
+      ...board,
+      columns: board.columns.map((column) => ({
+        ...column,
+        tasks: column.tasks.filter((task) => taskIds.has(task.id))
+      }))
+    };
   }
 
   private flattenMessages(messages: TaskMessageNode[], depth: number = 0): FlatMessageNode[] {
