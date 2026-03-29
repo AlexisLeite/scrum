@@ -1,6 +1,6 @@
 ---
 name: scrum-task-implementation
-description: Implementa tareas Scrum de punta a punta en el repo actual usando las herramientas del tablero Scrum. Usa este skill cuando haya que tomar una tarea pendiente, asignar la primera que no tenga responsable, pasarla a In Progress, implementar exactamente lo pedido en la descripcion, validar el resultado, cerrar la tarea en Done y publicar un comentario final en markdown con el detalle de lo hecho y los archivos tocados. Asume que es muy probable que haya otros agentes trabajando en paralelo y extrema el cuidado con el estado del repositorio antes, durante y despues de cada edicion.
+description: Implementa tareas Scrum de punta a punta en el repo actual usando las herramientas del tablero Scrum. Usa este skill cuando haya que tomar una tarea pendiente, asignar la primera que no tenga responsable, pasarla a In Progress, implementar exactamente lo pedido en la descripcion, validar el resultado, probar tambien la UI o el flujo afectado con Playwright contra el entorno watch cuando corresponda, hacer commit de los cambios con el id de la tarea, cerrar la tarea en Done y publicar un comentario final exhaustivo en markdown con resumen, validaciones, pruebas y archivos tocados. Asume que es muy probable que haya otros agentes trabajando en paralelo y extrema el cuidado con el estado del repositorio antes, durante y despues de cada edicion.
 ---
 
 # Scrum Task Implementation
@@ -17,8 +17,11 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 6. Incluye en esa lectura la historia, la tarea, los ultimos mensajes y cualquier tarea padre o mensaje padre cuando exista para reconstruir el contexto completo.
 7. Implementa solo lo que pida la tarea, respetando el estado actual del worktree.
 8. Ejecuta validaciones razonables para el cambio: pruebas focalizadas, lint o build parcial si aplica.
-9. Cambia la tarea a `Done` cuando la implementacion y la validacion esten terminadas.
-10. Publica un comentario final en markdown valido con resumen, validaciones y archivos tocados.
+9. Prueba con el MCP de Playwright el flujo afectado en `https://vmi3181573.contaboserver.net:5443/` siempre que el cambio tenga impacto verificable desde UI o navegador.
+10. Usa el entorno watch con HMR para verificar los cambios en tiempo real iniciando sesion con `email:test_agent@scrum.local` y `password:test_agent@scrum.local`.
+11. Haz un commit al finalizar cualquier tarea con cambios de codigo o archivos, incluyendo el id de la tarea en el mensaje de commit.
+12. Cambia la tarea a `Done` cuando la implementacion, la validacion y el commit esten terminados.
+13. Publica un comentario final en markdown valido, exhaustivo y autocontenido con resumen, justificacion, validaciones, pruebas, archivos tocados y el id del commit generado.
 
 ## Reglas Operativas
 
@@ -28,11 +31,18 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 - Si no hay tareas sin responsable, informa ese resultado y deten el flujo.
 - Antes de cambiar codigo, revisa `git status --short` y evita tocar archivos con cambios ajenos salvo que la tarea lo exija.
 - Repite la inspeccion del worktree antes de aplicar cambios grandes, antes de correr validaciones y antes de cerrar la tarea.
+- Si haces cambios, no termines la tarea sin crear un commit propio al final de tu trabajo.
+- El mensaje del commit debe incluir de forma visible el id de la tarea para mantener trazabilidad.
+- El comentario final de la tarea debe incluir el hash del commit git resultante.
 - Nunca reviertas, pises ni reformatees cambios ajenos para "limpiar" el repo.
 - Si detectas archivos relacionados con tu tarea que cambiaron mientras trabajabas, relee el contexto y adapta tu implementacion en vez de asumir que tu version local sigue siendo correcta.
 - Manten el diff minimo y localizado para reducir conflictos con trabajo concurrente.
 - Si la descripcion de la tarea entra en conflicto con el codigo existente o no alcanza para implementar algo con seguridad, deja un comentario explicando el bloqueo en vez de improvisar.
 - No marques la tarea como `Done` si no llegaste a implementar o validar el cambio principal.
+- Si el cambio afecta una experiencia navegable, usa el MCP de Playwright para probarla contra `https://vmi3181573.contaboserver.net:5443/`.
+- Ese entorno corre en modo watch con HMR; aprovecha ese comportamiento para revalidar rapido despues de cada ajuste relevante.
+- Usa las credenciales de prueba `test_agent@scrum.local` / `test_agent@scrum.local` para ingresar en el entorno de validacion.
+- El usuario de prueba ya dispone de un producto habilitado para trabajar sin restricciones; usa ese contexto en las pruebas en vez de reconfigurar datos.
 
 ## Implementacion
 
@@ -43,11 +53,21 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 - Manten los cambios acotados al problema descrito.
 - Si hay senales de trabajo concurrente en los mismos archivos, prioriza integrarte con ese estado en lugar de sobrescribirlo.
 - Respeta las convenciones del repo y corre la validacion mas especifica posible para reducir tiempo y ruido.
+- Cuando corresponda, valida el flujo afectado de punta a punta con Playwright navegando el entorno remoto en modo watch.
+- Documenta en tus notas y en el comentario final que probaste con Playwright, que flujo cubriste y cual fue el resultado.
 - Si haces una suposicion relevante, documentala en la respuesta final y en el comentario de la tarea.
+
+## Validacion Con Playwright
+
+- Usa el MCP de Playwright para navegar a `https://vmi3181573.contaboserver.net:5443/`.
+- Inicia sesion con `email:test_agent@scrum.local` y `password:test_agent@scrum.local`.
+- Si el cambio tiene impacto visible o funcional en UI, recorre el flujo afectado y verifica el resultado esperado directamente en navegador.
+- Si el cambio no es razonablemente verificable en navegador, deja constancia explicita de por que no correspondia una prueba con Playwright.
+- Si Playwright falla por un problema del entorno o de infraestructura, documenta el intento y el bloqueo con suficiente detalle.
 
 ## Comentario Final En La Tarea
 
-El comentario final debe ser markdown valido y autocontenido. Usa esta estructura base:
+El comentario final debe ser markdown valido, autocontenido y exhaustivo. Debe explicar que se hizo, por que se implemento de esa manera, que se valido, que pruebas manuales o con Playwright se realizaron y cual fue el commit final. Usa esta estructura base:
 
 ```md
 ## Trabajo realizado
@@ -55,10 +75,24 @@ El comentario final debe ser markdown valido y autocontenido. Usa esta estructur
 - Implementacion 1
 - Implementacion 2
 
+## Decisiones tecnicas
+
+- Decision 1 y motivo
+- Decision 2 y motivo
+
 ## Validaciones
 
 - `comando o verificacion`
 - `resultado resumido`
+
+## Pruebas en entorno
+
+- `Playwright o prueba manual`
+- `flujo cubierto y resultado`
+
+## Commit
+
+- `hash-del-commit`
 
 ## Archivos tocados
 
@@ -66,4 +100,4 @@ El comentario final debe ser markdown valido y autocontenido. Usa esta estructur
 - `ruta/al/archivo2`
 ```
 
-Incluye los archivos realmente modificados, no una lista hipotetica. Si una validacion no pudo correrse, indicalo explicitamente.
+Incluye los archivos realmente modificados, no una lista hipotetica. Si una validacion no pudo correrse, si Playwright no aplicaba o si alguna prueba fallo por el entorno, indicalo explicitamente. El comentario debe permitir que otra persona entienda el alcance completo del trabajo sin releer toda la conversacion.

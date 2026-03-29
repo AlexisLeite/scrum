@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import process from "node:process";
 import { PrismaClient } from "../apps/api/node_modules/@prisma/client/index.js";
 
-const apiPort = process.env.E2E_API_PORT ?? "3001";
+const apiPort = process.env.E2E_API_PORT ?? "3100";
 const baseUrl = `http://127.0.0.1:${apiPort}/api/v1`;
 
 function run(command, args, opts = {}) {

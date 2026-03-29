@@ -10,3 +10,5 @@ apps/web/node_modules
 .vercel
 logs
 public
+assets
+shared/media

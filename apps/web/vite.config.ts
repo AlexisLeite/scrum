@@ -25,7 +25,19 @@ export default defineConfig(() => ({
         : []
   },
   server: {
-    port: 5173
+    host: "127.0.0.1",
+    port: 5000,
+    strictPort: true,
+    allowedHosts: ["vmi3181573.contaboserver.net"],
+    hmr: {
+      host: "vmi3181573.contaboserver.net",
+      clientPort: 5443,
+      protocol: "wss"
+    }
+  },
+  build: {
+    outDir: "../../deploy/web",
+    emptyOutDir: true
   },
   preview: {
     allowedHosts: ["vmi3181573.contaboserver.net"]

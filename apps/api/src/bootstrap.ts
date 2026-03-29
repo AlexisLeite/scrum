@@ -10,10 +10,17 @@ import { resolveMediaRoot } from "./media/media.service";
 import { McpService } from "./mcp/mcp.service";
 
 function normalizeOrigins(rawOrigins: string | undefined): string[] {
-  return (rawOrigins ?? "http://localhost:5173")
+  const configuredOrigins = (rawOrigins ?? "https://vmi3181573.contaboserver.net")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+
+  return configuredOrigins.flatMap((origin) => {
+    if (origin.startsWith("https://") && !origin.match(/:\d+$/)) {
+      return [origin, `${origin}:443`];
+    }
+    return [origin];
+  });
 }
 
 function resolveAllowedOrigins(): string[] {

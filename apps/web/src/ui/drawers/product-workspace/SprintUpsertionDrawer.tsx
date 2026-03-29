@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ProductController } from "../../../controllers";
+import { canCommentOnVisibleTask, canCreateTaskFromMessage, canEditTaskFields } from "../../../lib/permissions";
 import { productSprintDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { TaskSearchPicker } from "../../../components/TaskSearchPicker";
@@ -128,6 +129,7 @@ export function SprintUpsertionForm(props: {
   const { controller, productId, teams, sprint, onDone } = options;
   const store = useRootStore();
   const navigate = useNavigate();
+  const user = store.session.user;
 
   const [name, setName] = React.useState(sprint?.name ?? "");
   const [goal, setGoal] = React.useState(sprint?.goal ?? "");
@@ -140,6 +142,7 @@ export function SprintUpsertionForm(props: {
   const [sprintTasks, setSprintTasks] = React.useState<PendingTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(false);
   const [sprintTaskQuery, setSprintTaskQuery] = React.useState("");
+  const [visibleSuggestionCount, setVisibleSuggestionCount] = React.useState(5);
   const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
     name: sprint?.name ?? "",
     goal: sprint?.goal ?? "",
@@ -280,16 +283,22 @@ export function SprintUpsertionForm(props: {
   );
   const suggestedTasks = React.useMemo(
     () =>
-      pendingTasks.slice(0, 5).map((task) => ({
+      pendingTasks.slice(0, visibleSuggestionCount).map((task) => ({
         task,
         imageSrc: getSuggestionImage(task.description),
         preview: getSuggestionPreview(task.description)
       })),
-    [pendingTasks]
+    [pendingTasks, visibleSuggestionCount]
   );
+  const hasMoreSuggestedTasks = pendingTasks.length > suggestedTasks.length;
+
+  React.useEffect(() => {
+    setVisibleSuggestionCount(5);
+  }, [sprint?.id]);
 
   const openTaskDetail = React.useCallback(
     (task: PendingTask) => {
+      const canEditTask = canEditTaskFields(user?.role);
       const relatedStory = task.story ? [{ id: task.story.id, title: task.story.title }] : [];
       const relatedSprint = sprint ? [{ id: sprint.id, name: sprint.name }] : [];
       const relatedAssignee = task.assignee ? [{ id: task.assignee.id, name: task.assignee.name }] : [];
@@ -302,10 +311,10 @@ export function SprintUpsertionForm(props: {
           sprints: relatedSprint,
           assignees: relatedAssignee,
           statusOptions: [task.status],
-          readOnly: true,
-          definitionReadOnly: true,
-          allowTaskCreation: false,
-          allowMessageCreation: false,
+          readOnly: !canEditTask,
+          definitionReadOnly: !canEditTask,
+          allowTaskCreation: canCreateTaskFromMessage(user?.role),
+          allowMessageCreation: canCommentOnVisibleTask(user?.role, task, user?.id),
           task: {
             id: task.id,
             title: task.title,
@@ -319,7 +328,7 @@ export function SprintUpsertionForm(props: {
         })
       );
     },
-    [controller, productId, sprint, store.drawers]
+    [controller, productId, sprint, store.drawers, user?.id, user?.role]
   );
 
   return (
@@ -494,6 +503,17 @@ export function SprintUpsertionForm(props: {
                     </article>
                   ))}
                 </div>
+                {hasMoreSuggestedTasks ? (
+                  <div className="sprint-task-suggestions-more">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setVisibleSuggestionCount((current) => current + 5)}
+                    >
+                      Mostrar mas
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>

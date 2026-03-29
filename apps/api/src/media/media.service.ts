@@ -31,14 +31,13 @@ function resolveExtension(originalName: string | undefined, mimeType: string | u
 }
 
 export function resolveMediaRoot() {
+  if (process.env.MEDIA_ROOT?.trim()) {
+    return resolve(process.env.MEDIA_ROOT);
+  }
+
   if (process.env.MEDIA_UPLOAD_DIR?.trim()) {
     return resolve(process.env.MEDIA_UPLOAD_DIR);
   }
 
-  const cwd = process.cwd();
-  if (cwd.endsWith(`${join("apps", "api")}`)) {
-    return resolve(cwd, "public", "media");
-  }
-
-  return resolve(cwd, "apps", "api", "public", "media");
+  return resolve("/root/repos/scrum/shared/media");
 }

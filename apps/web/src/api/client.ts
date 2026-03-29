@@ -5,7 +5,7 @@ const API_BASE = (() => {
   }
 
   if (import.meta.env.DEV) {
-    return "http://localhost:3000/api/v1";
+    return `${window.location.protocol}//${window.location.hostname}:5444/api/v1`;
   }
 
   throw new Error("Missing VITE_API_BASE in production");

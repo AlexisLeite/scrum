@@ -4,10 +4,10 @@ import { McpService } from "./mcp/mcp.service";
 
 async function bootstrap() {
   const app = await createHttpApp();
-  const port = Number(process.env.PORT ?? 3000);
+  const port = Number(process.env.PORT ?? 3100);
   await app.listen(port);
 
-  const mcpPort = Number(process.env.MCP_PORT ?? 3001);
+  const mcpPort = Number(process.env.MCP_PORT ?? 3101);
   const mcpService = app.get(McpService);
   const mcpServer = express();
   mcpServer.use(express.json({ limit: "1mb" }));

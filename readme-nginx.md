@@ -1,4 +1,4 @@
-# Nginx + Produccion (Scrum)
+# Nginx + Prod/Dev (Scrum)
 
 Este documento resume los comandos operativos para:
 
@@ -8,10 +8,12 @@ Este documento resume los comandos operativos para:
 
 Asume el despliegue actual:
 
-- API interna: `127.0.0.1:3100`
-- MCP interno: `127.0.0.1:3101`
-- Frontend interno (preview): `127.0.0.1:4173`
-- Puertos externos por nginx: `3000` (api), `3001` (mcp), `5173` (frontend)
+- Web prod servida por nginx: `443`
+- API prod interna: `127.0.0.1:3100`
+- MCP prod interna: `127.0.0.1:3101`
+- Web dev interna: `127.0.0.1:5000`
+- API dev interna: `127.0.0.1:5001`
+- Puertos externos por nginx: `3000` (api prod), `3001` (mcp prod), `5443` (web dev), `5444` (api dev)
 
 ## 1) Chequear salud
 
@@ -25,15 +27,17 @@ sudo systemctl status nginx --no-pager -n 50
 ### Ver puertos escuchando
 
 ```bash
-sudo ss -ltnp | grep -E ':3000|:3001|:5173|:3100|:3101|:4173|:80'
+sudo ss -ltnp | grep -E ':443|:3000|:3001|:5443|:5444|:3100|:3101|:5000|:5001'
 ```
 
 ### Probar endpoints publicados por nginx
 
 ```bash
-curl -i http://127.0.0.1:5173/
-curl -i http://127.0.0.1:3000/
-curl -i http://127.0.0.1:3001/
+curl -k -i https://127.0.0.1/
+curl -k -i https://127.0.0.1:3000/
+curl -k -i https://127.0.0.1:3001/
+curl -k -i https://127.0.0.1:5443/
+curl -k -i https://127.0.0.1:5444/
 ```
 
 Notas esperadas:
@@ -51,30 +55,25 @@ sudo tail -n 100 /var/log/nginx/access.log
 
 ## 2) Reiniciar aplicaciones
 
-### Detener procesos actuales (api/mcp + frontend preview)
+### Detener procesos actuales (dev)
 
 ```bash
-pkill -f 'node dist/src/main.js' || true
-pkill -f 'vite preview --host 127.0.0.1 --port 4173' || true
+pkill -f 'pnpm --filter @scrum/api dev' || true
+pkill -f 'pnpm --filter @scrum/web dev' || true
 ```
 
-### Levantar API + MCP en produccion
-
-```bash
-cd /root/repos/scrum/apps/api
-set -a
-source /root/repos/scrum/.env
-set +a
-export PORT=3100
-export MCP_PORT=3101
-nohup node dist/src/main.js >/tmp/scrum-api.log 2>&1 &
-```
-
-### Levantar Frontend en produccion (preview)
+### Levantar prod desde `deploy/`
 
 ```bash
 cd /root/repos/scrum
-nohup pnpm --filter @scrum/web preview --host 127.0.0.1 --port 4173 >/tmp/scrum-web.log 2>&1 &
+pnpm build
+```
+
+### Levantar desarrollo con HMR
+
+```bash
+cd /root/repos/scrum
+pnpm dev
 ```
 
 ### Recargar nginx
@@ -86,7 +85,7 @@ sudo nginx -t && sudo systemctl reload nginx
 ### Verificacion rapida post-reinicio
 
 ```bash
-sudo ss -ltnp | grep -E ':3000|:3001|:5173|:3100|:3101|:4173'
+sudo ss -ltnp | grep -E ':443|:3000|:3001|:5443|:5444|:3100|:3101|:5000|:5001'
 ```
 
 ## 3) Build de las aplicaciones
@@ -108,27 +107,13 @@ cd /root/repos/scrum/apps/web
 pnpm build
 ```
 
-## 4) Flujo recomendado (build + restart)
+## 4) Flujo recomendado
 
 ```bash
 cd /root/repos/scrum
 pnpm build
 
-pkill -f 'node dist/src/main.js' || true
-pkill -f 'vite preview --host 127.0.0.1 --port 4173' || true
-
-cd /root/repos/scrum/apps/api
-set -a
-source /root/repos/scrum/.env
-set +a
-export PORT=3100
-export MCP_PORT=3101
-nohup node dist/src/main.js >/tmp/scrum-api.log 2>&1 &
-
-cd /root/repos/scrum
-nohup pnpm --filter @scrum/web preview --host 127.0.0.1 --port 4173 >/tmp/scrum-web.log 2>&1 &
-
-sudo nginx -t && sudo systemctl reload nginx
+pnpm dev
 ```
 
 ## 5) Si aparece error de permisos

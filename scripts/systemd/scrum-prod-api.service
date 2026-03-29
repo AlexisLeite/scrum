@@ -1,0 +1,19 @@
+[Unit]
+Description=Scrum production API and MCP
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/repos/scrum/deploy/api
+EnvironmentFile=/root/repos/scrum/deploy/api/.env
+Environment=PORT=3100
+Environment=MCP_PORT=3101
+Environment=MEDIA_ROOT=/root/repos/scrum/shared/media
+ExecStart=/usr/bin/env node /root/repos/scrum/deploy/api/dist/src/main.js
+Restart=always
+RestartSec=2
+StandardOutput=append:/root/repos/scrum/logs/prod/app.log
+StandardError=append:/root/repos/scrum/logs/prod/error.log
+
+[Install]
+WantedBy=multi-user.target

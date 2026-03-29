@@ -16,6 +16,6 @@ RUN pnpm --filter @scrum/web build
 FROM node:22-alpine AS runtime
 WORKDIR /app
 RUN npm install -g serve
-COPY --from=build /app/apps/web/dist ./dist
-EXPOSE 5173
-CMD ["serve", "-s", "dist", "-l", "5173"]
+COPY --from=build /app/deploy/web ./dist
+EXPOSE 8080
+CMD ["serve", "-s", "dist", "-l", "8080"]

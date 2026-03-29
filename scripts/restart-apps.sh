@@ -9,9 +9,9 @@ PID_DIR="$ROOT_DIR/logs/pids"
 API_PID_FILE="$PID_DIR/api-supervisor.pid"
 FRONT_PID_FILE="$PID_DIR/front-supervisor.pid"
 
-API_PORT="3100"
-MCP_PORT="3101"
-FRONT_PORT="4173"
+API_PORT="5001"
+MCP_PORT="5002"
+FRONT_PORT="5000"
 
 mkdir -p "$LOG_API_DIR" "$LOG_FRONT_DIR" "$PID_DIR"
 
@@ -42,32 +42,36 @@ rm -f "$PID_DIR/api.pid" "$PID_DIR/front.pid"
 # Extra safety: stop old matching processes if they were started manually.
 pkill -f 'node dist/src/main.js' || true
 pkill -f 'node .*/apps/api/dist/src/main.js' || true
-pkill -f 'pnpm --filter @scrum/web preview --host 127.0.0.1 --port 4173' || true
-pkill -f 'vite preview --host 127.0.0.1 --port 4173' || true
-pkill -f '@scrum/web@0.1.0 preview' || true
-pkill -f 'vite preview' || true
+pkill -f 'pnpm --filter @scrum/web dev --host 127.0.0.1 --port 5000' || true
+pkill -f 'vite --host 127.0.0.1 --port 5000' || true
+pkill -f '@scrum/web@0.1.0 dev' || true
+pkill -f 'pnpm --filter @scrum/web dev' || true
+pkill -f 'nest start --watch' || true
 
 # Ensure no stale API/MCP listeners survive.
-fuser -k 3100/tcp 2>/dev/null || true
-fuser -k 3101/tcp 2>/dev/null || true
+fuser -k 5001/tcp 2>/dev/null || true
+fuser -k 5002/tcp 2>/dev/null || true
 
 # Ensure no stale frontend listeners survive on fallback ports.
-fuser -k 4173/tcp 2>/dev/null || true
-fuser -k 4174/tcp 2>/dev/null || true
-fuser -k 4175/tcp 2>/dev/null || true
-fuser -k 4176/tcp 2>/dev/null || true
+fuser -k 5000/tcp 2>/dev/null || true
+fuser -k 5003/tcp 2>/dev/null || true
+fuser -k 5004/tcp 2>/dev/null || true
+fuser -k 5005/tcp 2>/dev/null || true
 
 # Start API + MCP under a supervisor loop.
 nohup bash -lc '
   set -euo pipefail
   while true; do
-    cd "'$API_DIR'"
+    cd "'$ROOT_DIR'"
     set -a
     source "'$ROOT_DIR'/.env"
     set +a
+    export WEB_ORIGIN="https://vmi3181573.contaboserver.net:5443"
+    export PUBLIC_API_URL="https://vmi3181573.contaboserver.net:5444"
     export PORT="'$API_PORT'"
     export MCP_PORT="'$MCP_PORT'"
-    node dist/src/main.js >>"'$LOG_API_DIR'/app.log" 2>>"'$LOG_API_DIR'/error.log"
+    export MEDIA_ROOT="'$ROOT_DIR'/shared/media"
+    pnpm --filter @scrum/api dev >>"'$LOG_API_DIR'/app.log" 2>>"'$LOG_API_DIR'/error.log"
     code=$?
     printf "%s API exited with code %s. Restarting in 2s.\n" "$(date -Is)" "$code" >>"'$LOG_API_DIR'/error.log"
     sleep 2
@@ -75,12 +79,13 @@ nohup bash -lc '
 ' >/dev/null 2>&1 &
 echo $! > "$API_PID_FILE"
 
-# Start frontend preview under a supervisor loop.
+# Start frontend dev server under a supervisor loop so nginx can proxy HMR traffic.
 nohup bash -lc '
   set -euo pipefail
   while true; do
     cd "'$ROOT_DIR'"
-    pnpm --filter @scrum/web preview --host 127.0.0.1 --port "'$FRONT_PORT'" --strictPort >>"'$LOG_FRONT_DIR'/app.log" 2>>"'$LOG_FRONT_DIR'/error.log"
+    export VITE_API_BASE="https://vmi3181573.contaboserver.net:5444/api/v1"
+    pnpm --filter @scrum/web dev --host 127.0.0.1 --port "'$FRONT_PORT'" --strictPort >>"'$LOG_FRONT_DIR'/app.log" 2>>"'$LOG_FRONT_DIR'/error.log"
     code=$?
     printf "%s FRONT exited with code %s. Restarting in 2s.\n" "$(date -Is)" "$code" >>"'$LOG_FRONT_DIR'/error.log"
     sleep 2

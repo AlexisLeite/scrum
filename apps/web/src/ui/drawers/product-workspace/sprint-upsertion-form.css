@@ -140,6 +140,11 @@
   justify-content: flex-end;
 }
 
+.sprint-task-suggestions-more {
+  display: flex;
+  justify-content: center;
+}
+
 .story-list-kpis {
   margin-bottom: 1rem;
 }

@@ -316,7 +316,7 @@ export class TasksService {
     const isLeavingCurrentSprint = hasSprintId && nextSprintId !== current.sprintId;
 
     if (!isLeavingCurrentSprint) {
-      await this.assertSprintIsMutable(current.sprintId);
+      await this.assertSprintIsMutable(current.sprintId, user);
     }
 
     this.assertCanTeamMemberMutateTask(
@@ -477,7 +477,7 @@ export class TasksService {
 
   async addMessage(taskId: string, dto: CreateTaskMessageDto, user: AuthUser) {
     const task = await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
-    await this.assertSprintIsMutable(task.sprintId);
+    await this.assertSprintIsMutable(task.sprintId, user);
     this.assertCanTeamMemberCollaborate(user, task);
     if (dto.parentMessageId) {
       const parentMessage = await this.prisma.taskMessage.findUnique({
@@ -535,7 +535,7 @@ export class TasksService {
 
   async createFromMessage(taskId: string, messageId: string, dto: CreateTaskFromMessageDto, user: AuthUser) {
     const task = await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
-    await this.assertSprintIsMutable(task.sprintId);
+    await this.assertSprintIsMutable(task.sprintId, user);
     const sourceMessage = await this.prisma.taskMessage.findUnique({
       where: { id: messageId },
       select: {
@@ -1057,7 +1057,7 @@ export class TasksService {
     return keys.filter((key) => before[key] !== after[key]);
   }
 
-  private async assertSprintIsMutable(sprintId: string | null | undefined) {
+  private async assertSprintIsMutable(sprintId: string | null | undefined, user?: AuthUser) {
     if (!sprintId) {
       return;
     }
@@ -1066,13 +1066,20 @@ export class TasksService {
       where: { id: sprintId },
       select: { status: true }
     });
-    this.assertSprintStatusAllowsChanges(sprint?.status);
+    this.assertSprintStatusAllowsChanges(sprint?.status, user);
   }
 
-  private assertSprintStatusAllowsChanges(status: SprintStatus | null | undefined) {
+  private assertSprintStatusAllowsChanges(status: SprintStatus | null | undefined, user?: AuthUser) {
+    if (user && this.canManageClosedSprintResults(user)) {
+      return;
+    }
     if (status === SprintStatus.COMPLETED || status === SprintStatus.CANCELLED) {
       throw new BadRequestException("This sprint is closed and its tasks can no longer be modified");
     }
+  }
+
+  private canManageClosedSprintResults(user: AuthUser) {
+    return this.teamScopeService.isPlatformAdmin(user.role) || this.teamScopeService.isScrumMaster(user.role);
   }
 
   private async takeTask(id: string, assigneeId: string | null | undefined, sprintId: string | null | undefined, user: AuthUser) {

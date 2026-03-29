@@ -8,6 +8,7 @@ import { TasksService } from "../tasks/tasks.service";
 import { CreateSprintDto, CreateSprintTaskDto, MoveSprintTaskDto, UpdateSprintDto } from "./sprints.dto";
 
 const TERMINAL_TASK_STATUSES = ["Done", "Closed"] as const;
+const DEFAULT_OPEN_TASK_STATUS = "Todo" as const;
 
 @Injectable()
 export class SprintsService {
@@ -362,7 +363,7 @@ export class SprintsService {
         id: { in: releasableTasks.map((task) => task.id) }
       },
       data: {
-        status: "Pending",
+        status: DEFAULT_OPEN_TASK_STATUS,
         assigneeId: null,
         sprintId: null,
         boardOrder: 0
@@ -385,14 +386,14 @@ export class SprintsService {
         metadataJson: {
           taskId: task.id,
           reason: "SPRINT_OPEN_TASKS_RELEASED",
-          taskStatus: "Pending"
+          taskStatus: DEFAULT_OPEN_TASK_STATUS
         },
         afterJson: {
           id: task.id,
           title: task.title,
           sprintId: null,
           assigneeId: null,
-          status: "Pending"
+          status: DEFAULT_OPEN_TASK_STATUS
         }
       });
     }
@@ -677,7 +678,7 @@ export class SprintsService {
       throw new BadRequestException("Sprint not found");
     }
     await this.assertSprintAccess(user, sprint);
-    this.assertSprintIsMutable(sprint.status);
+    this.assertSprintIsMutable(sprint.status, user);
 
     const allowedStatuses = this.resolveWorkflowColumns(sprint.product.id, sprint.product.workflow).map((column) => column.name);
     if (!allowedStatuses.includes(dto.status)) {
@@ -938,10 +939,17 @@ export class SprintsService {
     });
   }
 
-  private assertSprintIsMutable(status: SprintStatus) {
+  private assertSprintIsMutable(status: SprintStatus, user?: AuthUser) {
+    if (user && this.canManageClosedSprintResults(user)) {
+      return;
+    }
     if (status === SprintStatus.COMPLETED || status === SprintStatus.CANCELLED) {
       throw new BadRequestException("This sprint is closed and can no longer be modified");
     }
+  }
+
+  private canManageClosedSprintResults(user: AuthUser) {
+    return this.teamScopeService.isPlatformAdmin(user.role) || this.teamScopeService.isScrumMaster(user.role);
   }
 
   private assertSprintIsClosed(status: SprintStatus) {

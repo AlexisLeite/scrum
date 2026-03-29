@@ -67,7 +67,7 @@ export class AuthController {
     @Query("code") code: string,
     @Query("state") state: string
   ) {
-    const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
+    const webOrigin = process.env.WEB_ORIGIN ?? "https://vmi3181573.contaboserver.net";
     const callbackUrl = process.env.GITLAB_CALLBACK_URL ?? "http://localhost:3000/api/v1/auth/gitlab/callback";
     const storedState = req.cookies?.gitlab_oauth_state as string | undefined;
 

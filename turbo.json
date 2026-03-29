@@ -8,7 +8,15 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "env": [
+        "PORT",
+        "MCP_PORT",
+        "WEB_ORIGIN",
+        "PUBLIC_API_URL",
+        "VITE_API_BASE",
+        "MEDIA_ROOT"
+      ]
     },
     "lint": {
       "dependsOn": ["^lint"]

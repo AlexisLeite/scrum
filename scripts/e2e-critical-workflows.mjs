@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import process from "node:process";
 
-const baseUrl = "http://127.0.0.1:3000/api/v1";
+const baseUrl = "http://127.0.0.1:3100/api/v1";
 
 function run(command, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -118,7 +118,8 @@ async function waitForApi() {
 
 async function main() {
   process.env.DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://scrum:scrum@localhost:5433/scrum?schema=public";
-  process.env.PORT = process.env.PORT ?? "3000";
+  process.env.PORT = process.env.PORT ?? "3100";
+  process.env.MCP_PORT = process.env.MCP_PORT ?? "3101";
 
   await run("cmd", ["/c", "pnpm --filter @scrum/api build"]);
 
@@ -301,4 +302,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-
