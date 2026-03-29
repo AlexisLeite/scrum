@@ -13,6 +13,12 @@ export type StoryTaskSummary = {
   status: string;
   title?: string | null;
   description?: string | null;
+  assigneeId?: string | null;
+  assignee?: { id: string; name: string } | null;
+  creatorId?: string | null;
+  creator?: { id: string; name: string } | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 export type StoryItem = {

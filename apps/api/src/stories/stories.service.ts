@@ -24,7 +24,7 @@ export class StoriesService {
       return [];
     }
 
-    return this.prisma.userStory.findMany({
+    const stories = await this.prisma.userStory.findMany({
       where: {
         productId,
         ...(status ? { status: status as StoryStatus } : {})
@@ -32,6 +32,60 @@ export class StoriesService {
       orderBy: [{ backlogRank: "asc" }, { createdAt: "asc" }],
       include: { tasks: true }
     });
+
+    const taskIds = Array.from(new Set(stories.flatMap((story) => story.tasks.map((task) => task.id))));
+    if (taskIds.length === 0) {
+      return stories;
+    }
+
+    const creationLogs = await this.prisma.activityLog.findMany({
+      where: {
+        entityType: ActivityEntityType.TASK,
+        entityId: { in: taskIds },
+        action: {
+          in: [
+            "SPRINT_TASK_CREATED",
+            "TASK_CREATED",
+            "TASK_CREATED_FROM_MESSAGE",
+            "TASK_CREATED_IN_SPRINT"
+          ]
+        }
+      },
+      select: {
+        entityId: true,
+        actorUserId: true,
+        actorUser: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        createdAt: true
+      },
+      orderBy: [{ entityId: "asc" }, { createdAt: "asc" }]
+    });
+
+    const creatorByTaskId = new Map<string, { id: string; name: string }>();
+    for (const log of creationLogs) {
+      if (creatorByTaskId.has(log.entityId)) {
+        continue;
+      }
+      const creatorId = log.actorUser?.id ?? log.actorUserId ?? "system";
+      const creatorName = log.actorUser?.name ?? log.actorUserId ?? "Sistema";
+      creatorByTaskId.set(log.entityId, {
+        id: creatorId,
+        name: creatorName
+      });
+    }
+
+    return stories.map((story) => ({
+      ...story,
+      tasks: story.tasks.map((task) => ({
+        ...task,
+        creatorId: creatorByTaskId.get(task.id)?.id ?? null,
+        creator: creatorByTaskId.get(task.id) ?? null
+      }))
+    }));
   }
 
   async create(productId: string, dto: CreateStoryDto, user: AuthUser) {
