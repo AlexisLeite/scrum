@@ -7,11 +7,12 @@ type ActivityTimelineProps = {
   controller: ProductController;
   entityType: ActivityEntityType;
   entityId: string;
+  initialEntries?: ActivityEntry[];
 };
 
-type ActivityEntry = React.ComponentProps<typeof ActivityFeed>["entries"][number];
+export type ActivityEntry = React.ComponentProps<typeof ActivityFeed>["entries"][number];
 
-type ActivityListResult = {
+export type ActivityListResult = {
   items: ActivityEntry[];
   page: number;
   pageSize: number;
@@ -19,12 +20,24 @@ type ActivityListResult = {
 };
 
 export function ActivityTimeline(props: ActivityTimelineProps) {
-  const { controller, entityType, entityId } = props;
-  const [entries, setEntries] = React.useState<ActivityEntry[]>([]);
-  const [loading, setLoading] = React.useState(false);
+  const { controller, entityType, entityId, initialEntries } = props;
+  const [entries, setEntries] = React.useState<ActivityEntry[]>(() => initialEntries ?? []);
+  const [loading, setLoading] = React.useState(initialEntries === undefined);
   const [error, setError] = React.useState("");
 
   React.useEffect(() => {
+    if (initialEntries === undefined) {
+      return;
+    }
+    setEntries(initialEntries);
+    setLoading(false);
+    setError("");
+  }, [initialEntries]);
+
+  React.useEffect(() => {
+    if (initialEntries !== undefined) {
+      return;
+    }
     let mounted = true;
     setLoading(true);
     setError("");
@@ -48,7 +61,7 @@ export function ActivityTimeline(props: ActivityTimelineProps) {
     return () => {
       mounted = false;
     };
-  }, [controller, entityId, entityType]);
+  }, [controller, entityId, entityType, initialEntries]);
 
   return (
     <section className="card">

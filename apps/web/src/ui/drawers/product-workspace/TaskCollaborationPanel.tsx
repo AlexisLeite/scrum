@@ -1,4 +1,5 @@
 ﻿import React from "react";
+import { DraftDto } from "@scrum/contracts";
 import { ProductController } from "../../../controllers";
 import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { canCommentOnVisibleTask, canEditTaskFields } from "../../../lib/permissions";
@@ -28,7 +29,7 @@ type TaskMessageNode = {
   replies: TaskMessageNode[];
 };
 
-type TaskDetail = {
+export type TaskCollaborationDetail = {
   id: string;
   title: string;
   storyId: string;
@@ -160,6 +161,8 @@ export function TaskCollaborationPanel(props: {
   readOnly?: boolean;
   allowTaskCreation?: boolean;
   allowMessageCreation?: boolean;
+  initialDetail?: TaskCollaborationDetail | null;
+  initialMessageDraft?: DraftDto | null;
   onChanged?: () => Promise<void> | void;
 }) {
   const {
@@ -174,12 +177,14 @@ export function TaskCollaborationPanel(props: {
     readOnly = false,
     allowTaskCreation = true,
     allowMessageCreation = true,
+    initialDetail,
+    initialMessageDraft,
     onChanged
   } = props;
   const store = useRootStore();
   const viewer = store.session.user;
-  const [detail, setDetail] = React.useState<TaskDetail | null>(null);
-  const [loading, setLoading] = React.useState(false);
+  const [detail, setDetail] = React.useState<TaskCollaborationDetail | null>(initialDetail ?? null);
+  const [loading, setLoading] = React.useState(initialDetail === undefined);
   const [error, setError] = React.useState("");
   const [submittingMessage, setSubmittingMessage] = React.useState(false);
   const [replyTarget, setReplyTarget] = React.useState<TaskMessageNode | null>(null);
@@ -191,7 +196,9 @@ export function TaskCollaborationPanel(props: {
       body: "",
       replyTargetId: ""
     },
-    enabled: allowMessageCreation && !submittingMessage
+    enabled: allowMessageCreation && !submittingMessage,
+    remoteDraft: initialMessageDraft,
+    skipRemoteLoad: initialMessageDraft !== undefined
   });
   const { value: messageDraft, setValue: setMessageDraft, isHydratingRemote, saveError, clearDraft } = draft;
   const messageBody = typeof messageDraft.body === "string" ? messageDraft.body : "";
@@ -213,7 +220,7 @@ export function TaskCollaborationPanel(props: {
     setLoading(true);
     setError("");
     try {
-      const nextDetail = (await controller.loadTaskDetail(taskId)) as TaskDetail;
+      const nextDetail = (await controller.loadTaskDetail(taskId)) as TaskCollaborationDetail;
       setDetail(nextDetail);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "No se pudo cargar la actividad colaborativa.");
@@ -223,8 +230,20 @@ export function TaskCollaborationPanel(props: {
   }, [controller, taskId]);
 
   React.useEffect(() => {
+    if (initialDetail === undefined) {
+      return;
+    }
+    setDetail(initialDetail);
+    setLoading(false);
+    setError("");
+  }, [initialDetail]);
+
+  React.useEffect(() => {
+    if (initialDetail !== undefined) {
+      return;
+    }
     void loadDetail();
-  }, [loadDetail]);
+  }, [initialDetail, loadDetail]);
 
   React.useEffect(() => {
     const replyTargetId = typeof messageDraft.replyTargetId === "string" ? messageDraft.replyTargetId : "";
@@ -242,7 +261,7 @@ export function TaskCollaborationPanel(props: {
   };
 
   const openTaskDrawerFromDetail = React.useCallback(
-    (taskDetail: TaskDetail) => {
+    (taskDetail: TaskCollaborationDetail) => {
       const readOnlyForTarget = !canEditTaskFields(viewer?.role);
       const allowMessagesForTarget = canCommentOnVisibleTask(viewer?.role, taskDetail, viewer?.id);
       store.drawers.add(
@@ -293,7 +312,7 @@ export function TaskCollaborationPanel(props: {
   const openTaskDrawerById = React.useCallback(
     async (relatedTaskId: string) => {
       try {
-        const relatedDetail = (await controller.loadTaskDetail(relatedTaskId)) as TaskDetail;
+        const relatedDetail = (await controller.loadTaskDetail(relatedTaskId)) as TaskCollaborationDetail;
         openTaskDrawerFromDetail(relatedDetail);
       } catch (openError) {
         setError(openError instanceof Error ? openError.message : "No se pudo abrir la tarea relacionada.");

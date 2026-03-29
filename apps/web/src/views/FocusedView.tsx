@@ -534,6 +534,7 @@ export const FocusedView = observer(function FocusedView() {
         : user
           ? [{ id: user.id, name: user.name }]
           : minimalAssignees;
+      let prefetchedTaskDrawerData: Awaited<ReturnType<typeof productController.loadTaskDrawerData>> | undefined;
 
       if (shouldLoadCatalog) {
         try {
@@ -551,6 +552,12 @@ export const FocusedView = observer(function FocusedView() {
         }
       }
 
+      try {
+        prefetchedTaskDrawerData = await productController.loadTaskDrawerData(task.id);
+      } catch (prefetchError) {
+        console.warn("Task drawer prefetch failed", prefetchError);
+      }
+
       store.drawers.add(
         new TaskUpsertionDrawer({
           controller: productController,
@@ -563,6 +570,7 @@ export const FocusedView = observer(function FocusedView() {
           definitionReadOnly: !canEditTasks,
           allowTaskCreation: canCreateTaskFromFocusedMessage,
           allowMessageCreation: canCommentOnVisibleTask(user?.role, task, user?.id),
+          prefetchedTaskDrawerData,
           task: {
             id: task.id,
             title: task.title,

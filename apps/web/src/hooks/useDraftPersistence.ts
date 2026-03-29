@@ -103,8 +103,19 @@ export function useDraftPersistence<T extends Record<string, unknown>>(options: 
   initialValue: T;
   productId?: string;
   enabled?: boolean;
+  remoteDraft?: DraftDto | null;
+  skipRemoteLoad?: boolean;
 }) {
-  const { userId, entityType, entityId, initialValue, productId, enabled = true } = options;
+  const {
+    userId,
+    entityType,
+    entityId,
+    initialValue,
+    productId,
+    enabled = true,
+    remoteDraft,
+    skipRemoteLoad = false
+  } = options;
   const initialValueJson = JSON.stringify(initialValue);
   const initialSnapshot = React.useMemo(() => JSON.parse(initialValueJson) as T, [initialValueJson]);
   const [value, setValue] = React.useState<T>(initialSnapshot);
@@ -139,6 +150,29 @@ export function useDraftPersistence<T extends Record<string, unknown>>(options: 
     setValue(localDraft?.payload ? cloneValue(localDraft.payload) : initialSnapshot);
     setSaveError("");
     setIsHydratingRemote(true);
+
+    if (skipRemoteLoad) {
+      const localUpdatedAt = localDraft?.updatedAt ? new Date(localDraft.updatedAt).getTime() : 0;
+      const remoteUpdatedAt = remoteDraft?.updatedAt ? new Date(remoteDraft.updatedAt).getTime() : 0;
+      const remotePayloadJson = remoteDraft ? JSON.stringify(remoteDraft.payload) : JSON.stringify(initialSnapshot);
+      const chosenPayload =
+        remoteDraft && remoteUpdatedAt > localUpdatedAt
+          ? (remoteDraft.payload as T)
+          : (localDraft?.payload ?? initialSnapshot);
+
+      setValue(cloneValue(chosenPayload));
+      lastSavedJsonRef.current =
+        remoteDraft && remoteUpdatedAt > localUpdatedAt
+          ? JSON.stringify(chosenPayload)
+          : remotePayloadJson;
+
+      if (remoteDraft && remoteUpdatedAt > localUpdatedAt && storageKey) {
+        writeLocalDraft(storageKey, chosenPayload);
+      }
+
+      setIsHydratingRemote(false);
+      return;
+    }
 
     let active = true;
     void (async () => {
@@ -180,7 +214,7 @@ export function useDraftPersistence<T extends Record<string, unknown>>(options: 
     return () => {
       active = false;
     };
-  }, [enabled, entityId, entityType, initialSnapshot, productId, storageKey, userId]);
+  }, [enabled, entityId, entityType, initialSnapshot, productId, remoteDraft, skipRemoteLoad, storageKey, userId]);
 
   React.useEffect(() => {
     if (!enabled || !storageKey || !userId || isHydratingRemote) {

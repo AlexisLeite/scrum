@@ -3,6 +3,7 @@ import { ActivityEntityType, Prisma, SprintStatus, StoryStatus } from "@prisma/c
 import { ActivityService } from "../activity/activity.service";
 import { AuthUser } from "../common/current-user.decorator";
 import { TeamScopeService } from "../common/team-scope.service";
+import { DraftsService } from "../drafts/drafts.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateTaskDto, CreateTaskFromMessageDto, CreateTaskMessageDto, UpdateTaskDto } from "./tasks.dto";
 
@@ -38,7 +39,8 @@ export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly teamScopeService: TeamScopeService,
-    private readonly activityService: ActivityService
+    private readonly activityService: ActivityService,
+    private readonly draftsService: DraftsService
   ) {}
 
   async listByStory(storyId: string, user: AuthUser) {
@@ -191,6 +193,20 @@ export class TasksService {
         completed: task.childTasks.filter((child) => TERMINAL_TASK_STATUSES.includes(child.status as (typeof TERMINAL_TASK_STATUSES)[number])).length
       },
       conversation
+    };
+  }
+
+  async getDrawerData(id: string, user: AuthUser) {
+    const [detail, activity, messageDraft] = await Promise.all([
+      this.getDetail(id, user),
+      this.activityService.listByEntity(user, ActivityEntityType.TASK, id, {}),
+      this.draftsService.getDraft(user, "TASK_MESSAGE", id)
+    ]);
+
+    return {
+      detail,
+      activity,
+      messageDraft
     };
   }
 

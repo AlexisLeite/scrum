@@ -32,6 +32,11 @@ export class TasksController {
     return this.tasksService.getDetail(id, user);
   }
 
+  @Get("tasks/:id/drawer")
+  getDrawerData(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.tasksService.getDrawerData(id, user);
+  }
+
   @Get("tasks/:id/messages")
   listMessages(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.tasksService.listMessages(id, user);
@@ -84,4 +89,3 @@ export class TasksController {
     return this.tasksService.createFromMessage(id, messageId, dto, user);
   }
 }
-

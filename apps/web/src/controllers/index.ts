@@ -1,8 +1,13 @@
-import { ActivityEntityType, ApiKeyDto, Role } from "@scrum/contracts";
+import { ActivityEntityType, ApiKeyDto, DraftDto, Role } from "@scrum/contracts";
 import { ApiError, apiClient } from "../api/client";
 import { RootStore } from "../stores/root-store";
 
-type ActivityListResult<T> = { items: T[]; page: number; pageSize: number; total: number };
+export type ActivityListResult<T> = { items: T[]; page: number; pageSize: number; total: number };
+export type TaskDrawerData = {
+  detail: any;
+  activity: ActivityListResult<any>;
+  messageDraft: DraftDto | null;
+};
 
 export class AuthController {
   constructor(private readonly store: RootStore) {}
@@ -219,6 +224,10 @@ export class ProductController {
 
   async loadTaskDetail(taskId: string) {
     return apiClient.get<any>(`/tasks/${taskId}/detail`);
+  }
+
+  async loadTaskDrawerData(taskId: string) {
+    return apiClient.get<TaskDrawerData>(`/tasks/${taskId}/drawer`);
   }
 
   async loadTaskMessages(taskId: string) {

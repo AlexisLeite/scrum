@@ -1,13 +1,14 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { DraftDto } from "@scrum/contracts";
 import { ProductController } from "../../../controllers";
 import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productTaskDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
-import { ActivityTimeline } from "./ActivityTimeline";
-import { TaskCollaborationPanel } from "./TaskCollaborationPanel";
+import { ActivityTimeline, type ActivityEntry, type ActivityListResult } from "./ActivityTimeline";
+import { TaskCollaborationPanel, type TaskCollaborationDetail } from "./TaskCollaborationPanel";
 import { RichDescriptionField } from "./RichDescriptionField";
 import { TaskCompletionDialog } from "./TaskCompletionDialog";
 import "./task-upsertion-form.css";
@@ -29,6 +30,11 @@ type EditableTask = {
 type TaskStoryOption = { id: string; title: string };
 type TaskSprintOption = { id: string; name: string };
 type TaskAssigneeOption = { id: string; name: string };
+type PrefetchedTaskDrawerData = {
+  detail?: TaskCollaborationDetail | null;
+  activity?: ActivityListResult & { items: ActivityEntry[] };
+  messageDraft?: DraftDto | null;
+};
 
 const EFFORT_POINT_VALUES = [1, 2, 3, 5, 8, 13, 21] as const;
 const ESTIMATED_HOUR_PRESETS = [4, 8, 16, 24] as const;
@@ -53,6 +59,7 @@ type TaskUpsertionDrawerOptions = {
   allowTaskCreation?: boolean;
   allowMessageCreation?: boolean;
   definitionReadOnly?: boolean;
+  prefetchedTaskDrawerData?: PrefetchedTaskDrawerData;
   onDone?: () => Promise<void> | void;
 };
 
@@ -592,7 +599,14 @@ export function TaskUpsertionForm(props: {
             {readOnly ? "Cerrar" : closeLabel}
           </button>
         </div>
-        {task ? <ActivityTimeline controller={controller} entityType="TASK" entityId={task.id} /> : null}
+        {task ? (
+          <ActivityTimeline
+            controller={controller}
+            entityType="TASK"
+            entityId={task.id}
+            initialEntries={options.prefetchedTaskDrawerData?.activity?.items}
+          />
+        ) : null}
         {task && showCollaboration ? (
           <TaskCollaborationPanel
             controller={controller}
@@ -605,6 +619,8 @@ export function TaskUpsertionForm(props: {
             readOnly={readOnly}
             allowTaskCreation={allowTaskCreation}
             allowMessageCreation={allowMessageCreation}
+            initialDetail={options.prefetchedTaskDrawerData?.detail}
+            initialMessageDraft={options.prefetchedTaskDrawerData?.messageDraft}
             onChanged={onDone}
           />
         ) : null}
