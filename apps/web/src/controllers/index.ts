@@ -7,6 +7,7 @@ import {
   ApiKeyDto,
   CreateRoleDto,
   DraftDto,
+  ProductAssignableUserDto,
   Role,
   RoleDefinitionDto,
   RoleScope,
@@ -217,6 +218,11 @@ export class ProductController {
   async loadProducts() {
     const products = await this.store.wrap(this.store.products, () => apiClient.get<any[]>("/products"));
     this.store.products.setItems(products);
+    return products;
+  }
+
+  async loadAssignableUsers(productId: string) {
+    return apiClient.get<ProductAssignableUserDto[]>(`/products/${productId}/assignable-users`);
   }
 
   async createProduct(payload: { name: string; key: string; description?: string }) {

@@ -1,3 +1,5 @@
+import { ProductAssignableUserDto } from "@scrum/contracts";
+
 export type StoryStatus = "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
 export type SprintStatus = "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
 
@@ -66,6 +68,11 @@ export type TeamItem = {
   name: string;
   description: string | null;
   members?: TeamMember[];
+};
+
+export type AssignableUserOption = {
+  id: string;
+  name: string;
 };
 
 export type BoardTask = {
@@ -156,6 +163,20 @@ export function buildAssignableUsers(teams: TeamItem[]) {
           { id: member.userId, name: member.user?.name ?? member.userId }
         ])
       )
+    ).values()
+  );
+}
+
+export function mapAssignableUsers(users: ProductAssignableUserDto[]): AssignableUserOption[] {
+  return Array.from(
+    new Map(
+      users.map((user) => [
+        user.id,
+        {
+          id: user.id,
+          name: user.name
+        }
+      ])
     ).values()
   );
 }

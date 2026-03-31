@@ -2,9 +2,11 @@ import React from "react";
 import { observer } from "mobx-react-lite";
 import { useParams } from "react-router-dom";
 import { ProductController, TeamController } from "../../controllers";
+import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
+import { filterAssignableUsersByTeam } from "../../lib/assignable-users";
 import { useRootStore } from "../../stores/root-store";
 import { ProductMetricsPanel } from "./ProductMetricsPanel";
-import { buildAssignableUsers, getErrorMessage, SprintItem, TeamItem } from "./ProductWorkspaceViewShared";
+import { getErrorMessage, SprintItem, TeamItem } from "./ProductWorkspaceViewShared";
 
 export const ProductMetricsView = observer(function ProductMetricsView() {
   const store = useRootStore();
@@ -29,12 +31,15 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
     void teamController.loadTeams();
   }, [controller, teamController, productId]);
 
+  const { assignableUsers } = useProductAssignableUsers(controller, productId ? [productId] : []);
   const sprints = store.sprints.items as SprintItem[];
   const teams = store.teams.items as TeamItem[];
-  const assignableUsers = buildAssignableUsers(teams);
   const selectedSprint = sprints.find((sprint) => sprint.id === sprintId);
   const selectedTeam = teams.find((team) => team.id === teamId);
-  const visibleUsers = teamId && selectedTeam ? buildAssignableUsers([selectedTeam]) : assignableUsers;
+  const visibleUsers = React.useMemo(
+    () => filterAssignableUsersByTeam(assignableUsers, teams, teamId),
+    [assignableUsers, teamId, teams]
+  );
   const selectedUser = visibleUsers.find((entry) => entry.id === userId) ?? assignableUsers.find((entry) => entry.id === userId);
 
   React.useEffect(() => {

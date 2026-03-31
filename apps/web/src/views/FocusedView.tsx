@@ -1,7 +1,7 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
 import ReactECharts from "echarts-for-react";
-import { ProductController, TeamController } from "../controllers";
+import { ProductController } from "../controllers";
 import {
   canAssignFocusedTask,
   canAssignFocusedTaskToOthers,
@@ -9,7 +9,9 @@ import {
   canClaimFocusedTask,
   canMoveFocusedTask
 } from "../lib/access";
+import { type AssignableUserOption } from "../lib/assignable-users";
 import { canCommentOnVisibleTask, canCreateTaskFromMessage, canCreateTasks, canEditTaskFields } from "../lib/permissions";
+import { useProductAssignableUsers } from "../hooks/useProductAssignableUsers";
 import { useRootStore } from "../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../ui/drawers/Drawer";
 import { useEChartsTheme } from "../ui/charts/echarts-theme";
@@ -47,8 +49,6 @@ type FocusedBoard = {
   }>;
 };
 
-type TeamMember = { userId: string; user?: { id: string; name: string; email: string } };
-type TeamItem = { id: string; name: string; members?: TeamMember[] };
 type StoryItem = { id: string; title: string };
 type SprintItem = { id: string; name: string; teamId?: string | null };
 type DrawerOption = { id: string; name: string };
@@ -65,19 +65,6 @@ type FocusedCreationContext = {
   sprintName: string;
   teamId?: string | null;
 };
-
-function buildAssignableUsers(teams: TeamItem[]) {
-  return Array.from(
-    new Map(
-      teams.flatMap((team) =>
-        (team.members ?? []).map((member) => [
-          member.userId,
-          { id: member.userId, name: member.user?.name ?? member.userId }
-        ])
-      )
-    ).values()
-  );
-}
 
 function mergeUniqueOptions(options: DrawerOption[]) {
   return Array.from(new Map(options.map((entry) => [entry.id, entry])).values());
@@ -345,9 +332,12 @@ function FocusedTaskCreationContextDrawerBody(props: {
 export const FocusedView = observer(function FocusedView() {
   const store = useRootStore();
   const productController = React.useMemo(() => new ProductController(store), [store]);
-  const teamController = React.useMemo(() => new TeamController(store), [store]);
   const chartTheme = useEChartsTheme();
   const user = store.session.user;
+  const { assignableUsers, assignableUsersByProductId } = useProductAssignableUsers(
+    productController,
+    user?.focusedProductIds ?? []
+  );
   const [board, setBoard] = React.useState<FocusedBoard>({ hasActiveSprint: false, columns: [] });
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -381,15 +371,16 @@ export const FocusedView = observer(function FocusedView() {
 
   React.useEffect(() => {
     void reloadBoard();
-    void teamController.loadTeams().catch(() => undefined);
     const intervalId = window.setInterval(() => {
       void reloadBoard();
     }, 15000);
     return () => window.clearInterval(intervalId);
-  }, [reloadBoard, teamController]);
+  }, [reloadBoard]);
 
-  const teams = store.teams.items as TeamItem[];
-  const allAssignableUsers = React.useMemo(() => buildAssignableUsers(teams), [teams]);
+  const allAssignableUsers = React.useMemo<DrawerOption[]>(
+    () => assignableUsers.map((entry) => ({ id: entry.id, name: entry.name })),
+    [assignableUsers]
+  );
   const visibleFilterUsers = React.useMemo(
     () => user?.role === "team_member" && user
       ? [{ id: user.id, name: user.name }]
@@ -437,7 +428,7 @@ export const FocusedView = observer(function FocusedView() {
   const canCreateTaskFromFocusedMessage = canCreateTaskFromMessage(user?.role);
 
   const ensureTaskDrawerCatalog = React.useCallback(
-    async (productId: string, teamId?: string | null): Promise<TaskDrawerCatalog> => {
+    async (productId: string): Promise<TaskDrawerCatalog> => {
       const cachedStories = taskDrawerCatalogRef.current.storiesByProductId.get(productId);
       const cachedSprints = taskDrawerCatalogRef.current.sprintsByProductId.get(productId);
 
@@ -461,10 +452,8 @@ export const FocusedView = observer(function FocusedView() {
         taskDrawerCatalogRef.current.sprintsByProductId.set(productId, sprints);
       }
 
-      const nextTeams = teams.length > 0 ? teams : await teamController.loadTeams().catch(() => []);
-      const nextAssignees = teamId
-        ? buildAssignableUsers((nextTeams as TeamItem[]).filter((team) => team.id === teamId))
-        : buildAssignableUsers(nextTeams as TeamItem[]);
+      const nextAssignees = (assignableUsersByProductId[productId] ?? await productController.loadAssignableUsers(productId))
+        .map((entry: AssignableUserOption) => ({ id: entry.id, name: entry.name }));
 
       return {
         stories,
@@ -472,7 +461,7 @@ export const FocusedView = observer(function FocusedView() {
         assignees: nextAssignees
       };
     },
-    [productController, teamController, teams]
+    [assignableUsersByProductId, productController]
   );
 
   React.useEffect(() => {
@@ -568,7 +557,7 @@ export const FocusedView = observer(function FocusedView() {
 
       if (shouldLoadCatalog) {
         try {
-          const catalog = await ensureTaskDrawerCatalog(productId, task.sprint?.teamId);
+          const catalog = await ensureTaskDrawerCatalog(productId);
           stories = catalog.stories;
           sprints = catalog.sprints;
           assignees = canAssignOthers
@@ -624,18 +613,14 @@ export const FocusedView = observer(function FocusedView() {
   const openFocusedCreationDrawer = React.useCallback(
     async (defaultStatus: string, creationContext: FocusedCreationContext) => {
       try {
-        const catalog = await ensureTaskDrawerCatalog(creationContext.productId, creationContext.teamId);
-        const teamAssignees = creationContext.teamId
-          ? catalog.assignees
-          : allAssignableUsers;
-
+        const catalog = await ensureTaskDrawerCatalog(creationContext.productId);
         store.drawers.add(
           new TaskUpsertionDrawer({
             controller: productController,
             productId: creationContext.productId,
             stories: catalog.stories,
             sprints: catalog.sprints,
-            assignees: teamAssignees,
+            assignees: catalog.assignees,
             statusOptions,
             defaultStatus,
             fixedSprintId: creationContext.sprintId,
@@ -650,7 +635,7 @@ export const FocusedView = observer(function FocusedView() {
         setError(getErrorMessage(loadError));
       }
     },
-    [allAssignableUsers, ensureTaskDrawerCatalog, productController, reloadBoard, statusOptions, store.drawers]
+    [ensureTaskDrawerCatalog, productController, reloadBoard, statusOptions, store.drawers]
   );
 
   const handleCreateTask = React.useCallback(
@@ -701,14 +686,18 @@ export const FocusedView = observer(function FocusedView() {
   const getFocusedTaskAssignees = React.useCallback(
     (_task: FocusedTask, assignees: DrawerOption[]) => {
       if (canAssignOthers) {
-        return assignees;
+        const productId = _task.productId ?? _task.product?.id ?? "";
+        const productAssignees = productId
+          ? (assignableUsersByProductId[productId] ?? []).map((entry) => ({ id: entry.id, name: entry.name }))
+          : [];
+        return productAssignees.length > 0 ? productAssignees : assignees;
       }
       if (!canAssignFocusedTask(user?.role) || !user) {
         return [];
       }
       return [{ id: user.id, name: user.name }];
     },
-    [canAssignOthers, user]
+    [assignableUsersByProductId, canAssignOthers, user]
   );
   const isFocusedTaskPending = React.useCallback((taskId: string) => Boolean(pendingTaskIds[taskId]), [pendingTaskIds]);
   const handleFocusedTaskEdit = React.useCallback((task: FocusedTask) => {

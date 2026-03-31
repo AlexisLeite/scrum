@@ -1,7 +1,8 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
 import { useParams } from "react-router-dom";
-import { ProductController, TeamController } from "../../controllers";
+import { ProductController } from "../../controllers";
+import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
 import { useRootStore } from "../../stores/root-store";
 import { StoryUpsertionDrawer } from "../../ui/drawers/product-workspace/StoryUpsertionDrawer";
 import { TaskUpsertionDrawer } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
@@ -14,7 +15,6 @@ import {
 } from "../../lib/permissions";
 import { BacklogStoryCard } from "./backlog/BacklogStoryCard";
 import {
-  buildAssignableUsers,
   buildStatusOptions,
   getErrorMessage,
   getStoryTaskCounts,
@@ -27,7 +27,6 @@ import {
   storySortOptions,
   StorySortOption,
   TaskDetail,
-  TeamItem,
   toEditableTask
 } from "./ProductWorkspaceViewShared";
 
@@ -98,11 +97,11 @@ const backlogFilterCheckboxStyle = {
 export const ProductBacklogView = observer(function ProductBacklogView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
-  const teamController = React.useMemo(() => new TeamController(store), [store]);
   const { productId } = useParams<{ productId: string }>();
   const user = store.session.user;
   const canManageStories = canEditStories(user?.role);
   const canManageTasks = canCreateTasks(user?.role);
+  const { assignableUsers } = useProductAssignableUsers(controller, productId ? [productId] : []);
   const [search, setSearch] = React.useState("");
   const [sortBy, setSortBy] = React.useState<StorySortOption>("title-asc");
   const [expandedStoryIds, setExpandedStoryIds] = React.useState<Record<string, boolean>>({});
@@ -122,9 +121,8 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
     void controller.loadStories(productId);
     if (canManageTasks) {
       void controller.loadSprints(productId);
-      void teamController.loadTeams();
     }
-  }, [canManageTasks, controller, productId, teamController]);
+  }, [canManageTasks, controller, productId]);
 
   if (!productId) return null;
 
@@ -252,15 +250,15 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   };
 
   const loadTaskDrawerContext = async () => {
-    const [sprints, teams] = await Promise.all([
+    const [sprints, nextAssignableUsers] = await Promise.all([
       controller.loadSprints(productId),
-      teamController.loadTeams()
+      assignableUsers.length > 0 ? Promise.resolve(assignableUsers) : controller.loadAssignableUsers(productId)
     ]);
 
     return {
       stories: store.stories.items as StoryItem[],
       sprints: sprints as SprintItem[],
-      assignees: buildAssignableUsers(teams as TeamItem[])
+      assignees: nextAssignableUsers.map((entry) => ({ id: entry.id, name: entry.name }))
     };
   };
 

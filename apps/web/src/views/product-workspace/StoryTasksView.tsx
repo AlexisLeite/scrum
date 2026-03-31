@@ -1,7 +1,8 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
 import { useParams } from "react-router-dom";
-import { ProductController, TeamController } from "../../controllers";
+import { ProductController } from "../../controllers";
+import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
 import { useRootStore } from "../../stores/root-store";
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
 import { TaskCompletionDialog } from "../../ui/drawers/product-workspace/TaskCompletionDialog";
@@ -14,23 +15,21 @@ import {
   canEditTaskFields
 } from "../../lib/permissions";
 import {
-  buildAssignableUsers,
   buildStatusOptions,
   getErrorMessage,
   normalizeSearchValue,
   SprintItem,
   StoryItem,
-  TaskItem,
-  TeamItem
+  TaskItem
 } from "./ProductWorkspaceViewShared";
 
 export const StoryTasksView = observer(function StoryTasksView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
-  const teamController = React.useMemo(() => new TeamController(store), [store]);
   const { productId, storyId } = useParams<{ productId: string; storyId: string }>();
   const user = store.session.user;
   const canManageTasks = canCreateTasks(user?.role);
+  const { assignableUsers } = useProductAssignableUsers(controller, productId ? [productId] : []);
   const [formError, setFormError] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [updatingTaskId, setUpdatingTaskId] = React.useState("");
@@ -41,8 +40,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
     void controller.loadTasks(storyId);
     void controller.loadSprints(productId);
     void controller.loadStories(productId);
-    void teamController.loadTeams();
-  }, [controller, productId, storyId, teamController]);
+  }, [controller, productId, storyId]);
 
   if (!storyId || !productId) return null;
 
@@ -50,8 +48,6 @@ export const StoryTasksView = observer(function StoryTasksView() {
   const stories = store.stories.items as StoryItem[];
   const currentStory = stories.find((story) => story.id === storyId);
   const sprints = store.sprints.items as SprintItem[];
-  const teams = store.teams.items as TeamItem[];
-  const assignableUsers = buildAssignableUsers(teams);
   const sprintNameById = new Map(sprints.map((sprint) => [sprint.id, sprint.name]));
   const assigneeNameById = new Map(assignableUsers.map((entry) => [entry.id, entry.name]));
   const statusOptions = buildStatusOptions(...tasks.map((task) => task.status));

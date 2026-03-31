@@ -40,7 +40,7 @@ export class TeamScopeService {
   }
 
   async getAccessibleTeamIds(_user: ScopedUser): Promise<string[] | null> {
-    return [];
+    return null;
   }
 
   async assertProductReadable(user: ScopedUser, productId: string): Promise<void> {

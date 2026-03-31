@@ -2,6 +2,7 @@
 import { observer } from "mobx-react-lite";
 import { NavLink, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ProductController, TeamController } from "../../controllers";
+import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
 import {
   productBacklogPath,
   productBoardPath,
@@ -106,19 +107,6 @@ type TaskMessageNode = {
   }>;
   replies: TaskMessageNode[];
 };
-
-function buildAssignableUsers(teams: TeamItem[]) {
-  return Array.from(
-    new Map(
-      teams.flatMap((team) =>
-        (team.members ?? []).map((member) => [
-          member.userId,
-          { id: member.userId, name: member.user?.name ?? member.userId }
-        ])
-      )
-    ).values()
-  );
-}
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return "-";
@@ -455,11 +443,11 @@ function TaskMessageThread(props: {
 export const TaskDefinitionView = observer(function TaskDefinitionView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
-  const teamController = React.useMemo(() => new TeamController(store), [store]);
   const { productId, taskId } = useParams<{ productId: string; taskId: string }>();
   const user = store.session.user;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { assignableUsers } = useProductAssignableUsers(controller, productId ? [productId] : []);
   const [taskDetail, setTaskDetail] = React.useState<DetailTask | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -474,13 +462,13 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
     try {
       const detail = await controller.loadTaskDetail(taskId);
       setTaskDetail(detail as DetailTask);
-      await Promise.all([controller.loadStories(productId), controller.loadSprints(productId), teamController.loadTeams()]);
+      await Promise.all([controller.loadStories(productId), controller.loadSprints(productId)]);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "No se pudo cargar la definicion de la tarea.");
     } finally {
       setLoading(false);
     }
-  }, [controller, productId, taskId, teamController]);
+  }, [controller, productId, taskId]);
 
   React.useEffect(() => {
     void loadTaskDetail();
@@ -491,16 +479,12 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
     void controller.loadBoard(taskDetail.sprint.id);
   }, [controller, taskDetail?.sprint?.id]);
 
-  const teams = store.teams.items as TeamItem[];
   const stories = store.stories.items as StoryItem[];
   const sprints = store.sprints.items as SprintItem[];
-
-  const assignees = React.useMemo(() => {
-    if (!taskDetail?.sprint?.teamId) {
-      return buildAssignableUsers(teams);
-    }
-    return buildAssignableUsers(teams.filter((team) => team.id === taskDetail.sprint?.teamId));
-  }, [taskDetail?.sprint?.teamId, teams]);
+  const assignees = React.useMemo(
+    () => assignableUsers.map((entry) => ({ id: entry.id, name: entry.name })),
+    [assignableUsers]
+  );
 
   const statusOptions = React.useMemo(
     () => buildStatusOptions(taskDetail?.status, ...(store.board?.columns ?? []).map((column) => column.name)),

@@ -593,6 +593,14 @@ export interface TeamSummaryDto {
   name: string;
 }
 
+export interface ProductAssignableUserDto {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+  roleKeys: string[];
+}
+
 export interface AdminUserDto {
   id: string;
   email: string;

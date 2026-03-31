@@ -160,21 +160,11 @@ async function openInternalReference(
       if (detailProductId) {
         await Promise.all([
           productController.loadStories(detailProductId),
-          productController.loadSprints(detailProductId),
-          teamController.loadTeams()
+          productController.loadSprints(detailProductId)
         ]);
 
-        const teams = store.teams.items as Array<{ members?: Array<{ userId: string; user?: { name?: string } }> }>;
-        const assignees = Array.from(
-          new Map(
-            teams.flatMap((team) =>
-              (team.members ?? []).map((member) => [
-                member.userId,
-                { id: member.userId, name: member.user?.name ?? member.userId }
-              ])
-            )
-          ).values()
-        );
+        const assignees = (await productController.loadAssignableUsers(detailProductId))
+          .map((entry) => ({ id: entry.id, name: entry.name }));
 
         const statusOptions = buildStatusOptions(detail.status);
         const stories = (store.stories.items as Array<{ id: string; title: string }>).map((entry) => ({ id: entry.id, title: entry.title }));

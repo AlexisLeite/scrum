@@ -993,7 +993,8 @@ export class IndicatorsService {
   }
 
   private async getScopedTeamIds(user: AuthUser): Promise<string[] | null> {
-    return this.teamScopeService.getAccessibleTeamIds(user);
+    const scopedTeamIds = await this.teamScopeService.getAccessibleTeamIds(user);
+    return scopedTeamIds && scopedTeamIds.length === 0 ? null : scopedTeamIds;
   }
 
   private async assertProductVisible(user: AuthUser, productId: string) {

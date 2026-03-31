@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { ProductController, TeamController } from "../../../controllers";
+import { ProductController } from "../../../controllers";
+import { useProductAssignableUsers } from "../../../hooks/useProductAssignableUsers";
 import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productStoryDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
@@ -47,24 +48,6 @@ type SprintOption = {
   id: string;
   name: string;
 };
-
-type TeamItem = {
-  id: string;
-  members?: Array<{ userId: string; user?: { id: string; name: string; email: string } }>;
-};
-
-function buildAssignableUsers(teams: TeamItem[]) {
-  return Array.from(
-    new Map(
-      teams.flatMap((team) =>
-        (team.members ?? []).map((member) => [
-          member.userId,
-          { id: member.userId, name: member.user?.name ?? member.userId }
-        ])
-      )
-    ).values()
-  );
-}
 
 function statusClass(status: string): string {
   const normalized = status.toLowerCase().replace(/\s+/g, "-").replace(/_/g, "-");
@@ -121,7 +104,7 @@ export function StoryUpsertionForm(props: {
   const { controller, productId, story, onDone } = options;
   const store = useRootStore();
   const navigate = useNavigate();
-  const teamController = React.useMemo(() => new TeamController(store), [store]);
+  const { assignableUsers } = useProductAssignableUsers(controller, [productId]);
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [taskError, setTaskError] = React.useState("");
@@ -170,8 +153,10 @@ export function StoryUpsertionForm(props: {
 
   const tasks = store.tasks.items as StoryTask[];
   const sprints = store.sprints.items as SprintOption[];
-  const teams = store.teams.items as TeamItem[];
-  const assignees = buildAssignableUsers(teams);
+  const assignees = React.useMemo(
+    () => assignableUsers.map((entry) => ({ id: entry.id, name: entry.name })),
+    [assignableUsers]
+  );
   const sprintNameById = new Map(sprints.map((entry) => [entry.id, entry.name]));
   const assigneeNameById = new Map(assignees.map((entry) => [entry.id, entry.name]));
   const statusOptions = buildStatusOptions(...tasks.map((task) => task.status));
@@ -207,13 +192,13 @@ export function StoryUpsertionForm(props: {
     setTasksLoading(true);
     setTaskError("");
     try {
-      await Promise.all([controller.loadTasks(story.id), controller.loadSprints(productId), teamController.loadTeams()]);
+      await Promise.all([controller.loadTasks(story.id), controller.loadSprints(productId)]);
     } catch (loadError) {
       setTaskError(loadError instanceof Error ? loadError.message : "No se pudieron cargar las tareas de la historia.");
     } finally {
       setTasksLoading(false);
     }
-  }, [controller, productId, story, teamController]);
+  }, [controller, productId, story]);
 
   React.useEffect(() => {
     if (!story) {

@@ -3,6 +3,8 @@ import { observer } from "mobx-react-lite";
 import ReactECharts from "echarts-for-react";
 import { useParams } from "react-router-dom";
 import { ProductController, TeamController } from "../../controllers";
+import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
+import { filterAssignableUsersByTeam } from "../../lib/assignable-users";
 import { useRootStore } from "../../stores/root-store";
 import { TaskUpsertionDrawer } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { KanbanBoard } from "../../ui/kanban";
@@ -58,13 +60,11 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const stories = store.stories.items as StoryItem[];
   const sprints = store.sprints.items as SprintItem[];
   const teams = store.teams.items as TeamItem[];
+  const { assignableUsers } = useProductAssignableUsers(controller, [productId]);
   const currentSprint = sprints.find((sprint) => sprint.id === sprintId);
   const isClosedSprint = currentSprint?.status === "COMPLETED" || currentSprint?.status === "CANCELLED";
   const boardReadOnly = currentSprint?.status !== "ACTIVE" || !canManageSprintBoard;
-  const assignees = buildAssignableUsers(teams);
-  const boardAssignees = currentSprint
-    ? buildAssignableUsers(teams.filter((team) => team.id === currentSprint.teamId))
-    : assignees;
+  const boardAssignees = filterAssignableUsersByTeam(assignableUsers, teams, currentSprint?.teamId);
   const workflowStatuses = (store.board?.columns ?? []).map((column) => column.name);
   const statusOptions = workflowStatuses.length > 0 ? workflowStatuses : [...DEFAULT_TASK_STATUS_OPTIONS];
 
