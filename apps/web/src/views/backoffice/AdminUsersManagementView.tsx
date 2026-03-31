@@ -45,11 +45,6 @@ const statsWindows = ["week", "month", "semester", "year"] as const;
 type UserSection = typeof userSections[number]["id"];
 type StatsWindow = typeof statsWindows[number];
 
-function statusClass(status: string): string {
-  const normalized = status.toLowerCase().replace(/\s+/g, "-").replace(/_/g, "-");
-  return `status status-${normalized}`;
-}
-
 function normalizeText(value: string | null | undefined): string {
   return (value ?? "")
     .normalize("NFD")
@@ -218,6 +213,8 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
   const [catalogError, setCatalogError] = React.useState("");
 
   const viewer = store.session.user;
+  const canCreateUsers = Boolean(viewer?.systemPermissions.includes("system.administration.users.create"));
+  const canUpdateUsers = Boolean(viewer?.systemPermissions.includes("system.administration.users.update"));
   const users = store.users.items as AdminUserDto[];
   const selectedMode = searchParams.get("mode") === "create" ? "create" : "manage";
   const selectedSection = parseUserSection(searchParams.get("section"));
@@ -541,7 +538,7 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
           </div>
           <div className="row-actions compact">
             <span className="pill">{users.length} usuarios</span>
-            {viewer ? (
+            {canCreateUsers ? (
               <button className="btn btn-primary" type="button" onClick={openCreateMode}>
                 Nuevo usuario
               </button>
@@ -557,7 +554,7 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
               <h3>Listado</h3>
               <p className="muted">{filteredUsers.length} de {users.length} usuarios</p>
             </div>
-            <button type="button" className="btn btn-secondary" onClick={openCreateMode}>
+            <button type="button" className="btn btn-secondary" onClick={openCreateMode} disabled={!canCreateUsers}>
               Alta
             </button>
           </div>
@@ -587,11 +584,15 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
                       <strong>{user.name}</strong>
                       <p className="muted">{user.email}</p>
                     </div>
-                    <span className={statusClass(user.role ?? "team_member")}>{user.role ?? "sin rol"}</span>
+                    <span className="pill">
+                      {user.roleKeys.length > 0 ? `${user.roleKeys.length} roles` : "Sin roles"}
+                    </span>
                   </div>
                   <div className="admin-user-list-item-meta">
                     <span className="pill">{(user.products ?? []).length} productos</span>
-                    <span className="pill">{user.roleKeys.length} roles</span>
+                    {(user.products ?? []).some((assignment) => assignment.isSystem) ? (
+                      <span className="pill">Incluye SYSTEM</span>
+                    ) : null}
                   </div>
                 </button>
               );
@@ -661,7 +662,7 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
               </div>
 
               <div className="row-actions">
-                <button type="button" className="btn btn-primary" onClick={() => void createUser()} disabled={createSaving}>
+                <button type="button" className="btn btn-primary" onClick={() => void createUser()} disabled={!canCreateUsers || createSaving}>
                   {createSaving ? "Creando..." : "Crear usuario"}
                 </button>
               </div>
@@ -682,9 +683,11 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
                   <p className="muted">{selectedUser.email}</p>
                 </div>
                 <div className="admin-user-summary-pills">
-                  <span className={statusClass(selectedUser.role ?? "team_member")}>{selectedUser.role ?? "sin rol"}</span>
                   <span className="pill">{selectedUser.roleKeys.length} roles</span>
                   <span className="pill">{(selectedUser.products ?? []).length} productos</span>
+                  {(selectedUser.products ?? []).some((assignment) => assignment.isSystem) ? (
+                    <span className="pill">Incluye SYSTEM</span>
+                  ) : null}
                 </div>
               </div>
 
@@ -719,8 +722,8 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
                       <p>Roles asignados</p>
                     </article>
                     <article className="metric">
-                      <h3>{selectedUser.role ?? "sin rol"}</h3>
-                      <p>Rol dominante</p>
+                      <h3>{(selectedUser.products ?? []).filter((assignment) => assignment.isSystem).length}</h3>
+                      <p>Asignaciones SYSTEM</p>
                     </article>
                   </div>
                   <div className="stack-sm">
@@ -738,7 +741,12 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
                     <button type="button" className="btn btn-secondary" onClick={() => selectSection("access")}>
                       Gestionar accesos
                     </button>
-                    <button type="button" className="btn btn-secondary" onClick={() => selectSection("security")}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => selectSection("security")}
+                      disabled={!canUpdateUsers}
+                    >
                       Cambiar contraseña
                     </button>
                     <button type="button" className="btn btn-secondary" onClick={() => selectSection("activity")}>
@@ -766,13 +774,13 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
                     catalog={catalog}
                     draft={assignmentDraft}
                     onToggle={toggleSelectedAssignment}
-                    disabled={assignmentLoading || assignmentSaving}
+                    disabled={!canUpdateUsers || assignmentLoading || assignmentSaving}
                     title="Asignaciones actuales"
                     subtitle="Activa o desactiva roles por producto y guarda al terminar."
                   />
 
                   <div className="row-actions">
-                    <button type="button" className="btn btn-primary" onClick={() => void saveAssignments()} disabled={assignmentSaving}>
+                    <button type="button" className="btn btn-primary" onClick={() => void saveAssignments()} disabled={!canUpdateUsers || assignmentSaving}>
                       {assignmentSaving ? "Guardando..." : "Guardar accesos"}
                     </button>
                   </div>
@@ -796,7 +804,7 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
                         onChange={(event) => setPasswordDraft(event.target.value)}
                         autoComplete="new-password"
                         placeholder="Al menos 8 caracteres"
-                        disabled={passwordSaving}
+                        disabled={!canUpdateUsers || passwordSaving}
                       />
                     </label>
                     <label>
@@ -807,12 +815,12 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
                         onChange={(event) => setPasswordConfirm(event.target.value)}
                         autoComplete="new-password"
                         placeholder="Repetir contraseña"
-                        disabled={passwordSaving}
+                        disabled={!canUpdateUsers || passwordSaving}
                       />
                     </label>
                   </div>
                   <div className="row-actions">
-                    <button type="button" className="btn btn-primary" onClick={() => void savePassword()} disabled={passwordSaving}>
+                    <button type="button" className="btn btn-primary" onClick={() => void savePassword()} disabled={!canUpdateUsers || passwordSaving}>
                       {passwordSaving ? "Guardando..." : "Cambiar contraseña"}
                     </button>
                   </div>

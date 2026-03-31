@@ -16,11 +16,11 @@ export function canManageUsers(role: Role | null | undefined): boolean {
 }
 
 export function canChangeFocusedTaskStatus(role: Role | null | undefined): boolean {
-  return role === "platform_admin" || role === "scrum_master" || role === "team_member";
+  return role === "platform_admin" || role === "scrum_master" || role === "team_member" || role === "qa_member";
 }
 
 export function canAssignFocusedTask(role: Role | null | undefined): boolean {
-  return role === "platform_admin" || role === "scrum_master" || role === "team_member";
+  return role === "platform_admin" || role === "scrum_master" || role === "team_member" || role === "qa_member";
 }
 
 export function canAssignFocusedTaskToOthers(role: Role | null | undefined): boolean {

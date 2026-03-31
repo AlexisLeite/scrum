@@ -141,7 +141,10 @@ export class ProductsService {
   }
 
   async listAssignableUsers(productId: string, user: AuthUser) {
-    this.permissionsService.assertProductReadable(user, productId);
+    const canReadUsers = this.permissionsService.hasSystemPermission(user, "system.administration.users.read");
+    if (!canReadUsers) {
+      this.permissionsService.assertProductReadable(user, productId);
+    }
 
     const memberships = await this.prisma.productMember.findMany({
       where: {

@@ -3,6 +3,12 @@ import { observer } from "mobx-react-lite";
 import { NavLink } from "react-router-dom";
 import { ProductController } from "../../controllers";
 import {
+  canCreateProductsAdministration,
+  canDeleteProductsAdministration,
+  canUpdateProductsAdministration,
+  canViewProductBacklog
+} from "../../lib/permissions";
+import {
   productOverviewPath,
 } from "../../routes/product-routes";
 import { useRootStore } from "../../stores/root-store";
@@ -21,8 +27,10 @@ function normalizeText(value: string | null | undefined): string {
 export const ProductsBackofficeView = observer(function ProductsBackofficeView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
-  const role = store.session.user?.role;
-  const canManageProducts = role === "platform_admin" || role === "product_owner";
+  const session = store.session.user;
+  const canCreateProducts = canCreateProductsAdministration(session);
+  const canEditProducts = canUpdateProductsAdministration(session);
+  const canDeleteProducts = canDeleteProductsAdministration(session);
   const [search, setSearch] = React.useState("");
 
   React.useEffect(() => { void controller.loadProducts(); }, [controller]);
@@ -68,7 +76,7 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
       <section className="card">
         <div className="stack-h pb-4">
           <h3>Catalogo</h3>
-          {canManageProducts ? <button className="btn btn-primary" onClick={openCreate}>+</button> : null}
+          {canCreateProducts ? <button className="btn btn-primary" onClick={openCreate}>+</button> : null}
         </div>
         <label>
           Filtrar productos
@@ -97,9 +105,11 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
                 <td><MarkdownPreview markdown={product.description} compact emptyLabel="-" /></td>
                 <td>
                   <div className="row-actions compact">
-                    <NavLink to={productOverviewPath(product.id)} className="btn btn-primary">Abrir workspace</NavLink>
-                    {canManageProducts ? <button className="btn btn-secondary" onClick={() => openEdit(product)}>Editar</button> : null}
-                    {canManageProducts ? <button className="btn btn-secondary" onClick={() => void removeProduct(product)}>Eliminar</button> : null}
+                    {canViewProductBacklog(session, product.id) ? (
+                      <NavLink to={productOverviewPath(product.id)} className="btn btn-primary">Abrir workspace</NavLink>
+                    ) : null}
+                    {canEditProducts ? <button className="btn btn-secondary" onClick={() => openEdit(product)}>Editar</button> : null}
+                    {canDeleteProducts ? <button className="btn btn-secondary" onClick={() => void removeProduct(product)}>Eliminar</button> : null}
                   </div>
                 </td>
               </tr>

@@ -46,7 +46,8 @@ export function isRole(value: string | null | undefined): value is Role {
   return value === "platform_admin"
     || value === "product_owner"
     || value === "scrum_master"
-    || value === "team_member";
+    || value === "team_member"
+    || value === "qa_member";
 }
 
 export function canAccessAdministration(subject: Role | SessionAccess | null | undefined): boolean {
@@ -194,12 +195,36 @@ export function canViewProductMetrics(
   return hasAnyProductPermission(subject, productId, ["product.admin.kpis.read"]);
 }
 
+export function canCreateProductsAdministration(subject: Role | SessionAccess | null | undefined): boolean {
+  if (!isSessionAccess(subject)) {
+    return subject === "platform_admin";
+  }
+
+  return hasAnySystemPermission(subject, ["system.administration.products.create"]);
+}
+
+export function canUpdateProductsAdministration(subject: Role | SessionAccess | null | undefined): boolean {
+  if (!isSessionAccess(subject)) {
+    return subject === "platform_admin";
+  }
+
+  return hasAnySystemPermission(subject, ["system.administration.products.update"]);
+}
+
+export function canDeleteProductsAdministration(subject: Role | SessionAccess | null | undefined): boolean {
+  if (!isSessionAccess(subject)) {
+    return subject === "platform_admin";
+  }
+
+  return hasAnySystemPermission(subject, ["system.administration.products.delete"]);
+}
+
 export function canManageUsers(role: Role | null | undefined): boolean {
   return canViewUsersAdministration(role);
 }
 
 export function canManageProducts(role: Role | null | undefined): boolean {
-  return role === "platform_admin" || role === "product_owner";
+  return role === "platform_admin";
 }
 
 export function canManageDelivery(role: Role | null | undefined): boolean {
@@ -246,7 +271,7 @@ export function canCommentOnVisibleTask(
   if (!role) {
     return false;
   }
-  if (role === "platform_admin" || role === "product_owner" || role === "scrum_master") {
+  if (role === "platform_admin" || role === "product_owner" || role === "scrum_master" || role === "qa_member") {
     return true;
   }
   return Boolean(userId && task.sprintId) && (!task.assigneeId || task.assigneeId === userId);
@@ -260,7 +285,7 @@ export function canMoveVisibleTask(
   if (!role) {
     return false;
   }
-  if (role === "platform_admin" || role === "scrum_master") {
+  if (role === "platform_admin" || role === "scrum_master" || role === "qa_member") {
     return true;
   }
   if (role === "team_member") {
@@ -271,11 +296,11 @@ export function canMoveVisibleTask(
 
 export function canClaimTask(role: Role | null | undefined, task: TaskPermissionContext): boolean {
   return Boolean(task.sprintId && !task.assigneeId)
-    && (role === "platform_admin" || role === "scrum_master" || role === "team_member");
+    && (role === "platform_admin" || role === "scrum_master" || role === "team_member" || role === "qa_member");
 }
 
 export function canReassignTask(role: Role | null | undefined): boolean {
-  return role === "platform_admin" || role === "scrum_master";
+  return role === "platform_admin" || role === "scrum_master" || role === "qa_member";
 }
 
 export function isTaskReadonly(role: Role | null | undefined): boolean {

@@ -16,27 +16,26 @@ type ProductItem = {
   key: string;
   description: string | null;
 };
-type TeamOption = { id: string; name: string; description: string | null };
+type ProductAccessUser = {
+  id: string;
+  name: string;
+  email?: string | null;
+  roleKeys: string[];
+};
 type ProductCloseSnapshot = {
   name: string;
   key: string;
   description: string;
-  linkedTeamIds: string[];
 };
 
 function normalizeProductCloseSnapshot(snapshot: ProductCloseSnapshot): ProductCloseSnapshot {
-  return {
-    ...snapshot,
-    linkedTeamIds: [...snapshot.linkedTeamIds].sort()
-  };
+  return snapshot;
 }
 
 function productSnapshotsEqual(left: ProductCloseSnapshot, right: ProductCloseSnapshot) {
   return left.name === right.name
     && left.key === right.key
-    && left.description === right.description
-    && left.linkedTeamIds.length === right.linkedTeamIds.length
-    && left.linkedTeamIds.every((teamId, index) => teamId === right.linkedTeamIds[index]);
+    && left.description === right.description;
 }
 
 function errorMessage(error: unknown): string {
@@ -109,14 +108,12 @@ export function ProductUpsertionForm(props: {
   const [error, setError] = React.useState("");
   const [activity, setActivity] = React.useState<ActivityItem[]>([]);
   const [activityError, setActivityError] = React.useState("");
-  const [teams, setTeams] = React.useState<TeamOption[]>([]);
-  const [linkedTeamIds, setLinkedTeamIds] = React.useState<string[]>([]);
-  const [teamsError, setTeamsError] = React.useState("");
+  const [accessUsers, setAccessUsers] = React.useState<ProductAccessUser[]>([]);
+  const [accessError, setAccessError] = React.useState("");
   const [closeBaseline, setCloseBaseline] = React.useState<ProductCloseSnapshot>(() => normalizeProductCloseSnapshot({
     name: product?.name ?? "",
     key: product?.key ?? "",
-    description: product?.description ?? "",
-    linkedTeamIds: [] as string[]
+    description: product?.description ?? ""
   }));
   const draft = useDraftPersistence({
     userId: store.session.user?.id,
@@ -138,10 +135,9 @@ export function ProductUpsertionForm(props: {
     () => normalizeProductCloseSnapshot({
       name,
       key,
-      description,
-      linkedTeamIds: [...linkedTeamIds].sort()
+      description
     }),
-    [description, key, linkedTeamIds, name]
+    [description, key, name]
   );
   const hasUnsavedChanges = !isHydratingRemote && !productSnapshotsEqual(currentCloseSnapshot, closeBaseline);
 
@@ -155,8 +151,7 @@ export function ProductUpsertionForm(props: {
     setCloseBaseline(normalizeProductCloseSnapshot({
       name: product?.name ?? "",
       key: product?.key ?? "",
-      description: product?.description ?? "",
-      linkedTeamIds: [] as string[]
+      description: product?.description ?? ""
     }));
   }, [product?.id]);
 
@@ -184,25 +179,22 @@ export function ProductUpsertionForm(props: {
     let active = true;
     void (async () => {
       try {
-        const [allTeams, productTeams] = await Promise.all([
-          apiClient.get<TeamOption[]>("/teams"),
-          apiClient.get<TeamOption[]>(`/products/${product.id}/teams`)
-        ]);
+        const users = await controller.loadAssignableUsers(product.id);
         if (!active) return;
-        setTeams(allTeams);
-        setLinkedTeamIds(productTeams.map((team) => team.id));
-        setCloseBaseline((currentBaseline) => normalizeProductCloseSnapshot({
-          ...currentBaseline,
-          linkedTeamIds: productTeams.map((team) => team.id)
-        }));
-        setTeamsError("");
+        setAccessUsers(users.map((user) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          roleKeys: user.roleKeys ?? []
+        })));
+        setAccessError("");
       } catch (loadError) {
         if (!active) return;
-        setTeamsError(errorMessage(loadError));
+        setAccessError(errorMessage(loadError));
       }
     })();
     return () => { active = false; };
-  }, [product]);
+  }, [controller, product]);
 
   const submit = React.useCallback(async () => {
     if (formDisabled) return;
@@ -243,31 +235,6 @@ export function ProductUpsertionForm(props: {
     }
   }, [clearDraft, close, closeOnSubmit, controller, description, formDisabled, isEditing, key, name, onSaved, product]);
 
-  const toggleLinkedTeam = React.useCallback((teamId: string) => {
-    setLinkedTeamIds((prev) => prev.includes(teamId)
-      ? prev.filter((id) => id !== teamId)
-      : [...prev, teamId]
-    );
-  }, []);
-
-  const saveTeams = React.useCallback(async () => {
-    if (!product || saving) return;
-    setSaving(true);
-    setTeamsError("");
-    try {
-      await apiClient.patch(`/products/${product.id}/teams`, { teamIds: linkedTeamIds });
-      setCloseBaseline((currentBaseline) => normalizeProductCloseSnapshot({
-        ...currentBaseline,
-        linkedTeamIds
-      }));
-      if (onSaved) await onSaved();
-    } catch (saveError) {
-      setTeamsError(errorMessage(saveError));
-    } finally {
-      setSaving(false);
-    }
-  }, [linkedTeamIds, onSaved, product, saving]);
-
   return (
     <div className="form-grid">
       <label>
@@ -298,30 +265,26 @@ export function ProductUpsertionForm(props: {
         <section className="card">
           <div className="section-head">
             <div>
-              <h4>Equipos vinculados</h4>
-              <p className="muted">Este vinculo define que equipos pueden operar el producto y ver sus tareas en Focused.</p>
+              <h4>Usuarios con acceso</h4>
+              <p className="muted">Este producto ya no gestiona equipos. Aqui se muestran los usuarios con acceso y los roles que tienen en el producto.</p>
             </div>
           </div>
-          <div className="metrics-grid">
-            {teams.map((team) => (
-              <label key={team.id} className="check-option">
-                <input
-                  type="checkbox"
-                  checked={linkedTeamIds.includes(team.id)}
-                  onChange={() => toggleLinkedTeam(team.id)}
-                  disabled={saving}
-                />
-                {team.name}
-              </label>
+          <div className="stack-sm">
+            {accessUsers.map((user) => (
+              <article key={user.id} className="definition-note">
+                <strong>{user.name}</strong>
+                <span className="muted">{user.email ?? "Sin email"}</span>
+                <div className="admin-user-list-item-meta">
+                  {user.roleKeys.map((roleKey) => (
+                    <span key={roleKey} className="pill">{roleKey}</span>
+                  ))}
+                  {user.roleKeys.length === 0 ? <span className="pill">Sin roles</span> : null}
+                </div>
+              </article>
             ))}
-            {teams.length === 0 ? <p className="muted">No hay equipos disponibles.</p> : null}
+            {accessUsers.length === 0 ? <p className="muted">No hay usuarios con acceso asignado a este producto.</p> : null}
           </div>
-          <div className="row-actions">
-            <button className="btn btn-secondary" disabled={saving} onClick={() => void saveTeams()}>
-              Guardar equipos
-            </button>
-          </div>
-          {teamsError ? <p className="teamsError error-text">{teamsError}</p> : null}
+          {accessError ? <p className="error-text">{accessError}</p> : null}
         </section>
       ) : null}
       {isEditing && product ? (

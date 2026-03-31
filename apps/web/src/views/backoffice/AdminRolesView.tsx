@@ -106,6 +106,9 @@ const ADMIN_PANELS = [
 export const AdminRolesView = observer(function AdminRolesView() {
   const store = useRootStore();
   const admin = React.useMemo(() => new AdminController(store), [store]);
+  const viewer = store.session.user;
+  const canCreateRoles = Boolean(viewer?.systemPermissions.includes("system.administration.roles.create"));
+  const canUpdateRoles = Boolean(viewer?.systemPermissions.includes("system.administration.roles.update"));
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -194,11 +197,14 @@ export const AdminRolesView = observer(function AdminRolesView() {
   }, [navigate, searchParams, setSearchParams]);
 
   const startCreate = React.useCallback(() => {
+    if (!canCreateRoles) {
+      return;
+    }
     setSelectedRoleId("__new__");
     setDraft(defaultDraft());
     setSaveError("");
     setSaveSuccess("");
-  }, []);
+  }, [canCreateRoles]);
 
   const selectRole = React.useCallback((role: RoleDefinitionDto) => {
     setSelectedRoleId(role.id);
@@ -239,6 +245,15 @@ export const AdminRolesView = observer(function AdminRolesView() {
       return;
     }
 
+    if (selectedRoleId === "__new__" && !canCreateRoles) {
+      setSaveError("No tienes permisos para crear roles.");
+      return;
+    }
+    if (selectedRoleId !== "__new__" && !canUpdateRoles) {
+      setSaveError("No tienes permisos para editar roles.");
+      return;
+    }
+
     setSaving(true);
     setSaveError("");
     setSaveSuccess("");
@@ -264,7 +279,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
     } finally {
       setSaving(false);
     }
-  }, [admin, draft.description, draft.permissions, draft.scope, draft.title, saving, selectedRoleId]);
+  }, [admin, canCreateRoles, canUpdateRoles, draft.description, draft.permissions, draft.scope, draft.title, saving, selectedRoleId]);
 
   return (
     <div className="stack-lg">
@@ -288,7 +303,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
                 <h3>Roles</h3>
                 <p className="muted">{filteredRoles.length} de {roles.length} roles</p>
               </div>
-              <button type="button" className="btn btn-primary" onClick={startCreate}>
+              <button type="button" className="btn btn-primary" onClick={startCreate} disabled={!canCreateRoles}>
                 Nuevo rol
               </button>
             </div>
@@ -366,6 +381,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
                         <input
                           value={draft.title}
                           onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                          disabled={selectedRoleId === "__new__" ? !canCreateRoles : !canUpdateRoles}
                         />
                       </label>
                       <label>
@@ -377,6 +393,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
                             scope: event.target.value as RoleScope,
                             permissions: []
                           }))}
+                          disabled={selectedRoleId === "__new__" ? !canCreateRoles : !canUpdateRoles}
                         >
                           <option value="PRODUCT">PRODUCT</option>
                           <option value="SYSTEM">SYSTEM</option>
@@ -389,6 +406,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
                         value={draft.description}
                         onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
                         rows={4}
+                        disabled={selectedRoleId === "__new__" ? !canCreateRoles : !canUpdateRoles}
                       />
                     </label>
                   </section>
@@ -398,13 +416,18 @@ export const AdminRolesView = observer(function AdminRolesView() {
                       scope={draft.scope}
                       permissions={draft.permissions}
                       onToggle={togglePermission}
-                      disabled={saving}
+                      disabled={saving || (selectedRoleId === "__new__" ? !canCreateRoles : !canUpdateRoles)}
                     />
                   </section>
                 </div>
 
                 <div className="row-actions">
-                  <button type="button" className="btn btn-primary" onClick={() => void saveRole()} disabled={saving}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void saveRole()}
+                    disabled={saving || (selectedRoleId === "__new__" ? !canCreateRoles : !canUpdateRoles)}
+                  >
                     {saving ? "Guardando..." : "Guardar rol"}
                   </button>
                 </div>
