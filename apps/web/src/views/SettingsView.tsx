@@ -123,7 +123,7 @@ export const SettingsView = observer(function SettingsView() {
           <div className="definition-hero-context">
             <span className="brand-badge">{getUserInitials(name || user.name)}</span>
             <span className="pill">{user.email}</span>
-            <span className={`status status-${user.role.replace(/_/g, "-")}`}>{user.role}</span>
+            <span className={`status status-${(user.role ?? "team_member").replace(/_/g, "-")}`}>{user.role ?? "team_member"}</span>
           </div>
         </div>
       </section>

@@ -6,8 +6,14 @@ export default defineConfig(() => ({
   envDir: "../..",
   plugins: [react()],
   resolve: {
-    alias:
-      process.env.BUILD_DEV_MODE === "1"
+    alias: [
+      {
+        find: /^@scrum\/contracts$/,
+        replacement: fileURLToPath(
+          new URL("../../packages/contracts/src/index.ts", import.meta.url)
+        )
+      },
+      ...(process.env.BUILD_DEV_MODE === "1"
         ? [
             {
               find: /^react-dom$/,
@@ -22,7 +28,8 @@ export default defineConfig(() => ({
               )
             }
           ]
-        : []
+        : [])
+    ]
   },
   server: {
     host: "127.0.0.1",

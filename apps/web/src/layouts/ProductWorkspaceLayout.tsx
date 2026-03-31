@@ -1,6 +1,7 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
 import { NavLink, Navigate, Outlet, useLocation, useParams } from "react-router-dom";
+import { UserProfileDto } from "@scrum/contracts";
 import { ProductController } from "../controllers";
 import {
   productBacklogPath,
@@ -10,16 +11,31 @@ import {
 } from "../routes/product-routes";
 import { useRootStore } from "../stores/root-store";
 import { AdministrationLinks } from "../views/AdministrationView";
-import { Role } from "@scrum/contracts";
+import {
+  canAccessAdministration,
+  canAccessProduct,
+  canViewProductBacklog,
+  canViewProductMetrics,
+  canViewProductSprints,
+  canViewProductWorkspace
+} from "../lib/permissions";
 
-function ProductTabs({ role, productId }: { role?: Role; productId: string }) {
+function ProductTabs({ user, productId }: { user: UserProfileDto; productId: string }) {
   return (
     <div className="tabs">
-      {role && <><AdministrationLinks role={role} /> <div className="navigation__separate" /></>}
-      <NavLink to={productOverviewPath(productId)} className={({ isActive }) => isActive ? "tab active" : "tab"}>Resumen</NavLink>
-      <NavLink to={productBacklogPath(productId)} className={({ isActive }) => isActive ? "tab active" : "tab"}>Backlog</NavLink>
-      <NavLink to={productSprintsPath(productId)} className={({ isActive }) => isActive ? "tab active" : "tab"}>Sprints</NavLink>
-      <NavLink to={productMetricsPath(productId)} className={({ isActive }) => isActive ? "tab active" : "tab"}>Metricas</NavLink>
+      {canAccessAdministration(user) ? <><AdministrationLinks user={user} /> <div className="navigation__separate" /></> : null}
+      {canViewProductWorkspace(user, productId) ? (
+        <NavLink to={productOverviewPath(productId)} className={({ isActive }) => isActive ? "tab active" : "tab"}>Resumen</NavLink>
+      ) : null}
+      {canViewProductBacklog(user, productId) ? (
+        <NavLink to={productBacklogPath(productId)} className={({ isActive }) => isActive ? "tab active" : "tab"}>Backlog</NavLink>
+      ) : null}
+      {canViewProductSprints(user, productId) ? (
+        <NavLink to={productSprintsPath(productId)} className={({ isActive }) => isActive ? "tab active" : "tab"}>Sprints</NavLink>
+      ) : null}
+      {canViewProductMetrics(user, productId) ? (
+        <NavLink to={productMetricsPath(productId)} className={({ isActive }) => isActive ? "tab active" : "tab"}>Metricas</NavLink>
+      ) : null}
     </div>
   );
 }
@@ -50,7 +66,10 @@ export const ProductWorkspaceLayout = observer(function ProductWorkspaceLayout()
   }, [controller, productId, store.products.items]);
 
   if (!productId) return <Navigate to="/products" replace />;
-  if (user?.role === "team_member" && !location.pathname.includes("/tasks/")) {
+  if (!user) {
+    return null;
+  }
+  if (!canAccessProduct(user, productId) && !location.pathname.includes("/tasks/")) {
     return <Navigate to="/focused" replace />;
   }
 
@@ -58,7 +77,7 @@ export const ProductWorkspaceLayout = observer(function ProductWorkspaceLayout()
     <div className="stack-lg">
       <section className="card workspace-shell-card">
         <div className="workspace-header">
-          {user?.role !== "team_member" ? <ProductTabs role={user?.role} productId={productId} /> : null}
+          <ProductTabs user={user} productId={productId} />
         </div>
       </section>
       <Outlet />

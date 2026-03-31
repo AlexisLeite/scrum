@@ -613,7 +613,9 @@ export class IndicatorsService {
 
     const sprintTeamIds = scope.teamId
       ? scope.teamMemberIds ?? []
-      : await this.getTeamMemberIds(sprint.teamId);
+      : sprint.teamId
+        ? await this.getTeamMemberIds(sprint.teamId)
+        : [];
     const teamSeries = await this.buildSprintTimeSeries(
       sprintId,
       rawFrom,
@@ -874,7 +876,7 @@ export class IndicatorsService {
   }
 
   private async resolveCompletedSprintRows(
-    sprints: Array<{ id: string; name: string; status: string; createdAt: Date; updatedAt: Date; startDate: Date | null; endDate: Date | null; teamId: string; productId: string }>,
+    sprints: Array<{ id: string; name: string; status: string; createdAt: Date; updatedAt: Date; startDate: Date | null; endDate: Date | null; teamId: string | null; productId: string }>,
     range: { from: Date; to: Date } | null
   ) {
     if (sprints.length === 0) {

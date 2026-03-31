@@ -1,9 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import { ActivityEntityType, Prisma, SprintStatus, StoryStatus } from "@prisma/client";
+import { PermissionKey } from "@scrum/contracts";
 import { ActivityService } from "../activity/activity.service";
 import { AuthUser } from "../common/current-user.decorator";
-import { TeamScopeService } from "../common/team-scope.service";
 import { DraftsService } from "../drafts/drafts.service";
+import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateTaskDto, CreateTaskFromMessageDto, CreateTaskMessageDto, UpdateTaskDto } from "./tasks.dto";
 
@@ -16,7 +17,7 @@ type TaskCreationInput = {
   storyId: string;
   productId: string;
   sprintId?: string | null;
-  teamId?: string;
+  teamId?: string | null;
   assigneeId?: string | null;
   title: string;
   description?: string | null;
@@ -38,7 +39,7 @@ const TERMINAL_TASK_STATUSES = ["Done", "Closed"] as const;
 export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly teamScopeService: TeamScopeService,
+    private readonly permissionsService: PermissionsService,
     private readonly activityService: ActivityService,
     private readonly draftsService: DraftsService
   ) {}
@@ -51,10 +52,12 @@ export class TasksService {
     if (!story) {
       throw new BadRequestException("Story not found");
     }
-    await this.assertProductAccess(user, story.productId);
-    if (this.teamScopeService.isTeamMember(user.role)) {
-      return [];
-    }
+    this.permissionsService.assertAnyProductPermission(
+      user,
+      story.productId,
+      ["product.admin.story.read", "product.admin.story.task.read"],
+      "Insufficient product permission"
+    );
 
     const tasks = await this.prisma.task.findMany({
       where: { storyId },
@@ -71,23 +74,14 @@ export class TasksService {
   }
 
   async listFocused(user: AuthUser) {
-    const accessibleProducts = await this.teamScopeService.getAccessibleProductIds(user);
-    if (accessibleProducts !== null && accessibleProducts.length === 0) {
+    const accessibleProducts = user.focusedProductIds;
+    if (accessibleProducts.length === 0) {
       return { sprint: null, hasActiveSprint: false, columns: [] };
     }
 
-    const assignmentScope = this.teamScopeService.isTeamMember(user.role)
-      ? {
-          OR: [
-            { assigneeId: user.sub },
-            { assigneeId: null }
-          ]
-        }
-      : {};
-
     const activeSprintWhere = {
       status: SprintStatus.ACTIVE,
-      ...(accessibleProducts !== null ? { productId: { in: accessibleProducts } } : {})
+      productId: { in: accessibleProducts }
     } satisfies Prisma.SprintWhereInput;
 
     const hasActiveSprint = (await this.prisma.sprint.count({
@@ -96,8 +90,7 @@ export class TasksService {
 
     const tasks = await this.prisma.task.findMany({
       where: {
-        sprint: activeSprintWhere,
-        ...assignmentScope
+        sprint: activeSprintWhere
       },
       include: {
         parentTask: {
@@ -162,7 +155,9 @@ export class TasksService {
       orderBy: [{ status: "asc" }, { boardOrder: "asc" }, { createdAt: "asc" }]
     });
 
-    const discoveredStatuses = Array.from(new Set(tasks.map((task) => task.status)));
+    const visibleTasks = tasks.filter((task) => this.canReadFocusedTask(user, task.productId, task));
+
+    const discoveredStatuses = Array.from(new Set(visibleTasks.map((task) => task.status)));
     const columnNames = [
       ...DEFAULT_TASK_STATUS_ORDER,
       ...discoveredStatuses
@@ -175,7 +170,7 @@ export class TasksService {
       hasActiveSprint,
       columns: columnNames.map((name) => ({
         name,
-        tasks: tasks
+        tasks: visibleTasks
           .filter((task) => task.status === name)
           .map((task) => this.withUnfinishedSprintCount(task))
       }))
@@ -255,7 +250,7 @@ export class TasksService {
       throw new BadRequestException("Message not found");
     }
 
-    await this.assertProductAccess(user, message.task.productId);
+    this.permissionsService.assertProductReadable(user, message.task.productId);
     this.assertCanReadTask(user, message.task);
     return message;
   }
@@ -265,9 +260,21 @@ export class TasksService {
     if (!story) {
       throw new BadRequestException("Story not found");
     }
-    await this.assertProductAccess(user, story.productId);
+    const canCreateBacklogTask = this.permissionsService.hasProductPermission(
+      user,
+      story.productId,
+      "product.admin.story.task.create"
+    );
+    const canCreateFocusedTask = this.permissionsService.hasProductPermission(
+      user,
+      story.productId,
+      "product.focused.create"
+    );
+    if (!canCreateBacklogTask && !(dto.sprintId && canCreateFocusedTask)) {
+      throw new ForbiddenException("Insufficient product permission");
+    }
 
-    let sprintTeamId: string | undefined;
+    let sprintTeamId: string | null | undefined;
     if (dto.sprintId) {
       const sprint = await this.validateSprintForProduct(dto.sprintId, story.productId);
       sprintTeamId = sprint.teamId;
@@ -278,7 +285,7 @@ export class TasksService {
       storyId,
       productId: story.productId,
       sprintId: dto.sprintId,
-      teamId: sprintTeamId,
+      teamId: sprintTeamId ?? undefined,
       assigneeId: dto.assigneeId,
       title: dto.title,
       description: dto.description,
@@ -331,28 +338,31 @@ export class TasksService {
     const nextSprintId = hasSprintId ? dto.sprintId ?? null : current.sprintId;
     const isLeavingCurrentSprint = hasSprintId && nextSprintId !== current.sprintId;
 
+    if (!this.permissionsService.hasProductPermission(user, current.productId, "product.admin.story.task.update")) {
+      this.assertCanTeamMemberMutateTask(
+        user,
+        {
+          productId: current.productId,
+          assigneeId: hasAssigneeId ? dto.assigneeId ?? current.assigneeId : current.assigneeId,
+          sprintId: nextSprintId
+        },
+        {
+          ...options,
+          changingAssignee: hasAssigneeId,
+          changingSprint: hasSprintId
+        }
+      );
+    }
+
     if (!isLeavingCurrentSprint) {
       await this.assertSprintIsMutable(current.sprintId, user);
     }
-
-    this.assertCanTeamMemberMutateTask(
-      user,
-      {
-        assigneeId: hasAssigneeId ? dto.assigneeId ?? current.assigneeId : current.assigneeId,
-        sprintId: nextSprintId
-      },
-      {
-        ...options,
-        changingAssignee: hasAssigneeId,
-        changingSprint: hasSprintId
-      }
-    );
 
     if (hasStatus && typeof dto.status !== "string") {
       throw new BadRequestException("Task status must be a string");
     }
 
-    let targetTeamId: string | undefined;
+    let targetTeamId: string | null | undefined;
     const nextStatus = hasStatus ? dto.status ?? current.status : current.status;
     const movesBoardColumn = current.sprintId !== nextSprintId || current.status !== nextStatus;
     const nextBoardOrder =
@@ -404,7 +414,7 @@ export class TasksService {
     const changedFields = this.getTaskChangedFields(current, updated);
     await this.activityService.record({
       actorUserId: user.sub,
-      teamId: targetTeamId,
+      teamId: targetTeamId ?? undefined,
       productId: current.productId,
       entityType: ActivityEntityType.TASK,
       entityId: updated.id,
@@ -441,10 +451,15 @@ export class TasksService {
     if (!task) {
       throw new BadRequestException("Task not found");
     }
-    await this.assertProductAccess(user, task.productId);
+    this.permissionsService.assertProductPermission(
+      user,
+      task.productId,
+      "product.admin.story.task.delete",
+      "Insufficient product permission"
+    );
     await this.assertSprintIsMutable(task.sprintId);
 
-    let teamId: string | undefined;
+    let teamId: string | null | undefined;
     if (task.sprintId) {
       const sprint = await this.prisma.sprint.findUnique({
         where: { id: task.sprintId },
@@ -457,7 +472,7 @@ export class TasksService {
     await this.recomputeStoryStatus(task.storyId);
     await this.activityService.record({
       actorUserId: user.sub,
-      teamId,
+      teamId: teamId ?? undefined,
       productId: task.productId,
       entityType: ActivityEntityType.TASK,
       entityId: task.id,
@@ -478,9 +493,6 @@ export class TasksService {
   }
 
   assign(id: string, assigneeId: string | null | undefined, sprintId: string | null | undefined, user: AuthUser) {
-    if (this.teamScopeService.isTeamMember(user.role)) {
-      return this.takeTask(id, assigneeId, sprintId, user);
-    }
     const payload: UpdateTaskDto = {};
     if (assigneeId !== undefined) {
       payload.assigneeId = assigneeId;
@@ -488,13 +500,19 @@ export class TasksService {
     if (sprintId !== undefined) {
       payload.sprintId = sprintId;
     }
-    return this.update(id, payload, user, "TASK_ASSIGNED");
+    if (assigneeId === user.sub && sprintId === undefined) {
+      return this.takeTask(id, assigneeId, sprintId, user);
+    }
+    return this.update(id, payload, user, "TASK_ASSIGNED", {
+      allowTeamMemberSelfKanbanOnly: true,
+      allowTeamMemberAssignment: true
+    });
   }
 
   async addMessage(taskId: string, dto: CreateTaskMessageDto, user: AuthUser) {
     const task = await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
     await this.assertSprintIsMutable(task.sprintId, user);
-    this.assertCanTeamMemberCollaborate(user, task);
+    this.assertCanTeamMemberCollaborate(user, { ...task, productId: task.productId });
     if (dto.parentMessageId) {
       const parentMessage = await this.prisma.taskMessage.findUnique({
         where: { id: dto.parentMessageId },
@@ -527,7 +545,7 @@ export class TasksService {
     await this.activityService.record({
       actorUserId: user.sub,
       productId: task.productId,
-      teamId: task.sprint?.teamId,
+      teamId: task.sprint?.teamId ?? undefined,
       entityType: ActivityEntityType.TASK,
       entityId: taskId,
       action: "TASK_MESSAGE_CREATED",
@@ -552,6 +570,12 @@ export class TasksService {
   async createFromMessage(taskId: string, messageId: string, dto: CreateTaskFromMessageDto, user: AuthUser) {
     const task = await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
     await this.assertSprintIsMutable(task.sprintId, user);
+    if (
+      !this.permissionsService.hasProductPermission(user, task.productId, "product.admin.story.task.create")
+      && !this.permissionsService.hasProductPermission(user, task.productId, "product.focused.create")
+    ) {
+      throw new ForbiddenException("Insufficient product permission");
+    }
     const sourceMessage = await this.prisma.taskMessage.findUnique({
       where: { id: messageId },
       select: {
@@ -574,7 +598,7 @@ export class TasksService {
       storyId: task.storyId,
       productId: task.productId,
       sprintId: dto.sprintId ?? task.sprintId,
-      teamId: sprintTeamId,
+      teamId: sprintTeamId ?? undefined,
       assigneeId: dto.assigneeId,
       title: dto.title,
       description: dto.description ?? sourceMessage.body,
@@ -648,6 +672,12 @@ export class TasksService {
     }
     this.assertSprintStatusAllowsChanges(sprint.status);
     await this.assertProductAccess(user, sprint.productId);
+    if (
+      !this.permissionsService.hasProductPermission(user, sprint.productId, "product.admin.story.task.create")
+      && !this.permissionsService.hasProductPermission(user, sprint.productId, "product.focused.create")
+    ) {
+      throw new ForbiddenException("Insufficient product permission");
+    }
 
     const story = await this.prisma.userStory.findUnique({ where: { id: dto.storyId } });
     if (!story) {
@@ -662,7 +692,7 @@ export class TasksService {
       storyId: dto.storyId,
       productId: sprint.productId,
       sprintId: sprint.id,
-      teamId: sprint.teamId,
+      teamId: sprint.teamId ?? undefined,
       assigneeId: dto.assigneeId,
       title: dto.title,
       description: dto.description,
@@ -707,7 +737,7 @@ export class TasksService {
     await this.recomputeStoryStatus(input.storyId);
     await this.activityService.record({
       actorUserId: input.actorUserId,
-      teamId: input.teamId,
+      teamId: input.teamId ?? undefined,
       productId: input.productId,
       entityType: ActivityEntityType.TASK,
       entityId: task.id,
@@ -997,7 +1027,7 @@ export class TasksService {
   }
 
   private async assertProductAccess(user: AuthUser, productId: string) {
-    await this.teamScopeService.assertProductReadable(user, productId);
+    this.permissionsService.assertProductReadable(user, productId);
   }
 
   async getNextBoardOrder(
@@ -1095,15 +1125,21 @@ export class TasksService {
   }
 
   private canManageClosedSprintResults(user: AuthUser) {
-    return this.teamScopeService.isPlatformAdmin(user.role) || this.teamScopeService.isScrumMaster(user.role);
+    return this.permissionsService.hasSystemPermission(user, "system.administration.products.update")
+      || user.administrationProductIds.some((productId) =>
+        this.permissionsService.hasAnyProductPermission(
+          user,
+          productId,
+          ["product.admin.sprint.update", "product.admin.story.task.update"]
+        ));
   }
 
   private async takeTask(id: string, assigneeId: string | null | undefined, sprintId: string | null | undefined, user: AuthUser) {
     if (sprintId !== undefined) {
-      throw new ForbiddenException("Team members cannot move tasks between sprints");
+      throw new ForbiddenException("Focused cannot move tasks between sprints from this action");
     }
     if (assigneeId !== user.sub) {
-      throw new ForbiddenException("Team members can only take tasks for themselves");
+      throw new ForbiddenException("Tasks can only be taken for the current user");
     }
 
     const current = await this.prisma.task.findUnique({
@@ -1119,7 +1155,7 @@ export class TasksService {
       throw new BadRequestException("Task not found");
     }
     await this.assertProductAccess(user, current.productId);
-    if (!current.sprintId || current.assigneeId) {
+    if (!current.sprintId || current.assigneeId || !this.permissionsService.hasProductPermission(user, current.productId, "product.focused.acquire")) {
       throw new ForbiddenException("Only unassigned tasks in active kanban can be taken");
     }
 
@@ -1131,19 +1167,34 @@ export class TasksService {
 
   private assertCanTeamMemberCollaborate(
     user: AuthUser,
-    task: { assigneeId: string | null; sprintId: string | null }
+    task: { productId?: string | null; assigneeId: string | null; sprintId: string | null }
   ) {
-    if (!this.teamScopeService.isTeamMember(user.role)) {
+    const productId = task.productId ?? "";
+    if (
+      this.permissionsService.hasProductPermission(user, productId, "product.admin.story.task.update")
+      || this.permissionsService.hasProductPermission(user, productId, "product.focused.update")
+    ) {
       return;
     }
-    if (!task.sprintId || (task.assigneeId !== user.sub && task.assigneeId !== null)) {
-      throw new ForbiddenException("Team members can only collaborate on visible kanban tasks");
+
+    if (!task.sprintId) {
+      throw new ForbiddenException("Task comments require focused visibility or administrative update permission");
     }
+
+    if (task.assigneeId === user.sub) {
+      if (this.permissionsService.hasProductPermission(user, productId, "product.focused.acquiredByMe.comment")) {
+        return;
+      }
+    } else if (task.assigneeId && this.permissionsService.hasProductPermission(user, productId, "product.focused.acquiredByOther.comment")) {
+      return;
+    }
+
+    throw new ForbiddenException("Insufficient permission to comment on this task");
   }
 
   private assertCanTeamMemberMutateTask(
     user: AuthUser,
-    task: { assigneeId: string | null; sprintId: string | null },
+    task: { productId?: string | null; assigneeId: string | null; sprintId: string | null },
     options?: {
       allowTeamMemberSelfKanbanOnly?: boolean;
       allowTeamMemberAssignment?: boolean;
@@ -1151,34 +1202,84 @@ export class TasksService {
       changingSprint?: boolean;
     }
   ) {
-    if (!this.teamScopeService.isTeamMember(user.role)) {
+    const productId = task.productId ?? "";
+
+    if (this.permissionsService.hasProductPermission(user, productId, "product.admin.story.task.update")) {
       return;
     }
 
-    if (!options?.allowTeamMemberSelfKanbanOnly) {
-      throw new ForbiddenException("Team members cannot modify tasks administratively");
+    if (task.sprintId && this.permissionsService.hasProductPermission(user, productId, "product.focused.update")) {
+      return;
+    }
+
+    if (!options?.allowTeamMemberSelfKanbanOnly || !task.sprintId) {
+      throw new ForbiddenException("Insufficient permission to modify this task");
     }
     if (options.changingSprint) {
-      throw new ForbiddenException("Team members cannot move tasks between sprints");
+      throw new ForbiddenException("Focused cannot move tasks between sprints from this action");
     }
-    if (options.changingAssignee && !options.allowTeamMemberAssignment) {
-      throw new ForbiddenException("Team members cannot assign tasks administratively");
+
+    if (task.assigneeId === user.sub) {
+      if (options.changingAssignee) {
+        if (!options.allowTeamMemberAssignment && !this.permissionsService.hasProductPermission(user, productId, "product.focused.acquiredByMe.release")) {
+          throw new ForbiddenException("Insufficient permission to release this task");
+        }
+        return;
+      }
+
+      if (this.permissionsService.hasProductPermission(user, productId, "product.focused.acquiredByMe.updateState")) {
+        return;
+      }
     }
-    if (!task.sprintId || task.assigneeId !== user.sub) {
-      throw new ForbiddenException("Team members can only update their own tasks in kanban");
+
+    if (task.assigneeId && task.assigneeId !== user.sub) {
+      if (options.changingAssignee && this.permissionsService.hasProductPermission(user, productId, "product.focused.reassign")) {
+        return;
+      }
+      if (this.permissionsService.hasProductPermission(user, productId, "product.focused.acquiredByOther.updateState")) {
+        return;
+      }
     }
+
+    throw new ForbiddenException("Insufficient permission to modify this task");
   }
 
   private assertCanReadTask(
     user: AuthUser,
-    task: { assigneeId?: string | null; sprintId?: string | null }
+    task: { productId?: string | null; assigneeId?: string | null; sprintId?: string | null }
   ) {
-    if (!this.teamScopeService.isTeamMember(user.role)) {
+    const productId = task.productId ?? "";
+    if (
+      this.permissionsService.hasAnyProductPermission(
+        user,
+        productId,
+        ["product.admin.story.read", "product.admin.story.task.read", "product.admin.sprint.read"]
+      )
+    ) {
       return;
     }
 
-    if (!task.sprintId || (task.assigneeId !== user.sub && task.assigneeId !== null)) {
-      throw new ForbiddenException("Team members can only read visible kanban tasks");
+    if (this.canReadFocusedTask(user, productId, task)) {
+      return;
     }
+
+    throw new ForbiddenException("Insufficient permission to read this task");
+  }
+
+  private canReadFocusedTask(
+    user: AuthUser,
+    productId: string,
+    task: { assigneeId?: string | null; sprintId?: string | null }
+  ) {
+    if (!this.permissionsService.hasProductPermission(user, productId, "product.focused.read")) {
+      return false;
+    }
+    if (!task.sprintId) {
+      return false;
+    }
+    if (!task.assigneeId || task.assigneeId === user.sub) {
+      return true;
+    }
+    return this.permissionsService.hasProductPermission(user, productId, "product.focused.acquiredByOther.read");
   }
 }

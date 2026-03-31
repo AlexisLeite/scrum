@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Reflector } from "@nestjs/core";
+import { PermissionsService } from "../permissions/permissions.service";
 import { ROLES_KEY } from "./roles.decorator";
 
 @Injectable()
@@ -14,9 +15,12 @@ export class RolesGuard implements CanActivate {
     secret: process.env.JWT_ACCESS_SECRET ?? "change-me-access"
   });
 
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly permissionsService: PermissionsService
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
       context.getHandler(),
       context.getClass()
@@ -27,32 +31,37 @@ export class RolesGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<{
-      user?: { role?: string };
+      user?: { role?: string | null; roleKeys?: string[] };
       headers?: { authorization?: string };
       cookies?: { accessToken?: string };
     }>();
 
-    let userRole = request.user?.role;
+    let userRoleKeys = request.user?.roleKeys;
 
-    if (!userRole) {
+    if (!userRoleKeys?.length) {
       const authHeader = request.headers?.authorization;
       const cookieToken = request.cookies?.accessToken;
       const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : cookieToken;
 
       if (token) {
         try {
-          const payload = this.jwtService.verify<{ role?: string }>(token, {
+          const payload = this.jwtService.verify<{ sub?: string }>(token, {
             secret: process.env.JWT_ACCESS_SECRET ?? "change-me-access"
           });
-          request.user = payload;
-          userRole = payload.role;
+          if (payload.sub) {
+            const user = await this.permissionsService.buildAuthUser(payload.sub);
+            if (user) {
+              request.user = user;
+              userRoleKeys = user.roleKeys;
+            }
+          }
         } catch {
-          userRole = undefined;
+          userRoleKeys = undefined;
         }
       }
     }
 
-    if (!userRole || !requiredRoles.includes(userRole)) {
+    if (!userRoleKeys?.some((roleKey) => requiredRoles.includes(roleKey))) {
       throw new ForbiddenException("Insufficient role");
     }
 

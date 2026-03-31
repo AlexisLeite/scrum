@@ -8,6 +8,7 @@ import { DraftsModule } from "./drafts/drafts.module";
 import { IndicatorsModule } from "./indicators/indicators.module";
 import { MediaModule } from "./media/media.module";
 import { McpModule } from "./mcp/mcp.module";
+import { PermissionsModule } from "./permissions/permissions.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductsModule } from "./products/products.module";
 import { ReferencesModule } from "./references/references.module";
@@ -24,6 +25,7 @@ import { TeamsModule } from "./teams/teams.module";
       envFilePath: [".env", "../../.env"]
     }),
     PrismaModule,
+    PermissionsModule,
     ActivityModule,
     ApiKeysModule,
     AdminModule,

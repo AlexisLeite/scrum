@@ -1,4 +1,18 @@
-import { ActivityEntityType, ApiKeyDto, DraftDto, Role } from "@scrum/contracts";
+import {
+  ActivityEntityType,
+  AdminAccessCatalogDto,
+  AdminCreateUserDto,
+  AdminSetUserProductRolesDto,
+  AdminUserDto,
+  ApiKeyDto,
+  CreateRoleDto,
+  DraftDto,
+  Role,
+  RoleDefinitionDto,
+  RoleScope,
+  UpdateRoleDto,
+  UserProductRoleAssignmentDto
+} from "@scrum/contracts";
 import { ApiError, apiClient } from "../api/client";
 import { RootStore } from "../stores/root-store";
 
@@ -80,18 +94,51 @@ export class AdminController {
   constructor(private readonly store: RootStore) {}
 
   async loadUsers() {
-    const users = await this.store.wrap(this.store.users, () => apiClient.get<any[]>("/admin/users"));
+    const users = await this.store.wrap(this.store.users, () => apiClient.get<AdminUserDto[]>("/admin/users"));
     this.store.users.setItems(users);
+    return users;
+  }
+
+  async createUser(payload: AdminCreateUserDto) {
+    return apiClient.post<AdminUserDto>("/admin/users", payload);
   }
 
   async setRole(userId: string, role: Role) {
-    const user = await apiClient.patch<any>(`/admin/users/${userId}/role`, { role });
+    const user = await apiClient.patch<AdminUserDto>(`/admin/users/${userId}/role`, { role });
     this.store.users.upsert(user);
   }
 
   async updatePassword(userId: string, password: string) {
-    const user = await apiClient.patch<any>(`/admin/users/${userId}/password`, { password });
+    const user = await apiClient.patch<AdminUserDto>(`/admin/users/${userId}/password`, { password });
     this.store.users.upsert(user);
+    return user;
+  }
+
+  async loadAccessCatalog() {
+    return apiClient.get<AdminAccessCatalogDto>("/admin/access/catalog");
+  }
+
+  async loadUserAssignments(userId: string) {
+    return apiClient.get<UserProductRoleAssignmentDto[]>(`/admin/users/${userId}/assignments`);
+  }
+
+  async setUserAssignments(userId: string, assignments: AdminSetUserProductRolesDto["assignments"]) {
+    return apiClient.patch<UserProductRoleAssignmentDto[]>(`/admin/users/${userId}/assignments`, {
+      assignments
+    });
+  }
+
+  async loadRoles(scope?: RoleScope) {
+    const query = scope ? `?scope=${encodeURIComponent(scope)}` : "";
+    return apiClient.get<RoleDefinitionDto[]>(`/admin/roles${query}`);
+  }
+
+  async createRole(payload: CreateRoleDto) {
+    return apiClient.post<RoleDefinitionDto>("/admin/roles", payload);
+  }
+
+  async updateRole(roleId: string, payload: UpdateRoleDto) {
+    return apiClient.patch<RoleDefinitionDto>(`/admin/roles/${roleId}`, payload);
   }
 
   async listBackups() {

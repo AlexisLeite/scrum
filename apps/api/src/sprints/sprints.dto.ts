@@ -4,10 +4,6 @@ import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, Min, MinLength } 
 
 export class CreateSprintDto {
   @IsString()
-  @MinLength(2)
-  teamId!: string;
-
-  @IsString()
   @MinLength(3)
   name!: string;
 
@@ -25,11 +21,6 @@ export class CreateSprintDto {
 }
 
 export class UpdateSprintDto {
-  @IsOptional()
-  @IsString()
-  @MinLength(2)
-  teamId?: string;
-
   @IsOptional()
   @IsString()
   @MinLength(3)

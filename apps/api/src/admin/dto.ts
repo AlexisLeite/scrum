@@ -1,12 +1,23 @@
-import { Role } from "@prisma/client";
+import { RoleDefinitionScope } from "@prisma/client";
+import { Type } from "class-transformer";
 import {
   IsArray,
   IsEmail,
   IsEnum,
   IsOptional,
   IsString,
-  MinLength
+  MinLength,
+  ValidateNested
 } from "class-validator";
+
+class UserAssignmentDto {
+  @IsString()
+  productId!: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  roleKeys!: string[];
+}
 
 export class CreateAdminUserDto {
   @IsEmail()
@@ -20,27 +31,15 @@ export class CreateAdminUserDto {
   @MinLength(8)
   password!: string;
 
-  @IsEnum(Role)
-  role!: Role;
-
   @IsOptional()
   @IsString()
   avatarUrl?: string;
 
-  @IsArray()
-  @IsString({ each: true })
   @IsOptional()
-  teamIds?: string[];
-
   @IsArray()
-  @IsString({ each: true })
-  @IsOptional()
-  productIds?: string[];
-}
-
-export class UpdateUserRoleDto {
-  @IsEnum(Role)
-  role!: Role;
+  @ValidateNested({ each: true })
+  @Type(() => UserAssignmentDto)
+  assignments?: UserAssignmentDto[];
 }
 
 export class UpdateUserPasswordDto {
@@ -49,14 +48,28 @@ export class UpdateUserPasswordDto {
   password!: string;
 }
 
-export class SetUserTeamsDto {
+export class SetUserAssignmentsDto {
   @IsArray()
-  @IsString({ each: true })
-  teamIds!: string[];
+  @ValidateNested({ each: true })
+  @Type(() => UserAssignmentDto)
+  assignments!: UserAssignmentDto[];
 }
 
-export class SetUserProductsDto {
+export class CreateRoleDto {
+  @IsString()
+  @MinLength(2)
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsEnum(RoleDefinitionScope)
+  scope!: RoleDefinitionScope;
+
   @IsArray()
   @IsString({ each: true })
-  productIds!: string[];
+  permissions!: string[];
 }
+
+export class UpdateRoleDto extends CreateRoleDto {}

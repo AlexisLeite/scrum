@@ -1,14 +1,18 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
 import { NavLink, Navigate, Outlet } from "react-router-dom";
-import { canManageUsers } from "../../lib/access";
+import {
+  canViewBackupsAdministration,
+  canViewProductsAdministration,
+  canViewUsersAdministration
+} from "../../lib/permissions";
 import { useRootStore } from "../../stores/root-store";
 
 export const AdminHubView = observer(function AdminHubView() {
   const store = useRootStore();
-  const role = store.session.user?.role;
+  const user = store.session.user;
 
-  if (!role) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 
@@ -22,15 +26,19 @@ export const AdminHubView = observer(function AdminHubView() {
           </div>
         </div>
         <div className="tabs">
-          <NavLink to="/admin/products" className={({ isActive }) => isActive ? "tab active" : "tab"}>
-            Productos
-          </NavLink>
-          <NavLink to="/admin/teams" className={({ isActive }) => isActive ? "tab active" : "tab"}>
-            Equipos
-          </NavLink>
-          {canManageUsers(role) ? (
+          {canViewProductsAdministration(user) ? (
+            <NavLink to="/admin/products" className={({ isActive }) => isActive ? "tab active" : "tab"}>
+              Productos
+            </NavLink>
+          ) : null}
+          {canViewUsersAdministration(user) ? (
             <NavLink to="/admin/users" className={({ isActive }) => isActive ? "tab active" : "tab"}>
               Usuarios
+            </NavLink>
+          ) : null}
+          {canViewBackupsAdministration(user) ? (
+            <NavLink to="/admin/backups" className={({ isActive }) => isActive ? "tab active" : "tab"}>
+              Backups
             </NavLink>
           ) : null}
         </div>

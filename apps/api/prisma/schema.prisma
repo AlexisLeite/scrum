@@ -13,6 +13,12 @@ enum Role {
   product_owner
   scrum_master
   team_member
+  qa_member
+}
+
+enum RoleDefinitionScope {
+  SYSTEM
+  PRODUCT
 }
 
 enum StoryStatus {
@@ -132,6 +138,7 @@ model Product {
   key         String          @unique
   description String?
   ownerId     String
+  isSystem    Boolean         @default(false)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   owner       User            @relation("ProductOwner", fields: [ownerId], references: [id], onDelete: Restrict)
@@ -145,17 +152,35 @@ model Product {
   activityLogs ActivityLog[]
 
   @@index([ownerId])
+  @@index([isSystem])
 }
 
 model ProductMember {
   productId   String
   userId      String
   role        Role
+  roleKeys    String[]        @default([])
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
   product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([productId, userId])
+  @@index([userId, productId])
+}
+
+model RoleDefinition {
+  id          String              @id @default(cuid())
+  key         String              @unique
+  title       String
+  description String?
+  scope       RoleDefinitionScope
+  isBuiltin   Boolean             @default(false)
+  permissions String[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([scope, title])
 }
 
 model ProductTeam {
@@ -185,7 +210,7 @@ model WorkflowColumn {
 model Sprint {
   id          String       @id @default(cuid())
   productId   String
-  teamId      String
+  teamId      String?
   name        String
   goal        String?
   startDate   DateTime?
@@ -194,7 +219,7 @@ model Sprint {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
-  team        Team         @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  team        Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
   tasks       Task[]
   unfinishedTasks TaskUnfinishedSprint[]
 

@@ -10,7 +10,6 @@ import {
 } from "@nestjs/common";
 import { AuthUser, CurrentUser } from "../common/current-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
-import { Roles } from "../common/roles.decorator";
 import {
   AddProductMemberDto,
   CreateProductDto,
@@ -31,25 +30,21 @@ export class ProductsController {
   }
 
   @Post()
-  @Roles("platform_admin", "product_owner")
-  create(@CurrentUser() user: { sub: string }, @Body() dto: CreateProductDto) {
-    return this.productsService.create(user.sub, dto);
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateProductDto) {
+    return this.productsService.create(user, dto);
   }
 
   @Patch(":id")
-  @Roles("platform_admin", "product_owner")
   update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: UpdateProductDto) {
     return this.productsService.update(id, dto, user);
   }
 
   @Delete(":id")
-  @Roles("platform_admin", "product_owner")
   remove(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.productsService.remove(id, user);
   }
 
   @Post(":id/members")
-  @Roles("platform_admin", "product_owner")
   addMember(@CurrentUser() user: AuthUser, @Param("id") productId: string, @Body() dto: AddProductMemberDto) {
     return this.productsService.addMember(productId, dto.userId, dto.role, user);
   }
@@ -60,9 +55,13 @@ export class ProductsController {
   }
 
   @Patch(":id/teams")
-  @Roles("platform_admin", "product_owner")
   setTeams(@CurrentUser() user: AuthUser, @Param("id") productId: string, @Body() dto: SetProductTeamsDto) {
     return this.productsService.setTeams(productId, dto.teamIds, user);
+  }
+
+  @Get(":id/assignable-users")
+  listAssignableUsers(@CurrentUser() user: AuthUser, @Param("id") productId: string) {
+    return this.productsService.listAssignableUsers(productId, user);
   }
 
   @Get(":id/workflow")
@@ -71,7 +70,6 @@ export class ProductsController {
   }
 
   @Post(":id/workflow")
-  @Roles("platform_admin", "product_owner", "scrum_master")
   upsertWorkflow(@CurrentUser() user: AuthUser, @Param("id") productId: string, @Body() dto: UpsertWorkflowColumnDto) {
     return this.productsService.upsertWorkflow(productId, dto, user);
   }

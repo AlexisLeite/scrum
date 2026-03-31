@@ -6,9 +6,10 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useParams,
   useSearchParams
 } from "react-router-dom";
-import { Role } from "@scrum/contracts";
+import { UserProfileDto } from "@scrum/contracts";
 import { AuthController } from "./controllers";
 import { ProductWorkspaceLayout } from "./layouts/ProductWorkspaceLayout";
 import {
@@ -16,13 +17,17 @@ import {
   LegacyIndicatorsRedirect,
   LegacySprintsManageRedirect,
   LegacyStoryTasksRedirect,
+  productOverviewPath,
   productRoutes
 } from "./routes/product-routes";
 import { useRootStore } from "./stores/root-store";
 import { DrawerHost } from "./ui/drawers/DrawerHost";
 import { ModalsController } from "./ui/modals/ModalsController";
 import { FocusedView } from "./views/FocusedView";
-import { administrationDefaultPath, AdministrationView } from "./views/AdministrationView";
+import {
+  administrationDefaultPath,
+  AdministrationView
+} from "./views/AdministrationView";
 import { SettingsView } from "./views/SettingsView";
 import {
   ProductBacklogView,
@@ -38,19 +43,25 @@ import {
   StoryDefinitionView,
   TaskDefinitionView
 } from "./views/product-workspace/ProductDefinitionViews";
+import { AdminUsersManagementView } from "./views/backoffice/AdminUsersManagementView";
 import { AdminRolesView } from "./views/backoffice/AdminRolesView";
 import { AdminBackupsView } from "./views/backoffice/AdminBackupsView";
 import { ProductsBackofficeView } from "./views/backoffice/ProductsBackofficeView";
-import { TeamDefinitionView } from "./views/backoffice/TeamDefinitionView";
-import { TeamsBackofficeView } from "./views/backoffice/TeamsBackofficeView";
 import { ThemeToggle } from "./components/ThemeToggle";
 import {
-  ADMINISTRATION_ROLES,
-  PRODUCT_MANAGERS,
-  PRODUCT_WORKSPACE_ROLES,
-  USER_ADMIN_ROLES,
+  canAccessProduct,
   canAccessAdministration,
-  getUserInitials
+  canViewBackupsAdministration,
+  canViewProductBacklog,
+  canViewProductDefinition,
+  canViewProductMetrics,
+  canViewProductSprints,
+  canViewProductWorkspace,
+  canViewRolesAdministration,
+  canViewSprintBoard,
+  canViewProductsAdministration,
+  canViewUsersAdministration,
+  getUserInitials,
 } from "./lib/permissions";
 
 const SESSION_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
@@ -131,123 +142,137 @@ export const App = observer(function App() {
           <Route
             path="/administration"
             element={
-              <ProtectedRoles roles={ADMINISTRATION_ROLES}>
-                <AdministrationShell />
-              </ProtectedRoles>
+              <Protected>
+                <ProtectedAdministration>
+                  <AdministrationShell />
+                </ProtectedAdministration>
+              </Protected>
             }
           >
             <Route index element={<AdministrationIndexRedirect />} />
-            <Route path="products" element={<ProductsBackofficeView />} />
-            <Route path="teams" element={<TeamsBackofficeView />} />
+            <Route
+              path="products"
+              element={
+                <ProtectedAdministrationFeature allowed={canViewProductsAdministration}>
+                  <ProductsBackofficeView />
+                </ProtectedAdministrationFeature>
+              }
+            />
             <Route
               path="backups"
               element={
-                <ProtectedRoles roles={["platform_admin"]}>
+                <ProtectedAdministrationFeature allowed={canViewBackupsAdministration}>
                   <AdminBackupsView />
-                </ProtectedRoles>
+                </ProtectedAdministrationFeature>
               }
             />
             <Route
               path="users"
               element={
-                <ProtectedRoles roles={USER_ADMIN_ROLES}>
+                <ProtectedAdministrationFeature allowed={canViewUsersAdministration}>
+                  <AdminUsersManagementView />
+                </ProtectedAdministrationFeature>
+              }
+            />
+            <Route
+              path="roles"
+              element={
+                <ProtectedAdministrationFeature allowed={canViewRolesAdministration}>
                   <AdminRolesView />
-                </ProtectedRoles>
+                </ProtectedAdministrationFeature>
               }
             />
           </Route>
-
-          <Route
-            path="/teams/:teamId/definition"
-            element={
-              <ProtectedRoles roles={["platform_admin", "product_owner", "scrum_master"]}>
-                <TeamDefinitionView />
-              </ProtectedRoles>
-            }
-          />
 
           <Route path="/products/:productId" element={<Protected><ProductWorkspaceLayout /></Protected>}>
             <Route
               index
               element={
-                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                <ProtectedProductFeature allowed={canViewProductWorkspace}>
                   <Navigate to={productRoutes.overview} replace />
-                </ProtectedRoles>
+                </ProtectedProductFeature>
               }
             />
             <Route
               path={productRoutes.rootDefinition}
               element={
-                <ProtectedRoles roles={PRODUCT_MANAGERS}>
+                <ProtectedProductFeature allowed={canViewProductDefinition}>
                   <ProductDefinitionView />
-                </ProtectedRoles>
+                </ProtectedProductFeature>
               }
             />
             <Route
               path={productRoutes.overview}
               element={
-                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                <ProtectedProductFeature allowed={canViewProductWorkspace}>
                   <ProductOverviewView />
-                </ProtectedRoles>
+                </ProtectedProductFeature>
               }
             />
             <Route
               path={productRoutes.backlog}
               element={
-                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                <ProtectedProductFeature allowed={canViewProductBacklog}>
                   <ProductBacklogView />
-                </ProtectedRoles>
+                </ProtectedProductFeature>
               }
             />
             <Route
               path={productRoutes.storyTasks}
               element={
-                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                <ProtectedProductFeature allowed={canViewProductBacklog}>
                   <StoryTasksView />
-                </ProtectedRoles>
+                </ProtectedProductFeature>
               }
             />
             <Route
               path={productRoutes.storyDefinition}
               element={
-                <ProtectedRoles roles={["platform_admin", "scrum_master"]}>
+                <ProtectedProductFeature allowed={canViewProductBacklog}>
                   <StoryDefinitionView />
-                </ProtectedRoles>
+                </ProtectedProductFeature>
               }
             />
             <Route
               path={productRoutes.sprints}
               element={
-                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                <ProtectedProductFeature allowed={canViewProductSprints}>
                   <SprintPlanningView />
-                </ProtectedRoles>
+                </ProtectedProductFeature>
               }
             />
             <Route
               path={productRoutes.sprintDefinition}
               element={
-                <ProtectedRoles roles={["platform_admin", "scrum_master"]}>
+                <ProtectedProductFeature allowed={canViewProductSprints}>
                   <SprintDefinitionView />
-                </ProtectedRoles>
+                </ProtectedProductFeature>
               }
             />
             <Route
               path={productRoutes.board}
               element={
-                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                <ProtectedProductFeature allowed={canViewSprintBoard}>
                   <SprintBoardView />
-                </ProtectedRoles>
+                </ProtectedProductFeature>
               }
             />
             <Route
               path={productRoutes.metrics}
               element={
-                <ProtectedRoles roles={PRODUCT_WORKSPACE_ROLES}>
+                <ProtectedProductFeature allowed={canViewProductMetrics}>
                   <ProductMetricsView />
-                </ProtectedRoles>
+                </ProtectedProductFeature>
               }
             />
-            <Route path={productRoutes.taskDefinition} element={<TaskDefinitionView />} />
+            <Route
+              path={productRoutes.taskDefinition}
+              element={
+                <ProtectedProductFeature allowed={canViewProductWorkspace}>
+                  <TaskDefinitionView />
+                </ProtectedProductFeature>
+              }
+            />
           </Route>
 
           <Route path="/products/:productId/stories/:storyId/tasks" element={<Protected><LegacyStoryTasksRedirect /></Protected>} />
@@ -255,7 +280,7 @@ export const App = observer(function App() {
           <Route path="/products/:productId/sprints/:sprintId/execute" element={<Protected><LegacyExecuteSprintRedirect /></Protected>} />
           <Route path="/products/:productId/indicators" element={<Protected><LegacyIndicatorsRedirect /></Protected>} />
           <Route path="/products" element={<Navigate to="/administration/products" replace />} />
-          <Route path="/teams" element={<Navigate to="/administration/teams" replace />} />
+          <Route path="/teams" element={<Navigate to="/focused" replace />} />
           <Route path="/admin" element={<Navigate to="/administration" replace />} />
           <Route path="*" element={<RootRedirect />} />
         </Routes>
@@ -310,7 +335,7 @@ const AuthenticatedHeader = observer(function AuthenticatedHeader() {
               <NavLink to="/settings" className="user-menu-link" onClick={() => setOpen(false)}>
                 Settings
               </NavLink>
-              {canAccessAdministration(user.role) ? (
+              {canAccessAdministration(user) ? (
                 <NavLink to="/administration" className="user-menu-link" onClick={() => setOpen(false)}>
                   Administración
                 </NavLink>
@@ -358,7 +383,7 @@ const Protected = observer(function Protected({ children }: { children: React.Re
   return <>{children}</>;
 });
 
-const ProtectedRoles = observer(function ProtectedRoles({ roles, children }: { roles: Role[]; children: React.ReactNode }) {
+const ProtectedAdministration = observer(function ProtectedAdministration({ children }: { children: React.ReactNode }) {
   const store = useRootStore();
   const user = store.session.user;
 
@@ -366,8 +391,55 @@ const ProtectedRoles = observer(function ProtectedRoles({ roles, children }: { r
     return <Protected>{children}</Protected>;
   }
 
-  if (!roles.includes(user.role)) {
-    return <Navigate to={user.role === "team_member" ? "/focused" : "/administration"} replace />;
+  if (!canAccessAdministration(user)) {
+    return <Navigate to="/focused" replace />;
+  }
+
+  return <>{children}</>;
+});
+
+const ProtectedProductFeature = observer(function ProtectedProductFeature({
+  allowed,
+  children
+}: {
+  allowed: (user: UserProfileDto, productId: string) => boolean;
+  children: React.ReactNode;
+}) {
+  const store = useRootStore();
+  const user = store.session.user;
+  const { productId } = useParams<{ productId: string }>();
+
+  if (!user || !productId) {
+    return <Protected>{children}</Protected>;
+  }
+
+  if (!canAccessProduct(user, productId)) {
+    return <Navigate to="/focused" replace />;
+  }
+
+  if (!allowed(user, productId)) {
+    return <Navigate to={productOverviewPath(productId)} replace />;
+  }
+
+  return <>{children}</>;
+});
+
+const ProtectedAdministrationFeature = observer(function ProtectedAdministrationFeature({
+  allowed,
+  children
+}: {
+  allowed: (user: UserProfileDto) => boolean;
+  children: React.ReactNode;
+}) {
+  const store = useRootStore();
+  const user = store.session.user;
+
+  if (!user) {
+    return <Protected>{children}</Protected>;
+  }
+
+  if (!allowed(user)) {
+    return <Navigate to={administrationDefaultPath(user)} replace />;
   }
 
   return <>{children}</>;
@@ -375,9 +447,13 @@ const ProtectedRoles = observer(function ProtectedRoles({ roles, children }: { r
 
 const RootRedirect = observer(function RootRedirect() {
   const store = useRootStore();
+  const user = store.session.user;
 
-  if (store.session.user) {
-    return <Navigate to="/focused" replace />;
+  if (user) {
+    const nextPath = canAccessAdministration(user) && user.focusedProductIds.length === 0
+      ? administrationDefaultPath(user)
+      : "/focused";
+    return <Navigate to={nextPath} replace />;
   }
 
   if (!store.session.hydrated || store.session.loading) {
@@ -400,7 +476,7 @@ const AdministrationShell = observer(function AdministrationShell() {
     return null;
   }
 
-  return <AdministrationView role={user.role} />;
+  return <AdministrationView user={user} />;
 });
 
 const AdministrationIndexRedirect = observer(function AdministrationIndexRedirect() {
@@ -411,7 +487,7 @@ const AdministrationIndexRedirect = observer(function AdministrationIndexRedirec
     return <Navigate to="/login" replace />;
   }
 
-  return <Navigate to={administrationDefaultPath(user.role)} replace />;
+  return <Navigate to={administrationDefaultPath(user)} replace />;
 });
 
 const LoginView = observer(function LoginView() {
@@ -426,7 +502,10 @@ const LoginView = observer(function LoginView() {
 
   React.useEffect(() => {
     if (store.session.user) {
-      navigate("/focused", { replace: true });
+      const nextPath = canAccessAdministration(store.session.user) && store.session.user.focusedProductIds.length === 0
+        ? administrationDefaultPath(store.session.user)
+        : "/focused";
+      navigate(nextPath, { replace: true });
     }
   }, [navigate, store.session.user]);
 

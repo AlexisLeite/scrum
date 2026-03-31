@@ -1,10 +1,5 @@
-import { Role } from "@prisma/client";
+import type { AuthUserSnapshot } from "../permissions/permissions.service";
 
-export type ScopedRole = Role;
+export type ScopedRole = AuthUserSnapshot["role"];
 
-export interface ScopedUser {
-  sub: string;
-  role: ScopedRole;
-  email?: string;
-}
-
+export type ScopedUser = AuthUserSnapshot;

@@ -1,11 +1,7 @@
 import { createParamDecorator, ExecutionContext } from "@nestjs/common";
-import { Role } from "@prisma/client";
+import type { AuthUserSnapshot } from "../permissions/permissions.service";
 
-export interface AuthUser {
-  sub: string;
-  email: string;
-  role: Role;
-}
+export type AuthUser = AuthUserSnapshot;
 
 export const CurrentUser = createParamDecorator((_: unknown, ctx: ExecutionContext): AuthUser => {
   const request = ctx.switchToHttp().getRequest();

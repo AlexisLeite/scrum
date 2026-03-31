@@ -1,10 +1,11 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { ActivityEntityType, Role, User } from "@prisma/client";
+import { ActivityEntityType, Role } from "@prisma/client";
 import * as argon2 from "argon2";
 import { randomUUID } from "crypto";
 import { Response } from "express";
 import { ActivityService } from "../activity/activity.service";
+import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { LoginDto, SignupDto, UpdateProfileDto } from "./dto";
 
@@ -28,7 +29,8 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-    private readonly activityService: ActivityService
+    private readonly activityService: ActivityService,
+    private readonly permissionsService: PermissionsService
   ) {}
 
   async signup(dto: SignupDto) {
@@ -38,31 +40,32 @@ export class AuthService {
     }
 
     const passwordHash = await argon2.hash(dto.password);
-    const defaultRole = await this.getDefaultRoleForNewUser();
     const created = await this.prisma.user.create({
       data: {
         email: dto.email,
         name: dto.name,
         avatarUrl: dto.avatarUrl,
         passwordHash,
-        role: defaultRole
+        role: await this.getDefaultRoleForNewUser()
       }
     });
-    const user = await this.ensureAtLeastOneAdmin(created);
-    const teamIds = await this.listUserTeamIds(user.id);
+
+    await this.permissionsService.ensureBootstrapped(created.id);
+    const result = await this.buildTokenResult(created.id, created.email);
 
     await this.activityService.record({
-      actorUserId: user.id,
+      actorUserId: created.id,
       entityType: ActivityEntityType.USER,
-      entityId: user.id,
+      entityId: created.id,
       action: "auth.signup",
       afterJson: {
-        email: user.email,
-        role: user.role
+        email: created.email,
+        role: result.user.role,
+        roleKeys: result.user.roleKeys
       }
     });
 
-    return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl, teamIds);
+    return result;
   }
 
   async login(dto: LoginDto) {
@@ -76,22 +79,25 @@ export class AuthService {
       throw new UnauthorizedException("Invalid credentials");
     }
 
-    const user = await this.ensureAtLeastOneAdmin(found);
-    const teamIds = await this.listUserTeamIds(user.id);
-    return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl, teamIds);
+    await this.permissionsService.ensureBootstrapped(found.id);
+    return this.buildTokenResult(found.id, found.email);
   }
 
   async refresh(refreshToken: string) {
-    const payload = this.jwtService.verify(refreshToken, {
+    const payload = this.jwtService.verify<{ sub?: string; email?: string }>(refreshToken, {
       secret: process.env.JWT_REFRESH_SECRET ?? "change-me-refresh"
     });
+    if (!payload.sub) {
+      throw new UnauthorizedException("Invalid refresh token");
+    }
+
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) {
       throw new UnauthorizedException("Invalid refresh token");
     }
 
-    const teamIds = await this.listUserTeamIds(user.id);
-    return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl, teamIds);
+    await this.permissionsService.ensureBootstrapped(user.id);
+    return this.buildTokenResult(user.id, user.email);
   }
 
   async loginWithGitLabCode(code: string, callbackUrl: string) {
@@ -107,42 +113,9 @@ export class AuthService {
     }
 
     const gitlabId = String(gitlabUser.id);
-
-    const byGitlab = await this.prisma.user.findUnique({ where: { gitlabId } });
-    if (byGitlab) {
-      const user = await this.ensureAtLeastOneAdmin(byGitlab);
-      const teamIds = await this.listUserTeamIds(user.id);
-      return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl, teamIds);
-    }
-
-    const byEmail = await this.prisma.user.findUnique({ where: { email } });
-    if (byEmail) {
-      const linked = await this.prisma.user.update({
-        where: { id: byEmail.id },
-        data: {
-          gitlabId,
-          name: byEmail.name || gitlabUser.name,
-          avatarUrl: byEmail.avatarUrl ?? gitlabUser.avatar_url ?? null
-        }
-      });
-      const user = await this.ensureAtLeastOneAdmin(linked);
-      const teamIds = await this.listUserTeamIds(user.id);
-      return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl, teamIds);
-    }
-
-    const defaultRole = await this.getDefaultRoleForNewUser();
-    const created = await this.prisma.user.create({
-      data: {
-        email,
-        name: gitlabUser.name,
-        avatarUrl: gitlabUser.avatar_url ?? null,
-        gitlabId,
-        role: defaultRole
-      }
-    });
-    const user = await this.ensureAtLeastOneAdmin(created);
-    const teamIds = await this.listUserTeamIds(user.id);
-    return this.buildTokenResult(user.id, user.email, user.role, user.name, user.avatarUrl, teamIds);
+    const found = await this.findOrCreateGitLabUser(gitlabId, email, gitlabUser);
+    await this.permissionsService.ensureBootstrapped(found.id);
+    return this.buildTokenResult(found.id, found.email);
   }
 
   generateOAuthState(): string {
@@ -172,15 +145,7 @@ export class AuthService {
   }
 
   async getMe(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        teamMembers: {
-          select: { teamId: true }
-        }
-      }
-    });
-    return user ? this.toUserDto(user) : null;
+    return this.permissionsService.buildUserProfile(userId);
   }
 
   async updateMe(userId: string, dto: UpdateProfileDto) {
@@ -191,18 +156,19 @@ export class AuthService {
         avatarUrl: true
       }
     });
-    const user = await this.prisma.user.update({
+
+    await this.prisma.user.update({
       where: { id: userId },
       data: {
         name: dto.name,
         avatarUrl: dto.avatarUrl
-      },
-      include: {
-        teamMembers: {
-          select: { teamId: true }
-        }
       }
     });
+
+    const profile = await this.permissionsService.buildUserProfile(userId);
+    if (!profile) {
+      throw new UnauthorizedException("User not found");
+    }
 
     await this.activityService.record({
       actorUserId: userId,
@@ -211,12 +177,12 @@ export class AuthService {
       action: "auth.profile.update",
       beforeJson: before ?? undefined,
       afterJson: {
-        name: user.name,
-        avatarUrl: user.avatarUrl
+        name: profile.name,
+        avatarUrl: profile.avatarUrl
       }
     });
 
-    return this.toUserDto(user);
+    return profile;
   }
 
   setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
@@ -283,87 +249,66 @@ export class AuthService {
     return (await response.json()) as GitLabUserResponse;
   }
 
-  private async getDefaultRoleForNewUser(): Promise<Role> {
-    const adminCount = await this.prisma.user.count({ where: { role: Role.platform_admin } });
-    return adminCount === 0 ? Role.platform_admin : Role.team_member;
-  }
-
-  private async ensureAtLeastOneAdmin(user: User): Promise<User> {
-    if (user.role === Role.platform_admin) {
-      return user;
+  private async findOrCreateGitLabUser(gitlabId: string, email: string, gitlabUser: GitLabUserResponse) {
+    const byGitlab = await this.prisma.user.findUnique({ where: { gitlabId } });
+    if (byGitlab) {
+      return byGitlab;
     }
 
-    const adminCount = await this.prisma.user.count({ where: { role: Role.platform_admin } });
-    if (adminCount > 0) {
-      return user;
+    const byEmail = await this.prisma.user.findUnique({ where: { email } });
+    if (byEmail) {
+      return this.prisma.user.update({
+        where: { id: byEmail.id },
+        data: {
+          gitlabId,
+          name: byEmail.name || gitlabUser.name,
+          avatarUrl: byEmail.avatarUrl ?? gitlabUser.avatar_url ?? null
+        }
+      });
     }
 
-    return this.prisma.user.update({
-      where: { id: user.id },
-      data: { role: Role.platform_admin }
+    return this.prisma.user.create({
+      data: {
+        email,
+        name: gitlabUser.name,
+        avatarUrl: gitlabUser.avatar_url ?? null,
+        gitlabId,
+        role: await this.getDefaultRoleForNewUser()
+      }
     });
   }
 
-  private buildTokenResult(
-    id: string,
-    email: string,
-    role: Role,
-    name: string,
-    avatarUrl: string | null,
-    teamIds: string[]
-  ) {
+  private async getDefaultRoleForNewUser(): Promise<Role> {
+    const userCount = await this.prisma.user.count();
+    return userCount === 0 ? Role.platform_admin : Role.team_member;
+  }
+
+  private async buildTokenResult(id: string, email: string) {
     const accessToken = this.jwtService.sign(
-      { sub: id, email, role },
+      { sub: id, email },
       {
         secret: process.env.JWT_ACCESS_SECRET ?? "change-me-access",
         expiresIn: process.env.JWT_ACCESS_TTL ?? "15m"
       }
     );
+
     const refreshToken = this.jwtService.sign(
-      { sub: id, email, role },
+      { sub: id, email },
       {
         secret: process.env.JWT_REFRESH_SECRET ?? "change-me-refresh",
         expiresIn: process.env.JWT_REFRESH_TTL ?? "7d"
       }
     );
 
+    const user = await this.permissionsService.buildUserProfile(id);
+    if (!user) {
+      throw new UnauthorizedException("User not found");
+    }
+
     return {
       accessToken,
       refreshToken,
-      user: {
-        id,
-        email,
-        role,
-        name,
-        avatarUrl,
-        teamIds
-      }
-    };
-  }
-
-  private async listUserTeamIds(userId: string): Promise<string[]> {
-    const memberships = await this.prisma.teamMember.findMany({
-      where: { userId },
-      select: { teamId: true }
-    });
-    return memberships.map((entry) => entry.teamId);
-  }
-
-  private toUserDto(user: {
-    id: string;
-    email: string;
-    name: string;
-    avatarUrl: string | null;
-    role: Role;
-    teamMembers?: Array<{ teamId: string }>;
-  }) {
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      avatarUrl: user.avatarUrl,
-      role: user.role,
-      teamIds: user.teamMembers?.map((item) => item.teamId) ?? []
+      user
     };
   }
 }

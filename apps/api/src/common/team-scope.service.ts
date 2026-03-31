@@ -1,217 +1,87 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
-import { Role } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { AuthUser } from "./current-user.decorator";
 import { ScopedRole, ScopedUser } from "./team-scope.types";
+import { PermissionsService } from "../permissions/permissions.service";
 
 @Injectable()
 export class TeamScopeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly permissionsService: PermissionsService
+  ) {}
 
   isPlatformAdmin(role: ScopedRole): boolean {
-    return role === Role.platform_admin;
+    return role === "platform_admin";
   }
 
   isProductOwner(role: ScopedRole): boolean {
-    return role === Role.product_owner;
+    return role === "product_owner";
   }
 
   isScrumMaster(role: ScopedRole): boolean {
-    return role === Role.scrum_master;
+    return role === "scrum_master";
   }
 
   isTeamMember(role: ScopedRole): boolean {
-    return role === Role.team_member;
+    return role === "team_member";
   }
 
-  isScopedRole(role: ScopedRole): boolean {
-    return this.isTeamMember(role);
+  isScopedRole(_role: ScopedRole): boolean {
+    return false;
   }
 
-  async getUserTeamIds(userId: string): Promise<string[]> {
-    const memberships = await this.prisma.teamMember.findMany({
-      where: { userId },
-      select: { teamId: true }
-    });
-    return memberships.map((entry) => entry.teamId);
+  async getUserTeamIds(_userId: string): Promise<string[]> {
+    return [];
   }
 
   async getAccessibleProductIds(user: ScopedUser): Promise<string[] | null> {
-    if (this.isPlatformAdmin(user.role)) {
-      return null;
-    }
-
-    if (this.isProductOwner(user.role)) {
-      const products = await this.prisma.product.findMany({
-        where: {
-          OR: [
-            { ownerId: user.sub },
-            {
-              members: {
-                some: {
-                  userId: user.sub,
-                  role: Role.product_owner
-                }
-              }
-            }
-          ]
-        },
-        select: { id: true }
-      });
-      return products.map((entry) => entry.id);
-    }
-
-    const directProducts = await this.prisma.productMember.findMany({
-      where: {
-        userId: user.sub,
-        role: user.role
-      },
-      select: {
-        productId: true
-      }
-    });
-
-    const teamIds = await this.getUserTeamIds(user.sub);
-    const [links, sprints] = teamIds.length > 0
-      ? await Promise.all([
-          this.prisma.productTeam.findMany({
-            where: { teamId: { in: teamIds } },
-            select: { productId: true }
-          }),
-          this.prisma.sprint.findMany({
-            where: { teamId: { in: teamIds } },
-            select: { productId: true }
-          })
-        ])
-      : [[], []];
-
-    return Array.from(new Set([
-      ...directProducts.map((entry) => entry.productId),
-      ...links.map((entry) => entry.productId),
-      ...sprints.map((entry) => entry.productId)
-    ]));
+    return user.accessibleProductIds;
   }
 
-  async getAccessibleTeamIds(user: ScopedUser): Promise<string[] | null> {
-    if (this.isPlatformAdmin(user.role)) {
-      return null;
-    }
-
-    if (this.isProductOwner(user.role)) {
-      const directTeamIds = await this.getUserTeamIds(user.sub);
-      const productIds = await this.getAccessibleProductIds(user);
-      if (!productIds || productIds.length === 0) {
-        return directTeamIds;
-      }
-      const links = await this.prisma.productTeam.findMany({
-        where: { productId: { in: productIds } },
-        select: { teamId: true }
-      });
-      return Array.from(new Set([
-        ...directTeamIds,
-        ...links.map((entry) => entry.teamId)
-      ]));
-    }
-
-    const directTeamIds = await this.getUserTeamIds(user.sub);
-    const productIds = await this.getAccessibleProductIds(user);
-    if (!productIds || productIds.length === 0) {
-      return directTeamIds;
-    }
-    const linkedTeams = await this.prisma.productTeam.findMany({
-      where: {
-        productId: { in: productIds }
-      },
-      select: {
-        teamId: true
-      }
-    });
-
-    return Array.from(new Set([
-      ...directTeamIds,
-      ...linkedTeams.map((entry) => entry.teamId)
-    ]));
+  async getAccessibleTeamIds(_user: ScopedUser): Promise<string[] | null> {
+    return [];
   }
 
   async assertProductReadable(user: ScopedUser, productId: string): Promise<void> {
-    const productIds = await this.getAccessibleProductIds(user);
-    if (productIds === null) {
-      return;
-    }
-    if (!productIds.includes(productId)) {
-      throw new ForbiddenException("Insufficient product scope");
-    }
+    this.permissionsService.assertProductReadable(user, productId);
   }
 
-  async assertTeamReadable(user: ScopedUser, teamId: string): Promise<void> {
-    const teamIds = await this.getAccessibleTeamIds(user);
-    if (teamIds === null) {
-      return;
-    }
-    if (!teamIds.includes(teamId)) {
-      throw new ForbiddenException("Insufficient team scope");
-    }
+  async assertTeamReadable(_user: ScopedUser, _teamId: string): Promise<void> {
+    throw new ForbiddenException("Teams are no longer part of the authorization model");
   }
 
-  async assertCanManageProduct(user: ScopedUser, productId: string): Promise<void> {
-    if (this.isPlatformAdmin(user.role)) {
-      return;
-    }
-    if (!this.isProductOwner(user.role)) {
-      throw new ForbiddenException("Insufficient product scope");
-    }
-
-    const product = await this.prisma.product.findFirst({
-      where: {
-        id: productId,
-        OR: [
-          { ownerId: user.sub },
-          {
-            members: {
-              some: {
-                userId: user.sub,
-                role: Role.product_owner
-              }
-            }
-          }
-        ]
-      },
-      select: { id: true }
-    });
-
-    if (!product) {
-      throw new ForbiddenException("Insufficient product scope");
-    }
+  async assertCanManageProduct(user: AuthUser, _productId: string): Promise<void> {
+    this.permissionsService.assertSystemPermission(
+      user,
+      "system.administration.products.update",
+      "Insufficient product permission"
+    );
   }
 
-  async assertCanManageTeam(user: ScopedUser, teamId: string): Promise<void> {
-    if (this.isPlatformAdmin(user.role)) {
-      return;
-    }
-    if (!this.isProductOwner(user.role)) {
-      throw new ForbiddenException("Insufficient team scope");
-    }
-    await this.assertTeamReadable(user, teamId);
+  async assertCanManageTeam(_user: ScopedUser, _teamId: string): Promise<void> {
+    throw new ForbiddenException("Teams are no longer part of the authorization model");
   }
 
   async assertCanReadUserActivity(viewer: ScopedUser, targetUserId: string): Promise<void> {
-    if (this.isPlatformAdmin(viewer.role)) {
-      return;
-    }
     if (viewer.sub === targetUserId) {
       return;
     }
 
-    if (!this.isScrumMaster(viewer.role)) {
-      throw new ForbiddenException("Insufficient team scope");
+    if (this.permissionsService.hasSystemPermission(viewer, "system.administration.users.read")) {
+      return;
     }
 
-    const [viewerTeams, targetTeams] = await Promise.all([
-      this.getUserTeamIds(viewer.sub),
-      this.getUserTeamIds(targetUserId)
-    ]);
-    const allowed = viewerTeams.some((teamId) => targetTeams.includes(teamId));
-    if (!allowed) {
-      throw new ForbiddenException("Insufficient team scope");
+    const target = await this.prisma.productMember.findFirst({
+      where: {
+        userId: targetUserId,
+        productId: { in: viewer.administrationProductIds }
+      },
+      select: { userId: true }
+    });
+
+    if (!target) {
+      throw new ForbiddenException("Insufficient user activity scope");
     }
   }
 }

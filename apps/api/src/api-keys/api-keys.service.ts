@@ -1,15 +1,15 @@
 import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { createHash, randomBytes } from "crypto";
-import { ActivityEntityType, Role } from "@prisma/client";
+import { ActivityEntityType } from "@prisma/client";
 import { ActivityService } from "../activity/activity.service";
 import { AuthUser } from "../common/current-user.decorator";
+import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateApiKeyDto } from "./api-keys.dto";
 
 type ApiKeyAuthUser = AuthUser & {
   name: string;
   avatarUrl: string | null;
-  teamIds: string[];
   apiKeyId: string;
   apiKeyName: string;
 };
@@ -18,7 +18,8 @@ type ApiKeyAuthUser = AuthUser & {
 export class ApiKeysService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly activityService: ActivityService
+    private readonly activityService: ActivityService,
+    private readonly permissionsService: PermissionsService
   ) {}
 
   async listForUser(userId: string) {
@@ -150,13 +151,15 @@ export class ApiKeysService {
       data: { lastUsedAt: new Date() }
     });
 
+    const authUser = await this.permissionsService.buildAuthUser(apiKey.user.id);
+    if (!authUser) {
+      throw new UnauthorizedException("User not found");
+    }
+
     return {
-      sub: apiKey.user.id,
-      email: apiKey.user.email,
-      role: apiKey.user.role as Role,
+      ...authUser,
       name: apiKey.user.name,
       avatarUrl: apiKey.user.avatarUrl,
-      teamIds: apiKey.user.teamMembers.map((membership) => membership.teamId),
       apiKeyId: apiKey.id,
       apiKeyName: apiKey.name
     };

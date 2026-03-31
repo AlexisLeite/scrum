@@ -59,7 +59,7 @@ Monorepo implementation of a Scrum sprint management application.
 - Task, sprint, product and team descriptions accept markdown and are rendered as markdown in workspace and admin views.
 - Production nginx owns ports `443`, `3000`, and `3001`.
 - Development nginx proxies `5443` to the Vite dev server on internal port `5000` and `5444` to the API dev server on internal port `5001`.
-- MCP HTTP server runs on `MCP_PORT` (default `3101`) and also accepts `/mcp` on the main API app. Supported tools: list focused pending tasks, take unassigned tasks, change status of self-assigned tasks, and comment on self-assigned tasks.
+- MCP HTTP server runs on `MCP_PORT` (default `3101`) and also accepts `/mcp` on the main API app. Supported tools include `readTasks(type?, offset, limit)` for compact focused task reads, plus take, status-change, comment, and task detail/history operations.
 - Uploaded media is shared between prod and dev through `/root/repos/scrum/shared/media`.
 
 ## Current Gaps

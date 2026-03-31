@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Role } from "@prisma/client";
 import { AuthUser } from "../common/current-user.decorator";
-import { TeamScopeService } from "../common/team-scope.service";
+import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   CreateProductDto,
@@ -13,29 +13,40 @@ import {
 export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly teamScopeService: TeamScopeService
+    private readonly permissionsService: PermissionsService
   ) {}
 
   async list(user: AuthUser) {
-    const accessibleProductIds = await this.teamScopeService.getAccessibleProductIds(user);
+    const canReadSystemCatalog = this.permissionsService.hasSystemPermission(
+      user,
+      "system.administration.products.read"
+    );
+
+    const where = canReadSystemCatalog
+      ? { isSystem: false }
+      : {
+          isSystem: false,
+          id: { in: user.accessibleProductIds }
+        };
+
     return this.prisma.product.findMany({
-      where: accessibleProductIds === null ? undefined : { id: { in: accessibleProductIds } },
+      where,
       include: { members: true, owner: true },
       orderBy: { name: "asc" }
     });
   }
 
-  async create(ownerId: string, dto: CreateProductDto) {
+  async create(actor: AuthUser, dto: CreateProductDto) {
+    this.permissionsService.assertSystemPermission(
+      actor,
+      "system.administration.products.create",
+      "Insufficient product permission"
+    );
+
     return this.prisma.product.create({
       data: {
         ...dto,
-        ownerId,
-        members: {
-          create: {
-            userId: ownerId,
-            role: Role.product_owner
-          }
-        },
+        ownerId: actor.sub,
         workflow: {
           createMany: {
             data: [
@@ -53,18 +64,26 @@ export class ProductsService {
   }
 
   async update(id: string, dto: UpdateProductDto, user: AuthUser) {
-    await this.teamScopeService.assertCanManageProduct(user, id);
+    this.permissionsService.assertSystemPermission(
+      user,
+      "system.administration.products.update",
+      "Insufficient product permission"
+    );
     const existing = await this.prisma.product.findUnique({ where: { id } });
-    if (!existing) {
+    if (!existing || existing.isSystem) {
       throw new NotFoundException("Product not found");
     }
     return this.prisma.product.update({ where: { id }, data: dto });
   }
 
   async remove(id: string, user: AuthUser) {
-    await this.teamScopeService.assertCanManageProduct(user, id);
+    this.permissionsService.assertSystemPermission(
+      user,
+      "system.administration.products.delete",
+      "Insufficient product permission"
+    );
     const existing = await this.prisma.product.findUnique({ where: { id } });
-    if (!existing) {
+    if (!existing || existing.isSystem) {
       throw new NotFoundException("Product not found");
     }
     await this.prisma.product.delete({ where: { id } });
@@ -72,70 +91,99 @@ export class ProductsService {
   }
 
   async addMember(productId: string, userId: string, role: Role, actor: AuthUser) {
-    await this.teamScopeService.assertCanManageProduct(actor, productId);
-    return this.prisma.productMember.upsert({
+    this.permissionsService.assertSystemPermission(
+      actor,
+      "system.administration.users.update",
+      "Insufficient user permission"
+    );
+    await this.getProductOrThrow(productId);
+
+    const existing = await this.prisma.productMember.findUnique({
+      where: { productId_userId: { productId, userId } }
+    });
+
+    if (!existing) {
+      return this.prisma.productMember.create({
+        data: {
+          productId,
+          userId,
+          role,
+          roleKeys: [role]
+        }
+      });
+    }
+
+    return this.prisma.productMember.update({
       where: { productId_userId: { productId, userId } },
-      update: { role },
-      create: { productId, userId, role }
+      data: {
+        role,
+        roleKeys: Array.from(new Set([...existing.roleKeys, role]))
+      }
     });
   }
 
   async listTeams(productId: string, user?: AuthUser) {
     await this.getProductOrThrow(productId);
     if (user) {
-      await this.teamScopeService.assertProductReadable(user, productId);
+      this.permissionsService.assertProductReadable(user, productId);
     }
+    return [];
+  }
 
-    const links = await this.prisma.productTeam.findMany({
-      where: { productId },
+  async setTeams(productId: string, _teamIds: string[], actor: AuthUser) {
+    this.permissionsService.assertSystemPermission(
+      actor,
+      "system.administration.products.update",
+      "Insufficient product permission"
+    );
+    await this.getProductOrThrow(productId);
+    return [];
+  }
+
+  async listAssignableUsers(productId: string, user: AuthUser) {
+    this.permissionsService.assertProductReadable(user, productId);
+
+    const memberships = await this.prisma.productMember.findMany({
+      where: {
+        productId
+      },
       include: {
-        team: {
+        user: {
           select: {
             id: true,
             name: true,
-            description: true
+            email: true,
+            avatarUrl: true
           }
         }
       },
       orderBy: {
-        team: { name: "asc" }
-      }
-    });
-    return links.map((entry) => entry.team);
-  }
-
-  async setTeams(productId: string, teamIds: string[], actor: AuthUser) {
-    await this.teamScopeService.assertCanManageProduct(actor, productId);
-    await this.getProductOrThrow(productId);
-
-    const uniqueTeamIds = Array.from(new Set(teamIds.filter((teamId) => teamId && teamId.trim().length > 0)));
-    if (uniqueTeamIds.length > 0) {
-      const found = await this.prisma.team.findMany({
-        where: { id: { in: uniqueTeamIds } },
-        select: { id: true }
-      });
-      if (found.length !== uniqueTeamIds.length) {
-        const foundIds = new Set(found.map((team) => team.id));
-        const missing = uniqueTeamIds.filter((teamId) => !foundIds.has(teamId));
-        throw new BadRequestException(`Invalid teamIds: ${missing.join(", ")}`);
-      }
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.productTeam.deleteMany({ where: { productId } });
-      if (uniqueTeamIds.length > 0) {
-        await tx.productTeam.createMany({
-          data: uniqueTeamIds.map((teamId) => ({ productId, teamId })),
-          skipDuplicates: true
-        });
+        user: { name: "asc" }
       }
     });
 
-    return this.listTeams(productId);
+    return memberships.map((membership) => ({
+      id: membership.user.id,
+      name: membership.user.name,
+      email: membership.user.email,
+      avatarUrl: membership.user.avatarUrl,
+      roleKeys: membership.roleKeys.length > 0 ? membership.roleKeys : [membership.role]
+    }));
   }
 
   async getWorkflow(productId: string, user: AuthUser) {
-    await this.teamScopeService.assertProductReadable(user, productId);
+    this.permissionsService.assertAnyProductPermission(
+      user,
+      productId,
+      [
+        "product.admin.workflow.read",
+        "product.admin.story.read",
+        "product.admin.story.task.read",
+        "product.admin.sprint.read"
+      ],
+      "Insufficient product permission"
+    );
+
     return this.prisma.workflowColumn.findMany({
       where: { productId },
       orderBy: { sortOrder: "asc" }
@@ -143,7 +191,13 @@ export class ProductsService {
   }
 
   async upsertWorkflow(productId: string, dto: UpsertWorkflowColumnDto, user: AuthUser) {
-    await this.teamScopeService.assertProductReadable(user, productId);
+    this.permissionsService.assertProductPermission(
+      user,
+      productId,
+      "product.admin.workflow.update",
+      "Insufficient product permission"
+    );
+
     if (dto.id) {
       return this.prisma.workflowColumn.update({
         where: { id: dto.id },
@@ -169,7 +223,7 @@ export class ProductsService {
 
   private async getProductOrThrow(productId: string) {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
-    if (!product) {
+    if (!product || product.isSystem) {
       throw new NotFoundException("Product not found");
     }
     return product;

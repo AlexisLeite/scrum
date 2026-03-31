@@ -61,6 +61,14 @@ type FlatMessageNode = {
 };
 
 const MCP_PROTOCOL_VERSION = "2025-03-26";
+const READ_TASKS_TYPE_TO_STATUS = {
+  todo: "Todo",
+  "in progress": "In Progress",
+  blocked: "Blocked",
+  done: "Done"
+} as const;
+
+const DEFAULT_READ_TASKS_STATUSES = Object.values(READ_TASKS_TYPE_TO_STATUS);
 
 @Injectable()
 export class McpService {
@@ -132,19 +140,24 @@ export class McpService {
           return this.jsonRpcResult(id, {
             tools: [
               {
-                name: "list_pending_tasks",
-                description: "Lista el tablero Focused visible para el usuario autenticado por API key.",
+                name: "readTasks",
+                description: "Devuelve tareas visibles en Focused en formato compacto, opcionalmente filtradas por estado.",
                 inputSchema: {
                   type: "object",
                   additionalProperties: false,
                   properties: {
+                    type: {
+                      type: "string",
+                      enum: Object.keys(READ_TASKS_TYPE_TO_STATUS),
+                      description: "Filtro opcional por estado. Valores: todo, in progress, blocked, done."
+                    },
                     offset: {
                       type: "number",
                       description: "Offset sobre el listado visible de tareas."
                     },
                     limit: {
                       type: "number",
-                      description: "Cantidad maxima de tareas visibles a devolver."
+                      description: "Cantidad maxima de tareas visibles a devolver. Default: 50."
                     }
                   }
                 }
@@ -288,7 +301,8 @@ export class McpService {
     const args = (params.arguments && typeof params.arguments === "object" ? params.arguments : {}) as Record<string, unknown>;
 
     switch (name) {
-      case "list_pending_tasks": {
+      case "readTasks": {
+        const requestedType = this.readOptionalTaskTypeArgument(args, "type");
         const offset = this.readOptionalIntegerArgument(args, "offset") ?? 0;
         const requestedLimit = this.readOptionalIntegerArgument(args, "limit");
         if (offset < 0) {
@@ -301,28 +315,36 @@ export class McpService {
         const board = await this.tasksService.listFocused(user);
         const normalizedBoard = this.normalizeFocusedBoard(board);
         const flattenedTasks = this.flattenFocusedBoard(normalizedBoard);
-        const total = flattenedTasks.length;
-        const limit = requestedLimit ?? Math.max(total - offset, 0);
-        const paginatedTasks = flattenedTasks.slice(offset, offset + limit);
-        const paginatedBoard = this.rebuildFocusedBoard(normalizedBoard, paginatedTasks);
+        const allowedStatuses = requestedType
+          ? new Set<string>([READ_TASKS_TYPE_TO_STATUS[requestedType]])
+          : new Set<string>(DEFAULT_READ_TASKS_STATUSES);
+        const filteredTasks = flattenedTasks.filter((entry) => allowedStatuses.has(entry.columnName));
+        const total = filteredTasks.length;
+        const limit = requestedLimit ?? 50;
+        const paginatedTasks = filteredTasks.slice(offset, offset + limit);
         const returned = paginatedTasks.length;
         const hasMore = offset + returned < total;
+
         return {
           content: [
             {
               type: "text",
-              text: `Se devolvieron ${returned} de ${total} tareas visibles en Focused. offset=${offset} limit=${limit} hasMore=${hasMore}`
+              text: `Se devolvieron ${returned} de ${total} tareas visibles${requestedType ? ` con type=${requestedType}` : ""}. offset=${offset} limit=${limit} hasMore=${hasMore}`
             }
           ],
           structuredContent: {
-            ...paginatedBoard,
+            filter: {
+              type: requestedType ?? null,
+              statuses: Array.from(allowedStatuses)
+            },
             pagination: {
               offset,
               limit,
               total,
               returned,
               hasMore
-            }
+            },
+            tasks: paginatedTasks.map((entry) => this.serializeFocusedTaskEntry(entry))
           }
         };
       }
@@ -558,6 +580,30 @@ export class McpService {
     return value;
   }
 
+  private readOptionalTaskTypeArgument(
+    args: Record<string, unknown>,
+    key: string
+  ): keyof typeof READ_TASKS_TYPE_TO_STATUS | undefined {
+    const value = this.readOptionalStringArgument(args, key);
+    if (value === undefined) {
+      return undefined;
+    }
+
+    const normalizedValue = value
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ") as keyof typeof READ_TASKS_TYPE_TO_STATUS;
+
+    if (!(normalizedValue in READ_TASKS_TYPE_TO_STATUS)) {
+      throw new BadRequestException(
+        `Invalid argument: ${key}. Expected one of ${Object.keys(READ_TASKS_TYPE_TO_STATUS).join(", ")}`
+      );
+    }
+
+    return normalizedValue;
+  }
+
   private normalizeFocusedBoard(board: Awaited<ReturnType<TasksService["listFocused"]>>) {
     return {
       ...board,
@@ -581,18 +627,63 @@ export class McpService {
     );
   }
 
-  private rebuildFocusedBoard(
-    board: ReturnType<McpService["normalizeFocusedBoard"]>,
-    tasks: Array<ReturnType<McpService["flattenFocusedBoard"]>[number]>
-  ) {
-    const taskIds = new Set(tasks.map((entry) => entry.task.id));
+  private serializeFocusedTaskEntry(entry: ReturnType<McpService["flattenFocusedBoard"]>[number]) {
+    const { columnName, task } = entry;
     return {
-      ...board,
-      columns: board.columns.map((column) => ({
-        ...column,
-        tasks: column.tasks.filter((task) => taskIds.has(task.id))
-      }))
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      type: this.toReadTasksType(columnName),
+      boardOrder: task.boardOrder,
+      effortPoints: task.effortPoints ?? null,
+      estimatedHours: task.estimatedHours ?? null,
+      remainingHours: task.remainingHours ?? null,
+      actualHours: task.actualHours ?? null,
+      unfinishedSprintCount: task.unfinishedSprintCount ?? 0,
+      assigneeId: task.assigneeId,
+      assignee: task.assignee
+        ? {
+            id: task.assignee.id,
+            name: task.assignee.name,
+            email: task.assignee.email
+          }
+        : null,
+      story: task.story
+        ? {
+            id: task.story.id,
+            title: task.story.title,
+            status: task.story.status
+          }
+        : null,
+      sprint: task.sprint
+        ? {
+            id: task.sprint.id,
+            name: task.sprint.name,
+            status: task.sprint.status
+          }
+        : null,
+      product: task.product
+        ? {
+            id: task.product.id,
+            name: task.product.name,
+            key: task.product.key
+          }
+        : null,
+      parentTaskId: task.parentTask?.id ?? task.parentTaskId ?? null,
+      parentTask: task.parentTask
+        ? {
+            id: task.parentTask.id,
+            title: task.parentTask.title,
+            status: task.parentTask.status
+          }
+        : null,
+      parentMessageId: task.parentMessageId ?? null
     };
+  }
+
+  private toReadTasksType(status: string) {
+    const entry = Object.entries(READ_TASKS_TYPE_TO_STATUS).find(([, value]) => value === status);
+    return entry?.[0] ?? null;
   }
 
   private flattenMessages(messages: TaskMessageNode[], depth: number = 0): FlatMessageNode[] {

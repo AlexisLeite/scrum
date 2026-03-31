@@ -1,7 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { AuthUser, CurrentUser } from "../common/current-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
-import { Roles } from "../common/roles.decorator";
 import { ListActivityQueryDto, RecordActivityDto, UserActivityStatsQueryDto } from "./activity.dto";
 import { ActivityService } from "./activity.service";
 
@@ -11,7 +10,6 @@ export class ActivityController {
   constructor(private readonly activityService: ActivityService) {}
 
   @Get("entities/:entityType/:entityId")
-  @Roles("platform_admin", "product_owner", "scrum_master", "team_member")
   listByEntity(
     @CurrentUser() user: AuthUser,
     @Param("entityType") entityType: string,
@@ -22,7 +20,6 @@ export class ActivityController {
   }
 
   @Get("users/:userId")
-  @Roles("platform_admin", "scrum_master", "team_member")
   listByUser(
     @CurrentUser() user: AuthUser,
     @Param("userId") userId: string,
@@ -32,7 +29,6 @@ export class ActivityController {
   }
 
   @Get("users/:userId/stats")
-  @Roles("platform_admin", "scrum_master", "team_member")
   getUserStats(
     @CurrentUser() user: AuthUser,
     @Param("userId") userId: string,
@@ -42,7 +38,6 @@ export class ActivityController {
   }
 
   @Post("record")
-  @Roles("platform_admin", "product_owner", "scrum_master")
   record(@CurrentUser() user: AuthUser, @Body() dto: RecordActivityDto) {
     return this.activityService.record({
       ...dto,

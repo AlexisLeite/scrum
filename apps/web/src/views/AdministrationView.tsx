@@ -1,53 +1,74 @@
 import React from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Role } from "@scrum/contracts";
-import { canViewUsersAdministration } from "../lib/permissions";
+import { Role, UserProfileDto } from "@scrum/contracts";
+import {
+  administrationDefaultPath,
+  canViewBackupsAdministration,
+  canViewProductsAdministration,
+  canViewRolesAdministration,
+  canViewUsersAdministration
+} from "../lib/permissions";
 
-export function administrationDefaultPath(role: Role): string {
-  if (role === "platform_admin" || role === "product_owner" || role === "scrum_master") {
-    return "/administration/products";
-  }
-  return "/administration/users";
+type AdministrationSubject = UserProfileDto | { role: Role };
+
+function resolveAdministrationUser(subject: AdministrationSubject): UserProfileDto {
+  return "systemPermissions" in subject ? subject : {
+    role: subject.role,
+    systemPermissions: [],
+    productPermissions: {},
+    accessibleProductIds: [],
+    administrationProductIds: [],
+    focusedProductIds: [],
+    teamIds: [],
+    id: "",
+    email: "",
+    name: "",
+    avatarUrl: null,
+    roleKeys: []
+  };
 }
 
-export const AdministrationLinks = ({ role }: { role: Role }) => {
+export const AdministrationLinks = ({ user, role }: { user?: AdministrationSubject; role?: Role }) => {
   const location = useLocation();
-  const showProducts = role === "platform_admin" || role === "product_owner" || role === "scrum_master";
-  const showTeams = role === "platform_admin" || role === "product_owner" || role === "scrum_master";
-  const showUsers = canViewUsersAdministration(role);
-  const showBackups = role === "platform_admin" && location.pathname.startsWith("/administration");
+  const profile = resolveAdministrationUser(user ?? { role: role ?? "team_member" });
+  const showProducts = canViewProductsAdministration(profile);
+  const showUsers = canViewUsersAdministration(profile);
+  const showRoles = canViewRolesAdministration(profile);
+  const showBackups = canViewBackupsAdministration(profile) && location.pathname.startsWith("/administration");
 
   return <> {showProducts ? (
     <NavLink to="/administration/products" className={({ isActive }) => isActive ? "tab active" : "tab"}>
       Productos
     </NavLink>
   ) : null}
-    {showTeams ? (
-      <NavLink to="/administration/teams" className={({ isActive }) => isActive ? "tab active" : "tab"}>
-        Equipos
-      </NavLink>
-    ) : null}
     {showUsers ? (
       <NavLink to="/administration/users" className={({ isActive }) => isActive ? "tab active" : "tab"}>
         Usuarios
+      </NavLink>
+    ) : null}
+    {showRoles ? (
+      <NavLink to="/administration/roles" className={({ isActive }) => isActive ? "tab active" : "tab"}>
+        Roles
       </NavLink>
     ) : null}
     {showBackups ? (
       <NavLink to="/administration/backups" className={({ isActive }) => isActive ? "tab active" : "tab"}>
         Backups
       </NavLink>
-    ) : null}</>
+  ) : null}</>
 }
 
-export function AdministrationView({ role }: { role: Role }) {
+export function AdministrationView({ user }: { user: AdministrationSubject }) {
   return (
     <div className="stack-lg">
       <section className="card workspace-shell-card">
         <div className="tabs">
-          <AdministrationLinks role={role} />
+          <AdministrationLinks user={user} />
         </div>
       </section>
       <Outlet />
     </div>
   );
 }
+
+export { administrationDefaultPath };

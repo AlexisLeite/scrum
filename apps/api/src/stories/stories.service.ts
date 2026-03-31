@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/com
 import { ActivityEntityType, StoryStatus } from "@prisma/client";
 import { ActivityService } from "../activity/activity.service";
 import { AuthUser } from "../common/current-user.decorator";
-import { TeamScopeService } from "../common/team-scope.service";
+import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateStoryDto, UpdateStoryDto } from "./stories.dto";
 
@@ -10,17 +10,19 @@ import { CreateStoryDto, UpdateStoryDto } from "./stories.dto";
 export class StoriesService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly teamScopeService: TeamScopeService,
+    private readonly permissionsService: PermissionsService,
     private readonly activityService: ActivityService
   ) {}
 
   async listByProduct(productId: string, user: AuthUser, status?: string) {
     try {
-      await this.teamScopeService.assertProductReadable(user, productId);
+      this.permissionsService.assertAnyProductPermission(
+        user,
+        productId,
+        ["product.admin.story.read", "product.admin.story.task.read"],
+        "Insufficient product permission"
+      );
     } catch {
-      return [];
-    }
-    if (this.teamScopeService.isTeamMember(user.role)) {
       return [];
     }
 
@@ -89,7 +91,12 @@ export class StoriesService {
   }
 
   async create(productId: string, dto: CreateStoryDto, user: AuthUser) {
-    await this.assertProductAccess(user, productId);
+    this.permissionsService.assertProductPermission(
+      user,
+      productId,
+      "product.admin.story.create",
+      "Insufficient product permission"
+    );
 
     if (dto.status === StoryStatus.IN_SPRINT || dto.status === StoryStatus.DONE) {
       throw new BadRequestException("Story status IN_SPRINT/DONE is derived from tasks");
@@ -131,7 +138,12 @@ export class StoriesService {
     if (!existing) {
       throw new BadRequestException("Story not found");
     }
-    await this.assertProductAccess(user, existing.productId);
+    this.permissionsService.assertProductPermission(
+      user,
+      existing.productId,
+      "product.admin.story.update",
+      "Insufficient product permission"
+    );
 
     if (dto.status === StoryStatus.IN_SPRINT || dto.status === StoryStatus.DONE) {
       throw new BadRequestException("Story status IN_SPRINT/DONE is derived from tasks");
@@ -166,7 +178,12 @@ export class StoriesService {
     if (!existing) {
       throw new BadRequestException("Story not found");
     }
-    await this.assertProductAccess(user, existing.productId);
+    this.permissionsService.assertProductPermission(
+      user,
+      existing.productId,
+      "product.admin.story.delete",
+      "Insufficient product permission"
+    );
 
     await this.prisma.userStory.delete({ where: { id } });
     await this.activityService.record({
@@ -189,7 +206,12 @@ export class StoriesService {
     if (!existing) {
       throw new BadRequestException("Story not found");
     }
-    await this.assertProductAccess(user, existing.productId);
+    this.permissionsService.assertProductPermission(
+      user,
+      existing.productId,
+      "product.admin.story.update",
+      "Insufficient product permission"
+    );
 
     const updated = await this.prisma.userStory.update({ where: { id }, data: { backlogRank } });
     await this.activityService.record({
@@ -206,10 +228,6 @@ export class StoriesService {
       afterJson: updated
     });
     return updated;
-  }
-
-  private async assertProductAccess(user: AuthUser, productId: string) {
-    await this.teamScopeService.assertProductReadable(user, productId);
   }
 
   private getStoryChangedFields(
