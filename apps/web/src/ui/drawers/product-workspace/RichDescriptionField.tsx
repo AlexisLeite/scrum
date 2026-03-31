@@ -93,6 +93,8 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
   const [uploadError, setUploadError] = React.useState("");
   const [lightboxImage, setLightboxImage] = React.useState<{ src: string; alt?: string } | null>(null);
 
+  const ensureImages = (c: string) => c.replaceAll('contaboserver.net:5444', 'contaboserver.net:3000')
+
   const syncEditorHeight = React.useCallback(() => {
     const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
     if (!content) {
@@ -132,7 +134,7 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
     if (!editorRef.current) {
       return;
     }
-    editorRef.current.setMarkdown(nextMarkdown);
+    editorRef.current.setMarkdown(ensureImages(nextMarkdown));
     onChange(nextMarkdown);
     scheduleHeightSync();
   }, [onChange, scheduleHeightSync]);
@@ -144,7 +146,7 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
     const currentMarkdown = editorRef.current.getMarkdown();
     const nextMarkdown = value || "";
     if (currentMarkdown !== nextMarkdown) {
-      editorRef.current.setMarkdown(nextMarkdown);
+      editorRef.current.setMarkdown(ensureImages(nextMarkdown));
     }
   }, [value]);
 
@@ -411,8 +413,6 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
       pendingUploadsRef.current.clear();
     };
   }, []);
-
-  const ensureImages = (c: string) => c.replaceAll('contaboserver.net:5444', 'contaboserver.net:3000') 
 
 
   return (
