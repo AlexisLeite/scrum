@@ -81,6 +81,81 @@
   gap: 0.9rem;
 }
 
+.admin-role-editor,
+.admin-role-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-role-sticky-head,
+.admin-role-header-card {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: color-mix(in srgb, var(--bg-card) 96%, var(--bg-soft));
+  box-shadow: 0 14px 28px rgba(9, 28, 52, 0.16);
+}
+
+.admin-role-head-grid,
+.admin-role-header-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(220px, 0.95fr) minmax(180px, 0.45fr) auto;
+  align-items: end;
+}
+
+.admin-role-heading {
+  align-items: flex-start;
+}
+
+.admin-role-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.admin-role-description-field {
+  min-width: 0;
+}
+
+.admin-role-description-field textarea {
+  min-height: 5.5rem;
+}
+
+.admin-role-header-description {
+  grid-column: 1 / -1;
+}
+
+.admin-role-permissions-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.admin-role-permission-card {
+  align-self: stretch;
+}
+
+.admin-role-category-options {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+}
+
+.admin-role-dependency-list,
+.admin-role-dependencies-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-role-dependency-item {
+  display: grid;
+  gap: 0.35rem;
+}
+
 .admin-user-window-select {
   display: grid;
   gap: 0.35rem;
@@ -90,6 +165,22 @@
 @media (max-width: 1080px) {
   .admin-users-layout {
     grid-template-columns: 1fr;
+  }
+
+  .admin-role-head-grid,
+  .admin-role-header-grid,
+  .admin-role-permissions-grid,
+  .admin-role-category-options {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-role-sticky-head,
+  .admin-role-header-card {
+    position: static;
+  }
+
+  .admin-role-actions {
+    justify-content: flex-start;
   }
 }
 

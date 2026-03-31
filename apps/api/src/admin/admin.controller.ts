@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { RoleDefinitionScope } from "@prisma/client";
 import { BackupsService } from "../backups/backups.service";
 import { AuthUser, CurrentUser } from "../common/current-user.decorator";
@@ -73,6 +73,16 @@ export class AdminController {
   @Patch("roles/:roleId")
   updateRole(@CurrentUser() user: AuthUser, @Param("roleId") roleId: string, @Body() dto: UpdateRoleDto) {
     return this.adminService.updateRole(roleId, dto, user);
+  }
+
+  @Get("roles/:roleId/dependencies")
+  listRoleDependencies(@CurrentUser() user: AuthUser, @Param("roleId") roleId: string) {
+    return this.adminService.listRoleDependencies(roleId, user);
+  }
+
+  @Delete("roles/:roleId")
+  deleteRole(@CurrentUser() user: AuthUser, @Param("roleId") roleId: string) {
+    return this.adminService.deleteRole(roleId, user);
   }
 
   @Get("backups")

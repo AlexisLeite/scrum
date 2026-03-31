@@ -465,6 +465,16 @@ export interface RoleDefinitionDto {
   updatedAt: string;
 }
 
+export interface RoleAssignmentDependencyDto {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  productId: string;
+  productKey: string;
+  productName: string;
+  isSystem: boolean;
+}
+
 export interface UserProductRoleAssignmentDto {
   productId: string;
   productKey: string;

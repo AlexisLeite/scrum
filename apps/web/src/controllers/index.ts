@@ -9,6 +9,7 @@ import {
   DraftDto,
   ProductAssignableUserDto,
   Role,
+  RoleAssignmentDependencyDto,
   RoleDefinitionDto,
   RoleScope,
   UpdateRoleDto,
@@ -140,6 +141,14 @@ export class AdminController {
 
   async updateRole(roleId: string, payload: UpdateRoleDto) {
     return apiClient.patch<RoleDefinitionDto>(`/admin/roles/${roleId}`, payload);
+  }
+
+  async loadRoleDependencies(roleId: string) {
+    return apiClient.get<RoleAssignmentDependencyDto[]>(`/admin/roles/${roleId}/dependencies`);
+  }
+
+  async deleteRole(roleId: string) {
+    return apiClient.del<RoleDefinitionDto>(`/admin/roles/${roleId}`);
   }
 
   async listBackups() {

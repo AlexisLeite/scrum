@@ -1,13 +1,16 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
   OnModuleInit
 } from "@nestjs/common";
 import {
   PermissionKey,
   PRODUCT_PERMISSION_KEYS,
   Role,
+  RoleAssignmentDependencyDto,
   RoleScope,
   STANDARD_ROLE_DEFINITIONS,
   SYSTEM_PERMISSION_KEYS,
@@ -170,17 +173,7 @@ export class PermissionsService implements OnModuleInit {
     return this.prisma.roleDefinition.findMany({
       where: scope ? { scope: scope as RoleDefinitionScope } : undefined,
       orderBy: [{ isBuiltin: "desc" }, { title: "asc" }]
-    }).then((roles) => roles.map((role) => ({
-      id: role.id,
-      key: role.key,
-      title: role.title,
-      description: role.description,
-      scope: role.scope as RoleScope,
-      isBuiltin: role.isBuiltin,
-      permissions: role.permissions as PermissionKey[],
-      createdAt: role.createdAt.toISOString(),
-      updatedAt: role.updatedAt.toISOString()
-    })));
+    }).then((roles) => roles.map((role) => this.serializeRoleDefinition(role)));
   }
 
   async createRole(input: {
@@ -204,17 +197,7 @@ export class PermissionsService implements OnModuleInit {
       }
     });
 
-    return {
-      id: role.id,
-      key: role.key,
-      title: role.title,
-      description: role.description,
-      scope: role.scope as RoleScope,
-      isBuiltin: role.isBuiltin,
-      permissions: role.permissions as PermissionKey[],
-      createdAt: role.createdAt.toISOString(),
-      updatedAt: role.updatedAt.toISOString()
-    };
+    return this.serializeRoleDefinition(role);
   }
 
   async updateRole(
@@ -234,17 +217,71 @@ export class PermissionsService implements OnModuleInit {
       }
     });
 
-    return {
-      id: role.id,
-      key: role.key,
-      title: role.title,
-      description: role.description,
-      scope: role.scope as RoleScope,
-      isBuiltin: role.isBuiltin,
-      permissions: role.permissions as PermissionKey[],
-      createdAt: role.createdAt.toISOString(),
-      updatedAt: role.updatedAt.toISOString()
-    };
+    return this.serializeRoleDefinition(role);
+  }
+
+  async listRoleDependencies(roleId: string): Promise<RoleAssignmentDependencyDto[]> {
+    await this.ensureBootstrapped();
+    const role = await this.getRoleDefinitionOrThrow(roleId);
+    const memberships = await this.prisma.productMember.findMany({
+      where: { roleKeys: { has: role.key } },
+      select: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        product: {
+          select: {
+            id: true,
+            key: true,
+            name: true,
+            isSystem: true
+          }
+        }
+      }
+    });
+
+    return memberships
+      .map((membership) => ({
+        userId: membership.user.id,
+        userName: membership.user.name,
+        userEmail: membership.user.email,
+        productId: membership.product.id,
+        productKey: membership.product.key,
+        productName: membership.product.name,
+        isSystem: membership.product.isSystem
+      }))
+      .sort((left, right) =>
+        `${left.isSystem ? "0" : "1"} ${left.productName} ${left.userName}`
+          .localeCompare(`${right.isSystem ? "0" : "1"} ${right.productName} ${right.userName}`)
+      );
+  }
+
+  async deleteRole(roleId: string) {
+    await this.ensureBootstrapped();
+    const role = await this.getRoleDefinitionOrThrow(roleId);
+    if (role.isBuiltin) {
+      throw new BadRequestException("No se pueden eliminar roles builtin.");
+    }
+
+    const dependencies = await this.listRoleDependencies(roleId);
+    if (dependencies.length > 0) {
+      const summary = dependencies
+        .map((dependency) => `${dependency.userName} / ${dependency.isSystem ? "SYSTEM" : dependency.productKey}`)
+        .join(", ");
+      throw new ConflictException(
+        `No se puede eliminar el rol porque sigue asignado a ${dependencies.length} combinaciones usuario/producto: ${summary}.`
+      );
+    }
+
+    const deleted = await this.prisma.roleDefinition.delete({
+      where: { id: roleId }
+    });
+
+    return this.serializeRoleDefinition(deleted);
   }
 
   async listAccessCatalog() {
@@ -1100,6 +1137,42 @@ export class PermissionsService implements OnModuleInit {
       counter += 1;
     }
     return key;
+  }
+
+  private async getRoleDefinitionOrThrow(roleId: string) {
+    const role = await this.prisma.roleDefinition.findUnique({
+      where: { id: roleId }
+    });
+
+    if (!role) {
+      throw new NotFoundException("Role not found");
+    }
+
+    return role;
+  }
+
+  private serializeRoleDefinition(role: {
+    id: string;
+    key: string;
+    title: string;
+    description: string | null;
+    scope: RoleDefinitionScope;
+    isBuiltin: boolean;
+    permissions: string[];
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: role.id,
+      key: role.key,
+      title: role.title,
+      description: role.description,
+      scope: role.scope as RoleScope,
+      isBuiltin: role.isBuiltin,
+      permissions: role.permissions as PermissionKey[],
+      createdAt: role.createdAt.toISOString(),
+      updatedAt: role.updatedAt.toISOString()
+    };
   }
 }
 

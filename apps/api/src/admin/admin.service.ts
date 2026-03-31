@@ -166,6 +166,16 @@ export class AdminService {
     });
   }
 
+  async listRoleDependencies(roleId: string, viewer: AuthUser) {
+    this.assertCanReadRoles(viewer);
+    return this.permissionsService.listRoleDependencies(roleId);
+  }
+
+  async deleteRole(roleId: string, actor: AuthUser) {
+    this.assertCanDeleteRoles(actor);
+    return this.permissionsService.deleteRole(roleId);
+  }
+
   private assertCanReadUsers(user: AuthUser) {
     this.permissionsService.assertSystemPermission(
       user,
@@ -210,6 +220,14 @@ export class AdminService {
     this.permissionsService.assertSystemPermission(
       user,
       "system.administration.roles.update",
+      "Insufficient role permission"
+    );
+  }
+
+  private assertCanDeleteRoles(user: AuthUser) {
+    this.permissionsService.assertSystemPermission(
+      user,
+      "system.administration.roles.delete",
       "Insufficient role permission"
     );
   }
