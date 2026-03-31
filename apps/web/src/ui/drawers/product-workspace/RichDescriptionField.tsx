@@ -412,12 +412,15 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
     };
   }, []);
 
+  const ensureImages = (c: string) => c.replaceAll('contaboserver.net:5444', 'contaboserver.net:3000') 
+
+
   return (
     <div className="rich-description-field" ref={fieldRef}>
       <span className="rich-description-label">{label}</span>
       <MDXEditor
         ref={editorRef}
-        markdown={value || ""}
+        markdown={ensureImages(value || "")}
         onChange={(nextValue) => {
           onChange(nextValue);
           scheduleHeightSync();
