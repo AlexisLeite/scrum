@@ -7,7 +7,7 @@
 
 .admin-backoffice-layout,
 .admin-role-layout {
-  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  grid-template-columns: minmax(400px, 450px) minmax(0, 1fr);
 }
 
 .admin-users-sidebar,
@@ -215,8 +215,6 @@
 }
 
 .admin-role-toolbar-card {
-  position: sticky;
-  top: 0.75rem;
   z-index: 4;
   background: color-mix(in srgb, var(--bg-card) 96%, var(--bg-soft));
   box-shadow: 0 14px 28px rgba(9, 28, 52, 0.16);
@@ -343,6 +341,7 @@
 }
 
 @media (max-width: 1080px) {
+
   .admin-backoffice-layout,
   .admin-role-layout,
   .admin-user-summary-layout,
