@@ -34,7 +34,18 @@ export class StoriesService {
         ...(status ? { status: status as StoryStatus } : {})
       },
       orderBy: [{ backlogRank: "asc" }, { createdAt: "asc" }],
-      include: { tasks: true }
+      include: {
+        tasks: {
+          include: {
+            assignee: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        }
+      }
     });
 
     const taskIds = Array.from(new Set(stories.flatMap((story) => story.tasks.map((task) => task.id))));

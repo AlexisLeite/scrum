@@ -78,7 +78,7 @@ const backlogFilterFieldStyle = {
 const backlogFilterRangeStyle = {
   display: "grid",
   gap: "0.5rem",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
+  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))"
 } as const;
 
 const backlogFilterActionsStyle = {
@@ -157,7 +157,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
     return {
       assignees: sortOptions(Array.from(assignees.values())),
       creators: sortOptions(Array.from(creators.values())),
-      statuses: Array.from(statuses.values()).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }))
+      statuses: buildStatusOptions(...Array.from(statuses.values()))
     };
   }, [stories]);
 

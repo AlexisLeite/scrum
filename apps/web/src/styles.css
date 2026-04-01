@@ -1238,6 +1238,28 @@ a.btn-secondary,
   z-index: 24;
 }
 
+.story-list-filter-field {
+  min-width: 0;
+}
+
+.story-list-filter-field > span {
+  display: block;
+}
+
+.story-list-filter-field input,
+.story-list-filter-field select {
+  width: 100%;
+  min-width: 0;
+}
+
+.story-list-filter-range {
+  align-items: start;
+}
+
+.story-list-filter-range > * {
+  min-width: 0;
+}
+
 .story-list-filter-option {
   display: flex;
   align-items: center;
@@ -2023,6 +2045,10 @@ html .drawer-content .card {
   .story-list-filter-popover {
     left: 0;
     right: auto;
+  }
+
+  .story-list-filter-range {
+    grid-template-columns: 1fr !important;
   }
 
   .theme-toggle {
