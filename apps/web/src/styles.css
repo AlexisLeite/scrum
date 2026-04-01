@@ -17,6 +17,7 @@
   --bg-strong: #1f4d7d;
   --bg-hover: rgba(30, 101, 170, 0.14);
   --field-bg: color-mix(in srgb, var(--bg-card) 88%, transparent);
+  --surface: var(--bg-card);
 
   --text-main: #13263b;
   --text-muted: #506a85;
@@ -28,6 +29,7 @@
 
   --shadow-surface: 0 14px 34px rgba(12, 37, 67, 0.12);
   --shadow-soft: 0 8px 20px rgba(10, 33, 60, 0.09);
+  --shadow-md: var(--shadow-surface);
   --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
 
   --focus-ring: #58a6f0;
@@ -61,6 +63,7 @@
   --bg-strong: #1f4f7f;
   --bg-hover: rgba(89, 157, 222, 0.2);
   --field-bg: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  --surface: var(--bg-card);
 
   --text-main: #eaf2fe;
   --text-muted: #abc0d9;
@@ -72,6 +75,7 @@
 
   --shadow-surface: 0 16px 36px rgba(4, 10, 19, 0.46);
   --shadow-soft: 0 10px 24px rgba(3, 8, 14, 0.38);
+  --shadow-md: var(--shadow-surface);
 
   --focus-ring: #7fbfff;
   --accent-a: #4a9fff;
