@@ -71,6 +71,19 @@ function formatDateTime(value: string | null | undefined): string {
   return parsed.toLocaleString();
 }
 
+function sortMessageNodes(nodes: TaskMessageNode[], root = true): TaskMessageNode[] {
+  return [...nodes]
+    .sort((left, right) => {
+      const leftTime = new Date(left.createdAt).getTime();
+      const rightTime = new Date(right.createdAt).getTime();
+      return root ? rightTime - leftTime : leftTime - rightTime;
+    })
+    .map((node) => ({
+      ...node,
+      replies: sortMessageNodes(node.replies, false)
+    }));
+}
+
 function previewText(value: string | null | undefined): string {
   if (!value?.trim()) return "Sin descripcion";
   return value.replace(/\s+/g, " ").trim();
@@ -86,32 +99,46 @@ function TaskMessageThread(props: {
   onReply: (message: TaskMessageNode) => void;
   onCreateTask: (message: TaskMessageNode) => void;
   onOpenDerivedTask: (taskId: string) => void;
+  activeReplyId: string | null;
+  replyBody: string;
+  onReplyBodyChange: (value: string) => void;
+  onSubmitReply: () => void;
+  onCancelReply: () => void;
+  productId: string;
   allowTaskCreation: boolean;
   allowMessageCreation: boolean;
+  submittingReply: boolean;
   depth?: number;
 }) {
-  const { nodes, onReply, onCreateTask, onOpenDerivedTask, allowTaskCreation, allowMessageCreation, depth = 0 } = props;
+  const {
+    nodes,
+    onReply,
+    onCreateTask,
+    onOpenDerivedTask,
+    activeReplyId,
+    replyBody,
+    onReplyBodyChange,
+    onSubmitReply,
+    onCancelReply,
+    productId,
+    allowTaskCreation,
+    allowMessageCreation,
+    submittingReply,
+    depth = 0
+  } = props;
 
   return (
     <div className="task-thread">
       {nodes.map((message) => (
-        <article key={message.id} className="task-message-card" style={{ marginLeft: `${depth * 20}px` }}>
+        <article
+          key={message.id}
+          className={`task-message-card ${activeReplyId === message.id ? "is-reply-target" : ""}`.trim()}
+          style={{ marginLeft: `${depth * 20}px` }}
+        >
           <div className="task-message-head">
             <div>
               <strong>{message.authorUser?.name ?? message.authorUser?.email ?? "Sistema"}</strong>
               <span className="muted"> · {formatDateTime(message.createdAt)}</span>
-            </div>
-            <div className="row-actions compact">
-              {allowMessageCreation ? (
-                <button type="button" className="btn btn-secondary" onClick={() => onReply(message)}>
-                  Responder
-                </button>
-              ) : null}
-              {allowTaskCreation ? (
-                <button type="button" className="btn btn-secondary" onClick={() => onCreateTask(message)}>
-                  Crear tarea
-                </button>
-              ) : null}
             </div>
           </div>
           <MarkdownPreview markdown={message.body} className="task-message-body markdown-preview-card" />
@@ -132,14 +159,64 @@ function TaskMessageThread(props: {
               </div>
             </div>
           ) : null}
+          {allowMessageCreation && activeReplyId === message.id ? (
+            <div className="task-inline-reply">
+              <RichDescriptionField
+                label="Tu respuesta"
+                value={replyBody}
+                onChange={onReplyBodyChange}
+                rows={6}
+                disabled={submittingReply}
+                productId={productId}
+              />
+              <div className="row-actions compact">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={onCancelReply}
+                  disabled={submittingReply}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => void onSubmitReply()}
+                  disabled={submittingReply || !replyBody.trim()}
+                >
+                  Responder
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="row-actions compact">
+              {allowTaskCreation ? (
+                <button type="button" className="btn btn-secondary" onClick={() => onCreateTask(message)}>
+                  Crear tarea
+                </button>
+              ) : null}
+              {allowMessageCreation ? (
+                <button type="button" className="btn btn-secondary" onClick={() => onReply(message)}>
+                  Responder
+                </button>
+              ) : null}
+            </div>
+          )}
           {message.replies.length > 0 ? (
             <TaskMessageThread
               nodes={message.replies}
               onReply={onReply}
               onCreateTask={onCreateTask}
               onOpenDerivedTask={onOpenDerivedTask}
+              activeReplyId={activeReplyId}
+              replyBody={replyBody}
+              onReplyBodyChange={onReplyBodyChange}
+              onSubmitReply={onSubmitReply}
+              onCancelReply={onCancelReply}
+              productId={productId}
               allowTaskCreation={allowTaskCreation}
               allowMessageCreation={allowMessageCreation}
+              submittingReply={submittingReply}
               depth={depth + 1}
             />
           ) : null}
@@ -202,6 +279,10 @@ export function TaskCollaborationPanel(props: {
   });
   const { value: messageDraft, setValue: setMessageDraft, isHydratingRemote, saveError, clearDraft } = draft;
   const messageBody = typeof messageDraft.body === "string" ? messageDraft.body : "";
+  const orderedConversation = React.useMemo(
+    () => sortMessageNodes(detail?.conversation ?? []),
+    [detail?.conversation]
+  );
 
   const findMessageById = React.useCallback((nodes: TaskMessageNode[], messageId: string): TaskMessageNode | null => {
     for (const node of nodes) {
@@ -461,30 +542,7 @@ export function TaskCollaborationPanel(props: {
           </article>
         ))}
       </div>
-      {replyTarget ? (
-        <div className="definition-note">
-          <span className="muted">Respondiendo a</span>
-          <MarkdownPreview
-            markdown={replyTarget.body}
-            compact
-            emptyLabel="El mensaje respondido no tiene contenido."
-            className="definition-note-markdown"
-          />
-          <div className="row-actions compact">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => {
-                setReplyTarget(null);
-                setMessageDraft((current) => ({ ...current, replyTargetId: "" }));
-              }}
-            >
-              Cancelar respuesta
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {allowMessageCreation ? (
+      {allowMessageCreation && !replyTarget ? (
         <>
           <RichDescriptionField
             label="Nuevo mensaje"
@@ -507,18 +565,28 @@ export function TaskCollaborationPanel(props: {
           </div>
         </>
       ) : null}
-      {!loading && detail && detail.conversation.length === 0 ? <p className="muted">Aun no hay mensajes.</p> : null}
+      {!loading && detail && orderedConversation.length === 0 ? <p className="muted">Aun no hay mensajes.</p> : null}
       {detail ? (
         <TaskMessageThread
-          nodes={detail.conversation}
+          nodes={orderedConversation}
           onReply={(message) => {
             setReplyTarget(message);
             setMessageDraft((current) => ({ ...current, replyTargetId: message.id }));
           }}
           onCreateTask={openDerivedTaskDrawer}
           onOpenDerivedTask={(derivedTaskId) => void openTaskDrawerById(derivedTaskId)}
+          activeReplyId={replyTarget?.id ?? null}
+          replyBody={messageBody}
+          onReplyBodyChange={(nextValue) => setMessageDraft((current) => ({ ...current, body: nextValue }))}
+          onSubmitReply={submitMessage}
+          onCancelReply={() => {
+            setReplyTarget(null);
+            setMessageDraft((current) => ({ ...current, body: "", replyTargetId: "" }));
+          }}
+          productId={productId}
           allowTaskCreation={allowTaskCreation}
           allowMessageCreation={allowMessageCreation}
+          submittingReply={submittingMessage || isHydratingRemote}
         />
       ) : null}
       {saveError ? <p className="error-text">{saveError}</p> : null}
