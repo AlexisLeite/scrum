@@ -72,11 +72,10 @@ export class CreateSprintTaskDto {
   @IsString()
   status: string = "Todo";
 
-  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(1)
-  effortPoints?: number;
+  effortPoints!: number;
 
   @IsOptional()
   @Type(() => Number)

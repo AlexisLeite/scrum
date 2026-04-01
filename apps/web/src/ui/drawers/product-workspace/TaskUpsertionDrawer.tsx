@@ -39,6 +39,7 @@ type PrefetchedTaskDrawerData = {
 
 const EFFORT_POINT_VALUES = [1, 2, 3, 5, 8, 13, 21] as const;
 const ESTIMATED_HOUR_PRESETS = [4, 8, 16, 24] as const;
+const DEFAULT_NEW_TASK_EFFORT_POINTS = "5";
 
 type TaskUpsertionDrawerOptions = {
   controller: ProductController;
@@ -113,6 +114,13 @@ function compactPreview(value: string | null | undefined): string {
     return "Sin detalle adicional.";
   }
   return value.replace(/\s+/g, " ").trim();
+}
+
+function getInitialEffortPoints(task?: EditableTask) {
+  if (task?.effortPoints != null) {
+    return String(task.effortPoints);
+  }
+  return task ? "" : DEFAULT_NEW_TASK_EFFORT_POINTS;
 }
 
 function CompactOptionGroup(props: {
@@ -195,6 +203,7 @@ export function TaskUpsertionForm(props: {
   } = options;
 
   const initialEstimatedHours = React.useMemo(() => toInitialHoursState(task?.estimatedHours), [task?.estimatedHours]);
+  const initialEffortPoints = React.useMemo(() => getInitialEffortPoints(task), [task]);
   const customHoursInputRef = React.useRef<HTMLInputElement | null>(null);
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
@@ -206,7 +215,7 @@ export function TaskUpsertionForm(props: {
     status: task?.status ?? defaultStatus ?? statusOptions[0] ?? "Todo",
     sprintId: task?.sprintId ?? fixedSprintId ?? "",
     assigneeId: task?.assigneeId ?? "",
-    effortPoints: task?.effortPoints != null ? String(task.effortPoints) : "",
+    effortPoints: initialEffortPoints,
     selectedEstimatedPreset: initialEstimatedHours.preset,
     customEstimatedHours: initialEstimatedHours.custom,
     actualHours: task?.actualHours != null ? String(task.actualHours) : ""
@@ -223,7 +232,7 @@ export function TaskUpsertionForm(props: {
       status: task?.status ?? defaultStatus ?? statusOptions[0] ?? "Todo",
       sprintId: task?.sprintId ?? fixedSprintId ?? "",
       assigneeId: task?.assigneeId ?? "",
-      effortPoints: task?.effortPoints != null ? String(task.effortPoints) : "",
+      effortPoints: initialEffortPoints,
       selectedEstimatedPreset: initialEstimatedHours.preset,
       customEstimatedHours: initialEstimatedHours.custom,
       actualHours: task?.actualHours != null ? String(task.actualHours) : ""
@@ -262,6 +271,13 @@ export function TaskUpsertionForm(props: {
     setCompletionDialogOpen(false);
   }, [task, defaultStoryId, fixedSprintId, defaultStatus, statusOptions]);
 
+  React.useEffect(() => {
+    if (task || isHydratingRemote || effortPoints) {
+      return;
+    }
+    setForm((current) => ({ ...current, effortPoints: DEFAULT_NEW_TASK_EFFORT_POINTS }));
+  }, [effortPoints, isHydratingRemote, setForm, task]);
+
   const persistTask = async (actualHoursOverride?: number) => {
     if (formDisabled) {
       return;
@@ -288,6 +304,11 @@ export function TaskUpsertionForm(props: {
 
     if (!task && !selectedStoryId) {
       setError("Debes elegir una historia.");
+      return;
+    }
+
+    if (!task && payload.effortPoints === undefined) {
+      setError("Debes elegir puntos de esfuerzo.");
       return;
     }
 

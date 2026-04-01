@@ -38,11 +38,10 @@ export class CreateTaskDto {
   @IsString()
   status: string = "Todo";
 
-  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @IsIn(EFFORT_POINT_VALUES)
-  effortPoints?: number;
+  effortPoints!: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -130,11 +129,10 @@ export class CreateTaskFromMessageDto {
   @IsString()
   status: string = "Todo";
 
-  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @IsIn(EFFORT_POINT_VALUES)
-  effortPoints?: number;
+  effortPoints!: number;
 
   @IsOptional()
   @Type(() => Number)
