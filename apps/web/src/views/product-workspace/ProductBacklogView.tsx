@@ -40,6 +40,8 @@ type StoryWithSearchState = StoryItem & {
   matchesSearch: boolean;
 };
 
+const DEFAULT_BACKLOG_SORT: StorySortOption = "title-asc";
+
 function normalizeDateInput(value: string) {
   return value ? new Date(`${value}T00:00:00`) : null;
 }
@@ -95,6 +97,26 @@ const backlogFilterCheckboxStyle = {
   gap: "0.55rem"
 } as const;
 
+function isStorySortOption(value: string): value is StorySortOption {
+  return storySortOptions.some((option) => option.value === value);
+}
+
+function getBacklogSortStorageKey(productId: string) {
+  return `scrum.backlog.sort.${productId}`;
+}
+
+function loadBacklogSort(productId: string | undefined): StorySortOption {
+  if (!productId || typeof window === "undefined") {
+    return DEFAULT_BACKLOG_SORT;
+  }
+  try {
+    const storedValue = window.localStorage.getItem(getBacklogSortStorageKey(productId));
+    return storedValue && isStorySortOption(storedValue) ? storedValue : DEFAULT_BACKLOG_SORT;
+  } catch {
+    return DEFAULT_BACKLOG_SORT;
+  }
+}
+
 export const ProductBacklogView = observer(function ProductBacklogView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
@@ -104,7 +126,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const canManageTasks = canCreateTasks(user?.role);
   const { assignableUsers } = useProductAssignableUsers(controller, productId ? [productId] : []);
   const [search, setSearch] = React.useState("");
-  const [sortBy, setSortBy] = React.useState<StorySortOption>("title-asc");
+  const [sortBy, setSortBy] = React.useState<StorySortOption>(() => loadBacklogSort(productId));
   const [expandedStoryIds, setExpandedStoryIds] = React.useState<Record<string, boolean>>({});
   const [expandedTaskIds, setExpandedTaskIds] = React.useState<Record<string, boolean>>({});
   const [openingTaskId, setOpeningTaskId] = React.useState("");
@@ -124,6 +146,21 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
       void controller.loadSprints(productId);
     }
   }, [canManageTasks, controller, productId]);
+
+  React.useEffect(() => {
+    setSortBy(loadBacklogSort(productId));
+  }, [productId]);
+
+  React.useEffect(() => {
+    if (!productId || typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(getBacklogSortStorageKey(productId), sortBy);
+    } catch {
+      // Ignore localStorage write failures and keep the in-memory fallback.
+    }
+  }, [productId, sortBy]);
 
   if (!productId) return null;
 
