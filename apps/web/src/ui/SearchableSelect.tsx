@@ -42,6 +42,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
   } = props;
 
   const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const [open, setOpen] = React.useState(false);
@@ -122,8 +123,9 @@ export function SearchableSelect(props: SearchableSelectProps) {
     };
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && rootRef.current?.contains(event.target as Node)) {
         setOpen(false);
+        window.setTimeout(() => triggerRef.current?.focus(), 0);
       }
     };
 
@@ -166,6 +168,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
   const handleSelect = (nextValue: string) => {
     onChange(nextValue);
     setOpen(false);
+    window.setTimeout(() => triggerRef.current?.focus(), 0);
   };
 
   const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -234,6 +237,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
       className={`searchable-select${open ? " is-open" : ""}${disabled ? " is-disabled" : ""}${className ? ` ${className}` : ""}`}
     >
       <button
+        ref={triggerRef}
         type="button"
         className="searchable-select-trigger"
         onClick={() => setOpen((current) => !current)}
