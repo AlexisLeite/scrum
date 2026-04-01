@@ -83,6 +83,7 @@
 }
 
 .searchable-select-option:hover:not(:disabled),
+.searchable-select-option.is-active,
 .searchable-select-option.is-selected {
   background: color-mix(in srgb, var(--accent-a) 10%, var(--surface));
   border-color: color-mix(in srgb, var(--accent-a) 24%, var(--border));
