@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { Role } from "@prisma/client";
 import { AuthUser } from "../common/current-user.decorator";
 import { PermissionsService } from "../permissions/permissions.service";
@@ -91,12 +91,8 @@ export class ProductsService {
   }
 
   async addMember(productId: string, userId: string, role: Role, actor: AuthUser) {
-    this.permissionsService.assertSystemPermission(
-      actor,
-      "system.administration.users.update",
-      "Insufficient user permission"
-    );
     await this.getProductOrThrow(productId);
+    this.assertCanManageProductMemberRole(productId, role, actor);
 
     const existing = await this.prisma.productMember.findUnique({
       where: { productId_userId: { productId, userId } }
@@ -120,6 +116,24 @@ export class ProductsService {
         roleKeys: Array.from(new Set([...existing.roleKeys, role]))
       }
     });
+  }
+
+  private assertCanManageProductMemberRole(productId: string, role: Role, actor: AuthUser) {
+    if (this.permissionsService.hasSystemPermission(actor, "system.administration.users.update")) {
+      return;
+    }
+
+    const canManageQaMembers = this.permissionsService.hasProductPermission(
+      actor,
+      productId,
+      ["product.admin.workflow.read", "product.admin.workflow.update"]
+    );
+
+    if (role === Role.qa_member && canManageQaMembers) {
+      return;
+    }
+
+    throw new ForbiddenException("Insufficient user permission");
   }
 
   async listTeams(productId: string, user?: AuthUser) {

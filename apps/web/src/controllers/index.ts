@@ -239,6 +239,10 @@ export class ProductController {
     this.store.products.upsert(product);
   }
 
+  async addProductMember(productId: string, payload: { userId: string; role: Role }) {
+    return apiClient.post<any>(`/products/${productId}/members`, payload);
+  }
+
   async deleteProduct(productId: string) {
     await apiClient.del(`/products/${productId}`);
     this.store.products.remove(productId);

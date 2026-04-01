@@ -111,11 +111,14 @@ export function ProductUpsertionForm(props: {
   const [activityError, setActivityError] = React.useState("");
   const [accessUsers, setAccessUsers] = React.useState<ProductAccessUser[]>([]);
   const [accessError, setAccessError] = React.useState("");
+  const [grantingQaUserId, setGrantingQaUserId] = React.useState("");
   const [closeBaseline, setCloseBaseline] = React.useState<ProductCloseSnapshot>(() => normalizeProductCloseSnapshot({
     name: product?.name ?? "",
     key: product?.key ?? "",
     description: product?.description ?? ""
   }));
+  const viewerRole = store.session.user?.role;
+  const canAssignQaMember = viewerRole === "platform_admin" || viewerRole === "product_owner" || viewerRole === "scrum_master";
   const draft = useDraftPersistence({
     userId: store.session.user?.id,
     entityType: "PRODUCT",
@@ -175,27 +178,52 @@ export function ProductUpsertionForm(props: {
     return () => { active = false; };
   }, [product]);
 
+  const loadAccessUsers = React.useCallback(async () => {
+    if (!product) {
+      setAccessUsers([]);
+      setAccessError("");
+      return;
+    }
+
+    const users = await controller.loadAssignableUsers(product.id);
+    setAccessUsers(users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      roleKeys: user.roleKeys ?? []
+    })));
+    setAccessError("");
+  }, [controller, product]);
+
   React.useEffect(() => {
     if (!product) return;
     let active = true;
-    void (async () => {
-      try {
-        const users = await controller.loadAssignableUsers(product.id);
-        if (!active) return;
-        setAccessUsers(users.map((user) => ({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          roleKeys: user.roleKeys ?? []
-        })));
-        setAccessError("");
-      } catch (loadError) {
-        if (!active) return;
-        setAccessError(errorMessage(loadError));
-      }
-    })();
+    void loadAccessUsers().catch((loadError) => {
+      if (!active) return;
+      setAccessError(errorMessage(loadError));
+    });
     return () => { active = false; };
-  }, [controller, product]);
+  }, [loadAccessUsers, product]);
+
+  const grantQaMember = React.useCallback(async (userId: string) => {
+    if (!product || grantingQaUserId) {
+      return;
+    }
+
+    setGrantingQaUserId(userId);
+    setAccessError("");
+    try {
+      await controller.addProductMember(product.id, {
+        userId,
+        role: "qa_member"
+      });
+      await loadAccessUsers();
+    } catch (grantError) {
+      setAccessError(errorMessage(grantError));
+    } finally {
+      setGrantingQaUserId("");
+    }
+  }, [controller, grantingQaUserId, loadAccessUsers, product]);
 
   const submit = React.useCallback(async () => {
     if (formDisabled) return;
@@ -273,8 +301,22 @@ export function ProductUpsertionForm(props: {
           <div className="stack-sm">
             {accessUsers.map((user) => (
               <article key={user.id} className="definition-note">
-                <strong>{user.name}</strong>
-                <span className="muted">{user.email ?? "Sin email"}</span>
+                <div className="section-head">
+                  <div>
+                    <strong>{user.name}</strong>
+                    <div className="muted">{user.email ?? "Sin email"}</div>
+                  </div>
+                  {canAssignQaMember && !user.roleKeys.includes("qa_member") ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={Boolean(grantingQaUserId)}
+                      onClick={() => void grantQaMember(user.id)}
+                    >
+                      {grantingQaUserId === user.id ? "Asignando..." : "Hacer QA Member"}
+                    </button>
+                  ) : null}
+                </div>
                 <div className="admin-user-list-item-meta">
                   {user.roleKeys.map((roleKey) => (
                     <span key={roleKey} className="pill">{roleKey}</span>
@@ -285,6 +327,11 @@ export function ProductUpsertionForm(props: {
             ))}
             {accessUsers.length === 0 ? <p className="muted">No hay usuarios con acceso asignado a este producto.</p> : null}
           </div>
+          {canAssignQaMember ? (
+            <p className="muted">
+              El rol <strong>qa_member</strong> se asigna como acceso adicional sobre usuarios ya visibles en el producto.
+            </p>
+          ) : null}
           {accessError ? <p className="error-text">{accessError}</p> : null}
         </section>
       ) : null}
