@@ -779,17 +779,20 @@ export class PermissionsService implements OnModuleInit {
   }
 
   private async ensureStandardRoleDefinitions() {
-    const existing = await this.prisma.roleDefinition.findMany({
-      select: { key: true }
-    });
-    const existingKeys = new Set(existing.map((role) => role.key));
-
     for (const definition of STANDARD_ROLE_DEFINITIONS) {
-      if (existingKeys.has(definition.key)) {
-        continue;
-      }
-      await this.prisma.roleDefinition.create({
-        data: {
+      await this.prisma.roleDefinition.upsert({
+        where: {
+          key: definition.key
+        },
+        update: {
+          key: definition.key,
+          title: definition.title,
+          description: definition.description,
+          scope: definition.scope as RoleDefinitionScope,
+          isBuiltin: true,
+          permissions: definition.permissions
+        },
+        create: {
           key: definition.key,
           title: definition.title,
           description: definition.description,

@@ -4,6 +4,7 @@ import {
   canManageUsers as canManageUsersByRole,
   canMoveVisibleTask,
   canReassignTask,
+  canReleaseTask,
   getUserInitials
 } from "./permissions";
 
@@ -25,6 +26,14 @@ export function canAssignFocusedTask(role: Role | null | undefined): boolean {
 
 export function canAssignFocusedTaskToOthers(role: Role | null | undefined): boolean {
   return canReassignTask(role ?? undefined);
+}
+
+export function canReleaseFocusedTask(
+  role: Role | null | undefined,
+  task: { assigneeId?: string | null; sprintId?: string | null },
+  userId: string | undefined
+): boolean {
+  return canReleaseTask(role ?? undefined, task, userId);
 }
 
 export function canMoveFocusedTask(

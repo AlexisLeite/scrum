@@ -299,8 +299,22 @@ export function canClaimTask(role: Role | null | undefined, task: TaskPermission
     && (role === "platform_admin" || role === "scrum_master" || role === "team_member" || role === "qa_member");
 }
 
+export function canReleaseTask(
+  role: Role | null | undefined,
+  task: TaskPermissionContext,
+  userId: string | undefined
+): boolean {
+  if (!role || !task.sprintId || !task.assigneeId) {
+    return false;
+  }
+  if (role === "platform_admin" || role === "scrum_master" || role === "qa_member") {
+    return true;
+  }
+  return role === "team_member" && task.assigneeId === userId;
+}
+
 export function canReassignTask(role: Role | null | undefined): boolean {
-  return role === "platform_admin" || role === "scrum_master" || role === "qa_member";
+  return role === "platform_admin" || role === "scrum_master";
 }
 
 export function isTaskReadonly(role: Role | null | undefined): boolean {

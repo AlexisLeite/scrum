@@ -7,6 +7,7 @@ import {
   canAssignFocusedTaskToOthers,
   canChangeFocusedTaskStatus,
   canClaimFocusedTask,
+  canReleaseFocusedTask,
   canMoveFocusedTask
 } from "../lib/access";
 import { type AssignableUserOption } from "../lib/assignable-users";
@@ -76,6 +77,16 @@ function buildTaskAssigneeSeed(task: FocusedTask, currentUser?: { id: string; na
     ...(task.assigneeId && task.assignee?.id !== task.assigneeId ? [{ id: task.assigneeId, name: task.assigneeId }] : []),
     ...(currentUser ? [{ id: currentUser.id, name: currentUser.name }] : [])
   ]);
+}
+
+function buildCurrentTaskAssigneeOption(task: FocusedTask) {
+  if (task.assignee?.id) {
+    return [{ id: task.assignee.id, name: task.assignee.name }];
+  }
+  if (task.assigneeId) {
+    return [{ id: task.assigneeId, name: task.assigneeId }];
+  }
+  return [];
 }
 
 const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
@@ -665,13 +676,16 @@ export const FocusedView = observer(function FocusedView() {
 
   const canChangeFocusedAssignee = React.useCallback(
     (task: FocusedTask) => {
-      if (!canAssignFocusedTask(user?.role)) {
+      if (!user || !canAssignFocusedTask(user.role)) {
         return false;
       }
       if (canAssignOthers) {
         return true;
       }
-      return user ? canClaimFocusedTask(user.role, task) || task.assigneeId === user.id : false;
+      if (canReleaseFocusedTask(user.role, task, user.id)) {
+        return true;
+      }
+      return canClaimFocusedTask(user.role, task) || task.assigneeId === user.id;
     },
     [canAssignOthers, user]
   );
@@ -684,9 +698,9 @@ export const FocusedView = observer(function FocusedView() {
     [user]
   );
   const getFocusedTaskAssignees = React.useCallback(
-    (_task: FocusedTask, assignees: DrawerOption[]) => {
+    (task: FocusedTask, assignees: DrawerOption[]) => {
       if (canAssignOthers) {
-        const productId = _task.productId ?? _task.product?.id ?? "";
+        const productId = task.productId ?? task.product?.id ?? "";
         const productAssignees = productId
           ? (assignableUsersByProductId[productId] ?? []).map((entry) => ({ id: entry.id, name: entry.name }))
           : [];
@@ -694,6 +708,12 @@ export const FocusedView = observer(function FocusedView() {
       }
       if (!canAssignFocusedTask(user?.role) || !user) {
         return [];
+      }
+      if (canReleaseFocusedTask(user.role, task, user.id)) {
+        return buildCurrentTaskAssigneeOption(task);
+      }
+      if (canClaimFocusedTask(user.role, task)) {
+        return [{ id: user.id, name: user.name }];
       }
       return [{ id: user.id, name: user.name }];
     },
@@ -715,7 +735,18 @@ export const FocusedView = observer(function FocusedView() {
           setBoard((current) => patchTaskInBoard(current, updatedTask as FocusedTask));
           return;
         }
-        if (!user || assigneeId !== user.id || !canClaimFocusedTask(user.role, task)) {
+        if (!user) {
+          return;
+        }
+        if (assigneeId == null) {
+          if (!canReleaseFocusedTask(user.role, task, user.id)) {
+            return;
+          }
+          const updatedTask = await productController.assignTask(taskId, { assigneeId: null });
+          setBoard((current) => patchTaskInBoard(current, updatedTask as FocusedTask));
+          return;
+        }
+        if (assigneeId !== user.id || !canClaimFocusedTask(user.role, task)) {
           return;
         }
         const updatedTask = await productController.assignTask(taskId, { assigneeId: user.id });

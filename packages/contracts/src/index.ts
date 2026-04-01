@@ -437,7 +437,6 @@ export const STANDARD_ROLE_DEFINITIONS: Array<{
     permissions: [
       "product.focused.read",
       "product.focused.acquire",
-      "product.focused.reassign",
       "product.focused.acquiredByMe.comment",
       "product.focused.acquiredByMe.release",
       "product.focused.acquiredByMe.updateState",

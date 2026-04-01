@@ -343,7 +343,8 @@ export class TasksService {
         user,
         {
           productId: current.productId,
-          assigneeId: hasAssigneeId ? dto.assigneeId ?? current.assigneeId : current.assigneeId,
+          currentAssigneeId: current.assigneeId,
+          nextAssigneeId: hasAssigneeId ? dto.assigneeId ?? null : current.assigneeId,
           sprintId: nextSprintId
         },
         {
@@ -1194,7 +1195,12 @@ export class TasksService {
 
   private assertCanTeamMemberMutateTask(
     user: AuthUser,
-    task: { productId?: string | null; assigneeId: string | null; sprintId: string | null },
+    task: {
+      productId?: string | null;
+      currentAssigneeId: string | null;
+      nextAssigneeId: string | null;
+      sprintId: string | null;
+    },
     options?: {
       allowTeamMemberSelfKanbanOnly?: boolean;
       allowTeamMemberAssignment?: boolean;
@@ -1203,6 +1209,8 @@ export class TasksService {
     }
   ) {
     const productId = task.productId ?? "";
+    const currentAssigneeId = task.currentAssigneeId;
+    const nextAssigneeId = task.nextAssigneeId;
 
     if (this.permissionsService.hasProductPermission(user, productId, "product.admin.story.task.update")) {
       return;
@@ -1219,11 +1227,75 @@ export class TasksService {
       throw new ForbiddenException("Focused cannot move tasks between sprints from this action");
     }
 
-    if (task.assigneeId === user.sub) {
-      if (options.changingAssignee) {
-        if (!options.allowTeamMemberAssignment && !this.permissionsService.hasProductPermission(user, productId, "product.focused.acquiredByMe.release")) {
-          throw new ForbiddenException("Insufficient permission to release this task");
+    if (options.changingAssignee) {
+      if (nextAssigneeId === currentAssigneeId) {
+        return;
+      }
+
+      if (currentAssigneeId === user.sub) {
+        if (
+          nextAssigneeId === null
+          && this.permissionsService.hasProductPermission(user, productId, "product.focused.acquiredByMe.release")
+        ) {
+          return;
         }
+
+        if (
+          nextAssigneeId
+          && user.role !== "qa_member"
+          && this.permissionsService.hasProductPermission(user, productId, "product.focused.reassign")
+        ) {
+          return;
+        }
+
+        throw new ForbiddenException(
+          nextAssigneeId === null
+            ? "Insufficient permission to release this task"
+            : "Insufficient permission to reassign this task"
+        );
+      }
+
+      if (currentAssigneeId && currentAssigneeId !== user.sub) {
+        if (
+          nextAssigneeId === null
+          && this.permissionsService.hasProductPermission(user, productId, "product.focused.acquiredByOther.release")
+        ) {
+          return;
+        }
+
+        if (
+          nextAssigneeId
+          && user.role !== "qa_member"
+          && this.permissionsService.hasProductPermission(user, productId, "product.focused.reassign")
+        ) {
+          return;
+        }
+
+        throw new ForbiddenException(
+          nextAssigneeId === null
+            ? "Insufficient permission to release this task"
+            : "Insufficient permission to reassign this task"
+        );
+      }
+
+      if (!currentAssigneeId) {
+        if (nextAssigneeId === null) {
+          return;
+        }
+
+        if (
+          user.role !== "qa_member"
+          && this.permissionsService.hasProductPermission(user, productId, "product.focused.reassign")
+        ) {
+          return;
+        }
+
+        throw new ForbiddenException("Insufficient permission to assign this task");
+      }
+    }
+
+    if (currentAssigneeId === user.sub || !currentAssigneeId) {
+      if (options.changingAssignee) {
         return;
       }
 
@@ -1232,7 +1304,7 @@ export class TasksService {
       }
     }
 
-    if (task.assigneeId && task.assigneeId !== user.sub) {
+    if (currentAssigneeId && currentAssigneeId !== user.sub) {
       if (options.changingAssignee && this.permissionsService.hasProductPermission(user, productId, "product.focused.reassign")) {
         return;
       }

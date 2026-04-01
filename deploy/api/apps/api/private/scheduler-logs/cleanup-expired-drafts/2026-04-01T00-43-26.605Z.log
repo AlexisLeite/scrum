@@ -1,0 +1,3 @@
+[2026-04-01T00:43:26.625Z] Starting job cleanup-expired-drafts (cleanup-expired-drafts).
+[2026-04-01T00:43:26.631Z] Deleted 0 expired drafts older than 2026-03-25T00:43:26.627Z.
+[2026-04-01T00:43:26.631Z] Finished job cleanup-expired-drafts.
