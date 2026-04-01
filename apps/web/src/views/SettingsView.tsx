@@ -5,6 +5,7 @@ import { apiClient } from "../api/client";
 import { AuthController, ProductController } from "../controllers";
 import { getUserInitials } from "../lib/permissions";
 import { useRootStore } from "../stores/root-store";
+import { SearchableSelect, buildSearchableSelectOptions } from "../ui/SearchableSelect";
 
 type ActivityStats = {
   activityCount: number;
@@ -261,13 +262,12 @@ export const SettingsView = observer(function SettingsView() {
           </div>
           <label className="settings-window-field">
             Ventana
-            <select value={windowSize} onChange={(event) => setWindowSize(event.target.value as StatsWindow)}>
-              {statsWindows.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={windowSize}
+              onChange={(value) => setWindowSize(value as StatsWindow)}
+              options={buildSearchableSelectOptions([...statsWindows])}
+              ariaLabel="Ventana"
+            />
           </label>
         </div>
         {stats ? (

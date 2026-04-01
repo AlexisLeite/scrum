@@ -8,6 +8,7 @@ import {
 import { apiClient } from "../../api/client";
 import { AdminController } from "../../controllers";
 import { useRootStore } from "../../stores/root-store";
+import { SearchableSelect, buildSearchableSelectOptions } from "../../ui/SearchableSelect";
 import { ActivityFeed } from "../../ui/drawers/product-workspace/ActivityFeed";
 import { useSearchParams } from "react-router-dom";
 import "./admin-users-management.css";
@@ -838,20 +839,21 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
                     </div>
                     <label className="admin-user-window-select">
                       Ventana
-                      <select value={selectedWindow} onChange={(event) => {
-                        setSearchParams(
-                          updateSearchParams(searchParams, {
-                            mode: null,
-                            user: selectedUser.id,
-                            section: "activity",
-                            window: event.target.value
-                          })
-                        );
-                      }}>
-                        {statsWindows.map((windowOption) => (
-                          <option key={windowOption} value={windowOption}>{windowOption}</option>
-                        ))}
-                      </select>
+                      <SearchableSelect
+                        value={selectedWindow}
+                        onChange={(value) => {
+                          setSearchParams(
+                            updateSearchParams(searchParams, {
+                              mode: null,
+                              user: selectedUser.id,
+                              section: "activity",
+                              window: value
+                            })
+                          );
+                        }}
+                        options={buildSearchableSelectOptions([...statsWindows])}
+                        ariaLabel="Ventana"
+                      />
                     </label>
                   </div>
                   {activityLoading ? <p className="muted">Cargando actividad...</p> : null}

@@ -11,6 +11,7 @@ import {
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AdminController } from "../../controllers";
 import { useRootStore } from "../../stores/root-store";
+import { SearchableSelect } from "../../ui/SearchableSelect";
 import { AdminUsersManagementView } from "./AdminUsersManagementView";
 import "./admin-users-management.css";
 
@@ -467,33 +468,35 @@ export const AdminRolesView = observer(function AdminRolesView() {
                     </label>
                     <label>
                       Alcance
-                      <select
+                      <SearchableSelect
                         value={draft.scope}
-                        onChange={(event) => setDraft((current) => ({
+                        onChange={(value) => setDraft((current) => ({
                           ...current,
-                          scope: event.target.value as RoleScope,
+                          scope: value as RoleScope,
                           permissions: []
                         }))}
+                        options={[
+                          { value: "PRODUCT", label: "PRODUCT" },
+                          { value: "SYSTEM", label: "SYSTEM" }
+                        ]}
                         disabled={!canEditSelectedRole}
-                        >
-                          <option value="PRODUCT">PRODUCT</option>
-                          <option value="SYSTEM">SYSTEM</option>
-                        </select>
-                      </label>
-                      <label className="admin-role-description-field admin-role-header-description">
-                        Descripción
-                        <textarea
-                          value={draft.description}
-                          onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
-                          rows={2}
-                          disabled={!canEditSelectedRole}
-                        />
-                      </label>
-                      <div className="admin-role-actions">
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          onClick={() => void saveRole()}
+                        ariaLabel="Alcance"
+                      />
+                    </label>
+                    <label className="admin-role-description-field admin-role-header-description">
+                      Descripción
+                      <textarea
+                        value={draft.description}
+                        onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+                        rows={2}
+                        disabled={!canEditSelectedRole}
+                      />
+                    </label>
+                    <div className="admin-role-actions">
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => void saveRole()}
                         disabled={saving || !canEditSelectedRole}
                       >
                         {saving ? "Guardando..." : "Guardar rol"}

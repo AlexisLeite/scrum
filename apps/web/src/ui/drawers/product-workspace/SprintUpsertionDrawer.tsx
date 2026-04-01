@@ -5,6 +5,7 @@ import { canCommentOnVisibleTask, canCreateTaskFromMessage, canEditTaskFields } 
 import { productSprintDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { TaskSearchPicker } from "../../../components/TaskSearchPicker";
+import { SearchableSelect } from "../../SearchableSelect";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
@@ -348,14 +349,15 @@ export function SprintUpsertionForm(props: {
         </label>
         <label>
           Equipo
-          <select value={teamId} onChange={(event) => setTeamId(event.target.value)} required>
-            <option value="">Seleccionar equipo</option>
-            {teams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
-            ))}
-          </select>
+          <SearchableSelect
+            value={teamId}
+            onChange={setTeamId}
+            options={[
+              { value: "", label: "Seleccionar equipo" },
+              ...teams.map((team) => ({ value: team.id, label: team.name }))
+            ]}
+            ariaLabel="Equipo"
+          />
         </label>
       </div>
 

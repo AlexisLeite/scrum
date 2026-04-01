@@ -6,6 +6,7 @@ import { teamDefinitionPath } from "../../../routes/backoffice-routes";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { RichDescriptionField } from "../product-workspace/RichDescriptionField";
+import { SearchableSelect } from "../../SearchableSelect";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 
@@ -296,14 +297,20 @@ export function TeamUpsertionForm(props: {
           <div className="form-grid two-columns">
             <label>
               Agregar usuario
-              <select value={newMemberId} onChange={(event) => setNewMemberId(event.target.value)} disabled={readOnly}>
-                <option value="">Seleccionar usuario</option>
-                {availableUsers.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name} ({user.email})
-                  </option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={newMemberId}
+                onChange={setNewMemberId}
+                options={[
+                  { value: "", label: "Seleccionar usuario" },
+                  ...availableUsers.map((user) => ({
+                    value: user.id,
+                    label: `${user.name} (${user.email})`,
+                    searchText: `${user.name} ${user.email}`
+                  }))
+                ]}
+                disabled={readOnly}
+                ariaLabel="Agregar usuario"
+              />
             </label>
             <div className="end-field">
               <button className="btn btn-secondary" disabled={!newMemberId || saving || readOnly} onClick={() => void addMember()}>

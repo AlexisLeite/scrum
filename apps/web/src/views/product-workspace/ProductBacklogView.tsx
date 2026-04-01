@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
 import { useRootStore } from "../../stores/root-store";
+import { SearchableSelect } from "../../ui/SearchableSelect";
 import { StoryUpsertionDrawer } from "../../ui/drawers/product-workspace/StoryUpsertionDrawer";
 import { TaskUpsertionDrawer } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import {
@@ -384,13 +385,12 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
           <div className="story-list-toolbar-actions">
             <label className="story-list-sort">
               Orden
-              <select value={sortBy} onChange={(event) => setSortBy(event.target.value as StorySortOption)}>
-                {storySortOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={sortBy}
+                onChange={(value) => setSortBy(value as StorySortOption)}
+                options={storySortOptions.map((option) => ({ value: option.value, label: option.label }))}
+                ariaLabel="Orden"
+              />
             </label>
             <div
               className="story-list-filters"
@@ -414,37 +414,40 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
                 <div className="story-list-filter-popover" role="dialog" aria-label="Filtros del backlog" style={backlogFilterPopoverStyle}>
                   <label className="story-list-filter-field" style={backlogFilterFieldStyle}>
                     <span>Usuario asignado</span>
-                    <select value={taskAssigneeFilter} onChange={(event) => setTaskAssigneeFilter(event.target.value)}>
-                      <option value="">Todos</option>
-                      <option value="unassigned">Sin asignar</option>
-                      {taskFilterOptions.assignees.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name}
-                        </option>
-                      ))}
-                    </select>
+                    <SearchableSelect
+                      value={taskAssigneeFilter}
+                      onChange={setTaskAssigneeFilter}
+                      options={[
+                        { value: "", label: "Todos" },
+                        { value: "unassigned", label: "Sin asignar" },
+                        ...taskFilterOptions.assignees.map((option) => ({ value: option.id, label: option.name }))
+                      ]}
+                      ariaLabel="Usuario asignado"
+                    />
                   </label>
                   <label className="story-list-filter-field" style={backlogFilterFieldStyle}>
                     <span>Usuario creador</span>
-                    <select value={taskCreatorFilter} onChange={(event) => setTaskCreatorFilter(event.target.value)}>
-                      <option value="">Todos</option>
-                      {taskFilterOptions.creators.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name}
-                        </option>
-                      ))}
-                    </select>
+                    <SearchableSelect
+                      value={taskCreatorFilter}
+                      onChange={setTaskCreatorFilter}
+                      options={[
+                        { value: "", label: "Todos" },
+                        ...taskFilterOptions.creators.map((option) => ({ value: option.id, label: option.name }))
+                      ]}
+                      ariaLabel="Usuario creador"
+                    />
                   </label>
                   <label className="story-list-filter-field" style={backlogFilterFieldStyle}>
                     <span>Estado de la tarea</span>
-                    <select value={taskStatusFilter} onChange={(event) => setTaskStatusFilter(event.target.value)}>
-                      <option value="">Todos</option>
-                      {taskFilterOptions.statuses.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
+                    <SearchableSelect
+                      value={taskStatusFilter}
+                      onChange={setTaskStatusFilter}
+                      options={[
+                        { value: "", label: "Todos" },
+                        ...taskFilterOptions.statuses.map((status) => ({ value: status, label: status }))
+                      ]}
+                      ariaLabel="Estado de la tarea"
+                    />
                   </label>
                   <div className="story-list-filter-range" style={backlogFilterRangeStyle}>
                     <label className="story-list-filter-field" style={backlogFilterFieldStyle}>

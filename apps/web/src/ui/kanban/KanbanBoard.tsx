@@ -15,6 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { SearchableSelect, buildSearchableSelectOptions } from "../SearchableSelect";
 import { TaskCompletionDialog } from "../drawers/product-workspace/TaskCompletionDialog";
 import "./kanban.css";
 import { KanbanAssignee, KanbanColumn, KanbanTask } from "./types";
@@ -292,35 +293,27 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
 
       <div className="kb-control-row">
         {allowAssigneeChange ? (
-          <select
+          <SearchableSelect
             value={task.assigneeId ?? ""}
-            aria-label={`Asignado de ${task.title}`}
             disabled={pending}
-            onChange={(event) => void onAssigneeChange(task.id, event.target.value ? event.target.value : null)}
-          >
-            <option value="">Sin asignar</option>
-            {assignees.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => void onAssigneeChange(task.id, value ? value : null)}
+            options={[
+              { value: "", label: "Sin asignar" },
+              ...assignees.map((user) => ({ value: user.id, label: user.name }))
+            ]}
+            ariaLabel={`Asignado de ${task.title}`}
+          />
         ) : (
           <span className="pill">{task.assignee?.name ?? "Sin asignar"}</span>
         )}
         {allowStatusChange ? (
-          <select
+          <SearchableSelect
             value={task.status}
-            aria-label={`Estado de ${task.title}`}
             disabled={pending}
-            onChange={(event) => void onStatusChange(task, event.target.value)}
-          >
-            {taskStatusOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => void onStatusChange(task, value)}
+            options={buildSearchableSelectOptions(taskStatusOptions)}
+            ariaLabel={`Estado de ${task.title}`}
+          />
         ) : (
           <span className="pill">{task.status}</span>
         )}
@@ -890,15 +883,16 @@ export function KanbanBoard({
           </label>
           <label>
             Filtrar por usuario
-            <select value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}>
-              <option value="all">Todos</option>
-              <option value="unassigned">Sin asignar</option>
-              {assigneeFilterOptions.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={assigneeFilter}
+              onChange={setAssigneeFilter}
+              options={[
+                { value: "all", label: "Todos" },
+                { value: "unassigned", label: "Sin asignar" },
+                ...assigneeFilterOptions.map((user) => ({ value: user.id, label: user.name }))
+              ]}
+              ariaLabel="Filtrar por usuario"
+            />
           </label>
         </div>
 

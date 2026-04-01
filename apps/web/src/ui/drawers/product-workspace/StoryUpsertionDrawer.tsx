@@ -9,6 +9,7 @@ import { Drawer, DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { ModalsController } from "../../modals/ModalsController";
+import { SearchableSelect, buildSearchableSelectOptions } from "../../SearchableSelect";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { RichDescriptionField } from "./RichDescriptionField";
@@ -386,17 +387,13 @@ export function StoryUpsertionForm(props: {
 
       <label>
         Estado manual
-        <select
+        <SearchableSelect
           value={status}
-          onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as "DRAFT" | "READY" }))}
+          onChange={(value) => setForm((current) => ({ ...current, status: value as "DRAFT" | "READY" }))}
+          options={buildSearchableSelectOptions([...manualStoryStatuses])}
           disabled={formDisabled}
-        >
-          {manualStoryStatuses.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
+          ariaLabel="Estado manual"
+        />
       </label>
 
       <RichDescriptionField

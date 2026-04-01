@@ -8,6 +8,7 @@ import { useRootStore } from "../../../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
+import { SearchableSelect, buildSearchableSelectOptions } from "../../SearchableSelect";
 import { ActivityTimeline, type ActivityEntry, type ActivityListResult } from "./ActivityTimeline";
 import { TaskCollaborationPanel, type TaskCollaborationDetail } from "./TaskCollaborationPanel";
 import { RichDescriptionField } from "./RichDescriptionField";
@@ -429,31 +430,29 @@ export function TaskUpsertionForm(props: {
           </label>
           <label>
             Estado
-            <select value={status} onChange={(event) => handleStatusChange(event.target.value)} disabled={formDisabled}>
-              {statusOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={status}
+              onChange={handleStatusChange}
+              options={buildSearchableSelectOptions(statusOptions)}
+              disabled={formDisabled}
+              ariaLabel="Estado"
+            />
           </label>
         </div>
 
         {shouldSelectStory ? (
           <label>
             Historia
-            <select
+            <SearchableSelect
               value={defaultStoryId ? defaultStoryId : storyId}
-              onChange={(event) => setForm((current) => ({ ...current, storyId: event.target.value }))}
+              onChange={(value) => setForm((current) => ({ ...current, storyId: value }))}
+              options={[
+                { value: "", label: "Seleccionar historia" },
+                ...stories.map((story) => ({ value: story.id, label: story.title }))
+              ]}
               disabled={storySelectionLocked || formDisabled}
-            >
-              <option value="">Seleccionar historia</option>
-              {stories.map((story) => (
-                <option key={story.id} value={story.id}>
-                  {story.title}
-                </option>
-              ))}
-            </select>
+              ariaLabel="Historia"
+            />
           </label>
         ) : null}
 
@@ -469,33 +468,29 @@ export function TaskUpsertionForm(props: {
         <div className="form-grid three-columns">
           <label>
             Sprint
-            <select
+            <SearchableSelect
               value={canChangeSprint ? sprintId : fixedSprintId ?? sprintId}
-              onChange={(event) => setForm((current) => ({ ...current, sprintId: event.target.value }))}
+              onChange={(value) => setForm((current) => ({ ...current, sprintId: value }))}
+              options={[
+                { value: "", label: "Sin asignar" },
+                ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))
+              ]}
               disabled={!canChangeSprint || formDisabled}
-            >
-              <option value="">Sin asignar</option>
-              {sprints.map((sprint) => (
-                <option key={sprint.id} value={sprint.id}>
-                  {sprint.name}
-                </option>
-              ))}
-            </select>
+              ariaLabel="Sprint"
+            />
           </label>
           <label>
             Asignado a
-            <select
+            <SearchableSelect
               value={assigneeId}
-              onChange={(event) => setForm((current) => ({ ...current, assigneeId: event.target.value }))}
+              onChange={(value) => setForm((current) => ({ ...current, assigneeId: value }))}
+              options={[
+                { value: "", label: "Sin asignar" },
+                ...assignees.map((assignee) => ({ value: assignee.id, label: assignee.name }))
+              ]}
               disabled={formDisabled}
-            >
-              <option value="">Sin asignar</option>
-              {assignees.map((assignee) => (
-                <option key={assignee.id} value={assignee.id}>
-                  {assignee.name}
-                </option>
-              ))}
-            </select>
+              ariaLabel="Asignado a"
+            />
           </label>
           <div className="task-estimator-group">
             <span className="task-estimator-label">Puntos de esfuerzo</span>

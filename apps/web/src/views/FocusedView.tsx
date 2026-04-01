@@ -14,6 +14,7 @@ import { type AssignableUserOption } from "../lib/assignable-users";
 import { canCommentOnVisibleTask, canCreateTaskFromMessage, canCreateTasks, canEditTaskFields } from "../lib/permissions";
 import { useProductAssignableUsers } from "../hooks/useProductAssignableUsers";
 import { useRootStore } from "../stores/root-store";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import { Drawer, DrawerRenderContext } from "../ui/drawers/Drawer";
 import { useEChartsTheme } from "../ui/charts/echarts-theme";
 import { buildBurndownOption } from "../ui/charts/burndown-chart";
@@ -307,13 +308,16 @@ function FocusedTaskCreationContextDrawerBody(props: {
     <div className="form-grid">
       <label>
         Contexto
-        <select value={selectedKey} onChange={(event) => setSelectedKey(event.target.value)}>
-          {contexts.map((entry) => (
-            <option key={`${entry.productId}:${entry.sprintId}`} value={`${entry.productId}:${entry.sprintId}`}>
-              {entry.productKey ? `${entry.productKey} · ` : ""}{entry.productName} / {entry.sprintName}
-            </option>
-          ))}
-        </select>
+        <SearchableSelect
+          value={selectedKey}
+          onChange={setSelectedKey}
+          options={contexts.map((entry) => ({
+            value: `${entry.productId}:${entry.sprintId}`,
+            label: `${entry.productKey ? `${entry.productKey} · ` : ""}${entry.productName} / ${entry.sprintName}`,
+            searchText: `${entry.productName} ${entry.productKey ?? ""} ${entry.sprintName}`
+          }))}
+          ariaLabel="Contexto"
+        />
       </label>
       <p className="muted">
         La tarea se abrira con el sprint ya fijado, igual que en la ejecucion del sprint.
@@ -833,16 +837,16 @@ export const FocusedView = observer(function FocusedView() {
           {creationContexts.length > 1 ? (
             <label>
               Contexto visible
-              <select
+              <SearchableSelect
                 value={selectedChartContextKey}
-                onChange={(event) => setSelectedChartContextKey(event.target.value)}
-              >
-                {creationContexts.map((context) => (
-                  <option key={`${context.productId}:${context.sprintId}`} value={`${context.productId}:${context.sprintId}`}>
-                    {context.productKey ? `${context.productKey} · ` : ""}{context.productName} / {context.sprintName}
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedChartContextKey}
+                options={creationContexts.map((context) => ({
+                  value: `${context.productId}:${context.sprintId}`,
+                  label: `${context.productKey ? `${context.productKey} · ` : ""}${context.productName} / ${context.sprintName}`,
+                  searchText: `${context.productName} ${context.productKey ?? ""} ${context.sprintName}`
+                }))}
+                ariaLabel="Contexto visible"
+              />
             </label>
           ) : null}
 

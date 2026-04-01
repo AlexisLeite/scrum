@@ -5,6 +5,7 @@ import { ProductController, TeamController } from "../../controllers";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
 import { filterAssignableUsersByTeam } from "../../lib/assignable-users";
 import { useRootStore } from "../../stores/root-store";
+import { SearchableSelect } from "../../ui/SearchableSelect";
 import { ProductMetricsPanel } from "./ProductMetricsPanel";
 import { getErrorMessage, SprintItem, TeamItem } from "./ProductWorkspaceViewShared";
 
@@ -96,45 +97,53 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
         <div className="form-grid three-columns">
           <label>
             Ventana
-            <select value={windowSize} onChange={(event) => setWindowSize(event.target.value as "week" | "month" | "semester" | "year")}>
-              <option value="week">Ultima semana</option>
-              <option value="month">Ultimo mes</option>
-              <option value="semester">Ultimos 6 meses</option>
-              <option value="year">Ultimo ano</option>
-            </select>
+            <SearchableSelect
+              value={windowSize}
+              onChange={(value) => setWindowSize(value as "week" | "month" | "semester" | "year")}
+              options={[
+                { value: "week", label: "Ultima semana" },
+                { value: "month", label: "Ultimo mes" },
+                { value: "semester", label: "Ultimos 6 meses" },
+                { value: "year", label: "Ultimo ano" }
+              ]}
+              ariaLabel="Ventana"
+            />
           </label>
           <label>
             Sprint
-            <select value={sprintId} onChange={(event) => setSprintId(event.target.value)}>
-              <option value="">Seleccionar sprint</option>
-              {sprints.map((sprint) => (
-                <option key={sprint.id} value={sprint.id}>
-                  {sprint.name}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={sprintId}
+              onChange={setSprintId}
+              options={[
+                { value: "", label: "Seleccionar sprint" },
+                ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))
+              ]}
+              ariaLabel="Sprint"
+            />
           </label>
           <label>
             Equipo
-            <select value={teamId} onChange={(event) => setTeamId(event.target.value)}>
-              <option value="">Seleccionar equipo</option>
-              {teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={teamId}
+              onChange={setTeamId}
+              options={[
+                { value: "", label: "Seleccionar equipo" },
+                ...teams.map((team) => ({ value: team.id, label: team.name }))
+              ]}
+              ariaLabel="Equipo"
+            />
           </label>
           <label>
             Usuario
-            <select value={userId} onChange={(event) => setUserId(event.target.value)}>
-              <option value="">Seleccionar usuario</option>
-              {visibleUsers.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.name}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={userId}
+              onChange={setUserId}
+              options={[
+                { value: "", label: "Seleccionar usuario" },
+                ...visibleUsers.map((entry) => ({ value: entry.id, label: entry.name }))
+              ]}
+              ariaLabel="Usuario"
+            />
           </label>
         </div>
         <p className="muted">Las metricas se actualizan automaticamente cuando cambias la ventana, sprint, equipo o usuario.</p>
