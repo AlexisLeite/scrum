@@ -1,4 +1,5 @@
 import React from "react";
+import { FiInfo } from "react-icons/fi";
 import { MarkdownPreview } from "../../../ui/drawers/product-workspace/MarkdownPreview";
 import { StoryItem } from "../ProductWorkspaceViewShared";
 
@@ -149,7 +150,7 @@ export function StoryInfoPopover(props: StoryInfoPopoverProps) {
         aria-label={`Ver informacion de ${story.title}`}
         aria-describedby={open ? panelId : undefined}
       >
-        i
+        <FiInfo aria-hidden="true" focusable="false" />
       </button>
       {open ? (
         <div

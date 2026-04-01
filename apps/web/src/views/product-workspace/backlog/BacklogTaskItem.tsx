@@ -1,3 +1,4 @@
+import { FiChevronRight } from "react-icons/fi";
 import { MarkdownPreview } from "../../../ui/drawers/product-workspace/MarkdownPreview";
 import { StoryTaskSummary } from "../ProductWorkspaceViewShared";
 
@@ -27,14 +28,6 @@ function formatDate(value: string | null | undefined): string {
   return date.toLocaleDateString();
 }
 
-function ChevronIcon({ expanded }: { expanded: boolean }) {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" className={expanded ? "is-expanded" : ""}>
-      <path d="m5 3.5 6 4.5-6 4.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 export function BacklogTaskItem(props: BacklogTaskItemProps) {
   const { task, expanded, isOpening, onOpen, onToggle } = props;
   const taskSummary = task as ExpandedTaskSummary;
@@ -54,7 +47,7 @@ export function BacklogTaskItem(props: BacklogTaskItemProps) {
           aria-expanded={expanded}
           onClick={() => onToggle(task.id)}
         >
-          <ChevronIcon expanded={expanded} />
+          <FiChevronRight aria-hidden="true" focusable="false" className={expanded ? "is-expanded" : ""} />
         </button>
       </div>
       {expanded ? (

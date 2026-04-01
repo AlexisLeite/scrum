@@ -1,38 +1,8 @@
 import React from "react";
+import { FiChevronRight, FiEdit3, FiPlus } from "react-icons/fi";
 import { StoryInfoPopover } from "./StoryInfoPopover";
 import { BacklogTaskItem } from "./BacklogTaskItem";
 import { StoryItem, sortStoryTasks } from "../ProductWorkspaceViewShared";
-
-function PencilIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <path
-        d="M11.9 1.6a2.1 2.1 0 0 1 3 3L6.1 13.4 2 14l.6-4.1 9.3-9.3Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinejoin="round"
-      />
-      <path d="m10.3 3.2 2.5 2.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChevronIcon({ expanded }: { expanded: boolean }) {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" className={expanded ? "is-expanded" : ""}>
-      <path d="m5 3.5 6 4.5-6 4.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 type BacklogStoryCardProps = {
   story: StoryItem;
@@ -91,7 +61,7 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
             disabled={!canManageStories}
             aria-label={`Editar historia ${story.title}`}
           >
-            <PencilIcon />
+            <FiEdit3 aria-hidden="true" focusable="false" />
           </button>
           <button
             type="button"
@@ -100,7 +70,7 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
             onClick={() => onCreateTask(story)}
             disabled={!canManageTasks}
           >
-            <PlusIcon />
+            <FiPlus aria-hidden="true" focusable="false" />
           </button>
           <button
             type="button"
@@ -110,7 +80,7 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
             aria-controls={panelId}
             onClick={() => onToggleStory(story.id)}
           >
-            <ChevronIcon expanded={expanded} />
+            <FiChevronRight aria-hidden="true" focusable="false" className={expanded ? "is-expanded" : ""} />
           </button>
         </div>
       </div>
