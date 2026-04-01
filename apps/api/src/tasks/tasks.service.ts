@@ -32,6 +32,15 @@ type TaskCreationInput = {
   metadataJson?: Record<string, unknown>;
 };
 
+type TaskHierarchyNode = {
+  id: string;
+  parentTaskId: string | null;
+  title: string;
+  description: string | null;
+  status: string;
+  children: TaskHierarchyNode[];
+};
+
 const DEFAULT_TASK_STATUS_ORDER = ["Todo", "In Progress", "Blocked", "Done", "Closed"] as const;
 const TERMINAL_TASK_STATUSES = ["Done", "Closed"] as const;
 
@@ -202,6 +211,67 @@ export class TasksService {
       detail,
       activity,
       messageDraft
+    };
+  }
+
+  async getHierarchy(id: string, user: AuthUser) {
+    const task = await this.getTaskWithAccess(id, user, { withChildren: false, withMessages: false });
+    const tasks = await this.prisma.task.findMany({
+      where: { productId: task.productId },
+      select: {
+        id: true,
+        parentTaskId: true,
+        title: true,
+        description: true,
+        status: true
+      }
+    });
+
+    const taskById = new Map(tasks.map((entry) => [entry.id, entry]));
+    const childrenByParentId = new Map<string | null, typeof tasks>();
+
+    for (const entry of tasks) {
+      const siblings = childrenByParentId.get(entry.parentTaskId ?? null) ?? [];
+      siblings.push(entry);
+      childrenByParentId.set(entry.parentTaskId ?? null, siblings);
+    }
+
+    let rootTask = taskById.get(task.id) ?? null;
+    while (rootTask?.parentTaskId) {
+      const parentTask = taskById.get(rootTask.parentTaskId);
+      if (!parentTask) {
+        break;
+      }
+      rootTask = parentTask;
+    }
+
+    const buildNode = (taskId: string, trail: Set<string>): TaskHierarchyNode | null => {
+      const current = taskById.get(taskId);
+      if (!current || trail.has(taskId)) {
+        return null;
+      }
+
+      const nextTrail = new Set(trail);
+      nextTrail.add(taskId);
+      const children = (childrenByParentId.get(taskId) ?? [])
+        .sort((left, right) => left.title.localeCompare(right.title, undefined, { sensitivity: "base" }))
+        .map((child) => buildNode(child.id, nextTrail))
+        .filter((child): child is TaskHierarchyNode => child !== null);
+
+      return {
+        id: current.id,
+        parentTaskId: current.parentTaskId,
+        title: current.title,
+        description: current.description ?? null,
+        status: current.status,
+        children
+      };
+    };
+
+    return {
+      taskId: task.id,
+      rootTaskId: rootTask?.id ?? task.id,
+      tree: buildNode(rootTask?.id ?? task.id, new Set<string>())
     };
   }
 
@@ -914,6 +984,7 @@ export class TasksService {
               select: {
                 id: true,
                 title: true,
+                description: true,
                 status: true,
                 updatedAt: true,
                 assignee: {

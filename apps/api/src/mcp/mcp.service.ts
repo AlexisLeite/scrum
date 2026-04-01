@@ -262,6 +262,21 @@ export class McpService {
                 }
               },
               {
+                name: "get_task_hierarchy",
+                description: "Devuelve la jerarquia completa de una tarea como arbol ASCII, marcando cual fue la tarea consultada.",
+                inputSchema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["taskId"],
+                  properties: {
+                    taskId: {
+                      type: "string",
+                      description: "ID de la tarea."
+                    }
+                  }
+                }
+              },
+              {
                 name: "respond_message",
                 description: "Responde a un mensaje existente dentro de una tarea asignada al usuario autenticado.",
                 inputSchema: {
@@ -444,6 +459,12 @@ export class McpService {
             parentMessageId: detail.sourceMessage?.id ?? detail.sourceMessageId ?? null,
             parentMessage: detail.sourceMessage ?? null,
             childSummary: detail.childSummary,
+            childTasks: (detail.childTasks ?? []).map((childTask) => ({
+              id: childTask.id,
+              title: childTask.title,
+              status: childTask.status,
+              descriptionPreview: this.toSingleLine(childTask.description, 250)
+            })),
             unfinishedSprintCount: detail.unfinishedSprintCount ?? 0
           },
           latestMessages: recentMessages.map((message) => this.serializeFlatMessage(message)),
@@ -490,6 +511,24 @@ export class McpService {
             total: history.length,
             hasMore: offset + slice.length < history.length,
             messages: slice.map((message) => this.serializeFlatMessage(message)),
+            ascii
+          }
+        };
+      }
+      case "get_task_hierarchy": {
+        const taskId = this.readStringArgument(args, "taskId");
+        const hierarchy = await this.tasksService.getHierarchy(taskId, user);
+        const ascii = this.renderAsciiTaskHierarchy(hierarchy);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: ascii
+            }
+          ],
+          structuredContent: {
+            ...hierarchy,
             ascii
           }
         };
@@ -753,6 +792,7 @@ export class McpService {
       description?: string | null;
       parentTask?: { id: string; title: string; status: string } | null;
       parentMessage?: { id: string; body: string } | null;
+      childTasks?: Array<{ id: string; title: string; status: string; descriptionPreview: string }>;
     };
 
     const lines = [
@@ -764,8 +804,20 @@ export class McpService {
       `- ${task.id} | ${task.title} | status=${task.status} | description=${this.toSingleLine(task.description, 160)}`,
       `- parentTask=${task.parentTask ? `${task.parentTask.id} ${task.parentTask.title} (${task.parentTask.status})` : "none"}`,
       `- parentMessage=${task.parentMessage ? `${task.parentMessage.id} ${this.toSingleLine(task.parentMessage.body, 120)}` : "none"}`,
+      `- childTasks=${task.childTasks?.length ?? 0}`,
       `Ultimos mensajes (${summary.latestMessagesInfo.returned}/${summary.latestMessagesInfo.total}):`
     ];
+
+    if ((task.childTasks?.length ?? 0) > 0) {
+      lines.splice(
+        6,
+        0,
+        ...task.childTasks!.map(
+          (childTask) =>
+            `- child=[${childTask.id}] ${childTask.title} | status=${childTask.status} | description=${childTask.descriptionPreview}`
+        )
+      );
+    }
 
     for (const message of summary.latestMessages as Array<{
       id: string;
@@ -778,6 +830,33 @@ export class McpService {
     }
 
     lines.push(summary.latestMessagesInfo.hasMore ? "- Hay mas mensajes disponibles." : "- No hay mas mensajes.");
+    return lines.join("\n");
+  }
+
+  private renderAsciiTaskHierarchy(hierarchy: Awaited<ReturnType<TasksService["getHierarchy"]>>) {
+    if (!hierarchy.tree) {
+      return `task_hierarchy taskId=${hierarchy.taskId} rootTaskId=${hierarchy.rootTaskId}\n(no se encontro la jerarquia)`;
+    }
+
+    const lines = [`task_hierarchy taskId=${hierarchy.taskId} rootTaskId=${hierarchy.rootTaskId}`];
+
+    const walk = (
+      node: NonNullable<Awaited<ReturnType<TasksService["getHierarchy"]>>["tree"]>,
+      prefix: string,
+      isLast: boolean,
+      depth: number
+    ) => {
+      const connector = depth === 0 ? "" : isLast ? "\\- " : "|- ";
+      const marker = node.id === hierarchy.taskId ? " <consultada>" : "";
+      lines.push(`${prefix}${connector}[${node.id}] ${node.title} | status=${node.status}${marker}`);
+
+      const childPrefix = depth === 0 ? "" : `${prefix}${isLast ? "   " : "|  "}`;
+      node.children.forEach((child, index) => {
+        walk(child, childPrefix, index === node.children.length - 1, depth + 1);
+      });
+    };
+
+    walk(hierarchy.tree, "", true, 0);
     return lines.join("\n");
   }
 
