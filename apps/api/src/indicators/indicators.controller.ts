@@ -35,6 +35,11 @@ export class IndicatorsController {
     });
   }
 
+  @Get("products/:productId/velocity")
+  productVelocity(@CurrentUser() user: AuthUser, @Param("productId") productId: string, @Query("window") window?: string) {
+    return this.indicatorsService.productVelocity(productId, user, window);
+  }
+
   @Get("teams/:teamId/velocity")
   teamVelocity(@CurrentUser() user: AuthUser, @Param("teamId") teamId: string, @Query("window") window?: string) {
     return this.indicatorsService.teamVelocity(teamId, user, window);

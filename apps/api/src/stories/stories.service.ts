@@ -6,6 +6,8 @@ import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateStoryDto, UpdateStoryDto } from "./stories.dto";
 
+const COMPLETED_TASK_STATUSES = ["Done", "Closed"] as const;
+
 @Injectable()
 export class StoriesService {
   constructor(
@@ -66,6 +68,17 @@ export class StoriesService {
       },
       orderBy: [{ entityId: "asc" }, { createdAt: "asc" }]
     });
+    const completionLogs = await this.prisma.taskStatusHistory.findMany({
+      where: {
+        taskId: { in: taskIds },
+        toStatus: { in: [...COMPLETED_TASK_STATUSES] }
+      },
+      select: {
+        taskId: true,
+        changedAt: true
+      },
+      orderBy: [{ taskId: "asc" }, { changedAt: "desc" }]
+    });
 
     const creatorByTaskId = new Map<string, { id: string; name: string }>();
     for (const log of creationLogs) {
@@ -79,13 +92,20 @@ export class StoriesService {
         name: creatorName
       });
     }
+    const completedAtByTaskId = new Map<string, Date>();
+    for (const log of completionLogs) {
+      if (!completedAtByTaskId.has(log.taskId)) {
+        completedAtByTaskId.set(log.taskId, log.changedAt);
+      }
+    }
 
     return stories.map((story) => ({
       ...story,
       tasks: story.tasks.map((task) => ({
         ...task,
         creatorId: creatorByTaskId.get(task.id)?.id ?? null,
-        creator: creatorByTaskId.get(task.id) ?? null
+        creator: creatorByTaskId.get(task.id) ?? null,
+        completedAt: completedAtByTaskId.get(task.id) ?? null
       }))
     }));
   }

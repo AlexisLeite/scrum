@@ -151,6 +151,33 @@ export class IndicatorsService {
     };
   }
 
+  async productVelocity(productId: string, viewer: AuthUser, window?: string) {
+    await this.assertProductVisible(viewer, productId);
+    const range = window ? this.resolveWindow(window, await this.resolveLatestProductDate(productId)) : null;
+    const completedSprints = await this.prisma.sprint.findMany({
+      where: {
+        productId,
+        status: "COMPLETED"
+      },
+      orderBy: { endDate: "desc" },
+      take: 20
+    });
+
+    const resolved = await this.resolveCompletedSprintRows(completedSprints, range);
+    const latest = resolved.slice(0, 10);
+
+    return Promise.all(latest.map(async ({ sprint, completedAt, startedAt }) => ({
+      sprintId: sprint.id,
+      sprintName: sprint.name,
+      completedPoints: await this.computeSprintCompletedPointsAt(
+        sprint.id,
+        startedAt,
+        completedAt,
+        (task) => task.productId === productId
+      )
+    })));
+  }
+
   async teamVelocity(teamId: string, viewer: AuthUser, window?: string, productId?: string) {
     const scopedTeamIds = await this.getScopedTeamIds(viewer);
     if (scopedTeamIds && !scopedTeamIds.includes(teamId)) {

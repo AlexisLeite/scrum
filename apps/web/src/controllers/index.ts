@@ -451,6 +451,13 @@ export class ProductController {
     return points;
   }
 
+  async loadProductVelocityByWindow(productId: string, window: "week" | "month" | "semester" | "year") {
+    return this.tryGetWithFallback<any[]>(
+      `/indicators/products/${productId}/velocity?window=${window}`,
+      `/indicators/products/${productId}/velocity`
+    );
+  }
+
   async loadBurnupByWindow(productId: string, sprintId: string, window: "week" | "month" | "semester" | "year") {
     const points = await this.tryGetWithFallback<any[]>(
       `/indicators/products/${productId}/burnup?sprintId=${sprintId}&window=${window}`,

@@ -21,6 +21,7 @@ export type StoryTaskSummary = {
   creator?: { id: string; name: string } | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  completedAt?: string | null;
 };
 
 export type StoryItem = {

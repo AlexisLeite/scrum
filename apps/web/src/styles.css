@@ -881,6 +881,202 @@ a.btn-secondary,
   gap: 0.9rem;
 }
 
+.product-overview-page {
+  gap: 1rem;
+}
+
+.product-overview-hero {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  padding: clamp(1.2rem, 2.6vw, 1.8rem);
+  background:
+    radial-gradient(circle at top right, rgba(91, 170, 255, 0.22), transparent 32%),
+    linear-gradient(135deg, #16395d, #102743 55%, #1d4f7f 100%);
+  color: var(--text-contrast);
+  box-shadow:
+    0 20px 40px rgba(9, 28, 52, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.product-overview-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -8% -35% auto;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(91, 170, 255, 0.22), transparent 68%);
+  pointer-events: none;
+}
+
+.product-overview-hero>* {
+  position: relative;
+  z-index: 1;
+}
+
+.product-overview-hero-copy,
+.product-overview-hero-side {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.product-overview-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.product-overview-badge-row .pill {
+  border-color: rgba(209, 231, 255, 0.22);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-contrast);
+}
+
+.product-overview-hero h2 {
+  margin: 0;
+  font-size: clamp(2rem, 3.2vw, 2.8rem);
+  line-height: 1;
+}
+
+.product-overview-lead {
+  max-width: 62ch;
+  margin-top: 0.55rem;
+  color: color-mix(in srgb, var(--text-contrast) 84%, #bcd8f8);
+}
+
+.product-overview-markdown,
+.product-overview-markdown p,
+.product-overview-markdown li,
+.product-overview-markdown strong,
+.product-overview-markdown h1,
+.product-overview-markdown h2,
+.product-overview-markdown h3,
+.product-overview-markdown h4 {
+  color: color-mix(in srgb, var(--text-contrast) 90%, #bdd6f2);
+}
+
+.product-overview-markdown .btn {
+  border-color: rgba(209, 231, 255, 0.24);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-contrast);
+}
+
+.product-overview-spotlight {
+  display: grid;
+  gap: 0.24rem;
+  padding: 1rem 1.05rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(209, 231, 255, 0.2);
+  background: rgba(8, 18, 34, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.product-overview-spotlight strong {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  line-height: 1.05;
+}
+
+.product-overview-spotlight small {
+  color: color-mix(in srgb, var(--text-contrast) 74%, #b5d1ef);
+}
+
+.product-overview-kpis .metric-kpi {
+  min-height: 100%;
+}
+
+.product-overview-chart-grid,
+.product-overview-activity-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.product-overview-chart-card,
+.product-overview-feed-card {
+  min-width: 0;
+}
+
+.product-overview-chart-card .echarts-for-react {
+  width: 100%;
+  min-width: 0;
+}
+
+.product-overview-chart-card .echarts-for-react>div {
+  max-width: 100%;
+}
+
+.product-overview-task-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.product-overview-task-item {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.95rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--border-soft) 92%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 92%, var(--bg-soft));
+}
+
+.product-overview-task-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.product-overview-task-copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.product-overview-task-link {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.product-overview-task-link:hover {
+  color: var(--accent-a);
+}
+
+.product-overview-task-story {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.product-overview-task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.product-overview-empty {
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border);
+  background: color-mix(in srgb, var(--bg-soft) 72%, transparent);
+}
+
+.product-overview-empty h4 {
+  margin: 0;
+}
+
+.product-overview-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .metric {
   border-radius: var(--radius-md);
   padding: 0.95rem;
@@ -2519,6 +2715,12 @@ th {
     grid-template-columns: 1fr;
   }
 
+  .product-overview-hero,
+  .product-overview-chart-grid,
+  .product-overview-activity-grid {
+    grid-template-columns: 1fr;
+  }
+
   .focused-topbar {
     top: 0.35rem;
   }
@@ -2540,6 +2742,10 @@ th {
   .focused-topbar {
     padding: 0.78rem 0.85rem;
     border-radius: var(--radius-lg);
+  }
+
+  .product-overview-actions {
+    justify-content: flex-start;
   }
 
   .definition-grid,
