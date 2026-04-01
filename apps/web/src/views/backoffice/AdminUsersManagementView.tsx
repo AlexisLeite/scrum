@@ -535,7 +535,7 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
           <div>
             <p className="workspace-context">Administración</p>
             <h2 className="workspace-title">Usuarios</h2>
-            <p className="muted">Las asignaciones se hacen por producto o por SYSTEM. Ya no hay equipos en este flujo.</p>
+            <p className="muted">Administra accesos por producto y SYSTEM sin mezclar permisos, seguridad ni actividad.</p>
           </div>
           <div className="row-actions compact">
             <span className="pill">{users.length} usuarios</span>
@@ -548,29 +548,31 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
         </div>
       </section>
 
-      <div className="admin-users-layout">
-        <section className="card admin-users-sidebar">
-          <div className="section-head">
-            <div>
-              <h3>Listado</h3>
-              <p className="muted">{filteredUsers.length} de {users.length} usuarios</p>
+      <div className="admin-users-layout admin-backoffice-layout">
+        <section className="card admin-users-sidebar admin-sidebar-card">
+          <div className="admin-sidebar-tools">
+            <div className="section-head">
+              <div>
+                <h3>Listado</h3>
+                <p className="muted">{filteredUsers.length} de {users.length} usuarios</p>
+              </div>
+              <button type="button" className="btn btn-secondary" onClick={openCreateMode} disabled={!canCreateUsers}>
+                Alta
+              </button>
             </div>
-            <button type="button" className="btn btn-secondary" onClick={openCreateMode} disabled={!canCreateUsers}>
-              Alta
-            </button>
+
+            <label className="admin-sidebar-filter">
+              Filtrar usuarios
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Nombre, email, rol o producto"
+              />
+            </label>
           </div>
 
-          <label>
-            Filtrar usuarios
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Nombre, email, rol o producto"
-            />
-          </label>
-
-          <div className="admin-user-list">
+          <div className="admin-user-list admin-backoffice-list">
             {filteredUsers.map((user) => {
               const isSelected = selectedMode !== "create" && selectedUser?.id === user.id;
               return (
@@ -581,7 +583,7 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
                   onClick={() => selectUser(user.id)}
                 >
                   <div className="admin-user-list-item-head">
-                    <div>
+                    <div className="admin-list-item-copy">
                       <strong>{user.name}</strong>
                       <p className="muted">{user.email}</p>
                     </div>
@@ -607,10 +609,14 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
 
         <section className="card admin-users-detail">
           {selectedMode === "create" ? (
-            <div className="stack-lg">
-              <div className="section-head">
-                <div>
-                  <p className="workspace-context">Usuarios / Nuevo usuario</p>
+            <div className="stack-lg admin-detail-shell">
+              <div className="admin-detail-header">
+                <div className="admin-detail-copy">
+                  <p className="admin-detail-breadcrumbs">
+                    <span>Usuarios</span>
+                    <span>/</span>
+                    <span>Nuevo usuario</span>
+                  </p>
                   <h3>Crear usuario</h3>
                   <p className="muted">El alta ahora permite marcar asignaciones iniciales por producto y SYSTEM.</p>
                 </div>
@@ -670,10 +676,10 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
               {createError ? <p className="error-text">{createError}</p> : null}
             </div>
           ) : selectedUser ? (
-            <div className="stack-lg">
-              <div className="section-head">
-                <div>
-                  <p className="admin-user-breadcrumbs">
+            <div className="stack-lg admin-detail-shell">
+              <div className="admin-detail-header">
+                <div className="admin-detail-copy">
+                  <p className="admin-detail-breadcrumbs">
                     <span>Usuarios</span>
                     <span>/</span>
                     <span>{selectedUser.name}</span>
@@ -692,7 +698,7 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
                 </div>
               </div>
 
-              <div className="tabs admin-user-tabs">
+              <div className="tabs admin-user-tabs admin-detail-tabs">
                 {userSections.map((section) => (
                   <button
                     key={section.id}
@@ -706,53 +712,64 @@ export const AdminUsersManagementView = observer(function AdminUsersManagementVi
               </div>
 
               {selectedSection === "summary" ? (
-                <section className="card admin-user-section-card">
+                <section className="card admin-user-section-card admin-summary-section">
                   <div className="section-head">
                     <div>
                       <h4>Resumen</h4>
                       <p className="muted">Resumen rápido de accesos y credenciales.</p>
                     </div>
                   </div>
-                  <div className="metrics-grid">
-                    <article className="metric">
-                      <h3>{(selectedUser.products ?? []).length}</h3>
-                      <p>Productos</p>
-                    </article>
-                    <article className="metric">
-                      <h3>{selectedUser.roleKeys.length}</h3>
-                      <p>Roles asignados</p>
-                    </article>
-                    <article className="metric">
-                      <h3>{(selectedUser.products ?? []).filter((assignment) => assignment.isSystem).length}</h3>
-                      <p>Asignaciones SYSTEM</p>
-                    </article>
-                  </div>
-                  <div className="stack-sm">
-                    <p className="muted">Roles por producto:</p>
-                    <div className="admin-user-list-item-meta">
-                      {(selectedUser.products ?? []).map((assignment) => (
-                        <span key={assignment.productId} className="pill">
-                          {assignment.isSystem ? "SYSTEM" : assignment.productKey}: {assignment.roleKeys.join(", ")}
-                        </span>
-                      ))}
-                      {(selectedUser.products ?? []).length === 0 ? <span className="pill">Sin asignaciones</span> : null}
+                  <div className="admin-user-summary-layout">
+                    <div className="stack-lg">
+                      <div className="metrics-grid metrics-summary-grid">
+                        <article className="metric">
+                          <h3>{(selectedUser.products ?? []).length}</h3>
+                          <p>Productos</p>
+                        </article>
+                        <article className="metric">
+                          <h3>{selectedUser.roleKeys.length}</h3>
+                          <p>Roles asignados</p>
+                        </article>
+                        <article className="metric">
+                          <h3>{(selectedUser.products ?? []).filter((assignment) => assignment.isSystem).length}</h3>
+                          <p>Asignaciones SYSTEM</p>
+                        </article>
+                      </div>
+                      <div className="stack-sm">
+                        <p className="muted">Roles por producto:</p>
+                        <div className="admin-user-list-item-meta">
+                          {(selectedUser.products ?? []).map((assignment) => (
+                            <span key={assignment.productId} className="pill">
+                              {assignment.isSystem ? "SYSTEM" : assignment.productKey}: {assignment.roleKeys.join(", ")}
+                            </span>
+                          ))}
+                          {(selectedUser.products ?? []).length === 0 ? <span className="pill">Sin asignaciones</span> : null}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="row-actions">
-                    <button type="button" className="btn btn-secondary" onClick={() => selectSection("access")}>
-                      Gestionar accesos
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => selectSection("security")}
-                      disabled={!canUpdateUsers}
-                    >
-                      Cambiar contraseña
-                    </button>
-                    <button type="button" className="btn btn-secondary" onClick={() => selectSection("activity")}>
-                      Actividad
-                    </button>
+                    <aside className="admin-side-note">
+                      <p className="workspace-context">Operación rápida</p>
+                      <h5>Gestiona el usuario por contexto</h5>
+                      <p className="muted">
+                        Separa accesos, seguridad y actividad para reducir errores cuando cambias datos sensibles.
+                      </p>
+                      <div className="admin-user-quick-actions">
+                        <button type="button" className="btn btn-secondary" onClick={() => selectSection("access")}>
+                          Gestionar accesos
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => selectSection("security")}
+                          disabled={!canUpdateUsers}
+                        >
+                          Cambiar contraseña
+                        </button>
+                        <button type="button" className="btn btn-secondary" onClick={() => selectSection("activity")}>
+                          Actividad
+                        </button>
+                      </div>
+                    </aside>
                   </div>
                 </section>
               ) : null}

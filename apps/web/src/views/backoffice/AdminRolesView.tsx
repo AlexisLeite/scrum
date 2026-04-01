@@ -9,11 +9,9 @@ import {
   RoleScope
 } from "@scrum/contracts";
 import { FiInfo } from "react-icons/fi";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AdminController } from "../../controllers";
 import { useRootStore } from "../../stores/root-store";
 import { SearchableSelect } from "../../ui/SearchableSelect";
-import { AdminUsersManagementView } from "./AdminUsersManagementView";
 import "./admin-users-management.css";
 
 type RoleDraft = {
@@ -29,21 +27,6 @@ const defaultDraft = (): RoleDraft => ({
   scope: "PRODUCT",
   permissions: []
 });
-
-function updateSearchParams(
-  current: URLSearchParams,
-  updates: Record<string, string | null | undefined>
-): URLSearchParams {
-  const next = new URLSearchParams(current);
-  for (const [key, value] of Object.entries(updates)) {
-    if (value == null || value === "") {
-      next.delete(key);
-    } else {
-      next.set(key, value);
-    }
-  }
-  return next;
-}
 
 function permissionCategories(scope: RoleScope): PermissionCatalogCategory[] {
   return PERMISSION_CATALOG.filter((category) => category.scope === scope);
@@ -126,10 +109,9 @@ function PermissionChecklist({
         <section key={category.key} className="card admin-user-section-card admin-role-permission-card">
           <div className="admin-role-permission-head">
             <div>
-              <p className="workspace-context">{category.scope}</p>
               <h5>{category.label}</h5>
               <p className="muted">
-                {category.permissions.length} permisos disponibles en esta categoría.
+                {category.permissions.length} permisos disponibles para el alcance {scope}.
               </p>
             </div>
             <span className="pill">{category.permissions.length} permisos</span>
@@ -156,11 +138,6 @@ function PermissionChecklist({
   );
 }
 
-const ADMIN_PANELS = [
-  { id: "users", label: "Usuarios" },
-  { id: "roles", label: "Roles" }
-] as const;
-
 export const AdminRolesView = observer(function AdminRolesView() {
   const store = useRootStore();
   const admin = React.useMemo(() => new AdminController(store), [store]);
@@ -168,10 +145,6 @@ export const AdminRolesView = observer(function AdminRolesView() {
   const canCreateRoles = Boolean(viewer?.systemPermissions.includes("system.administration.roles.create"));
   const canUpdateRoles = Boolean(viewer?.systemPermissions.includes("system.administration.roles.update"));
   const canDeleteRoles = Boolean(viewer?.systemPermissions.includes("system.administration.roles.delete"));
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const panel = location.pathname.endsWith("/roles") || searchParams.get("panel") === "roles" ? "roles" : "users";
   const [roles, setRoles] = React.useState<RoleDefinitionDto[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -190,10 +163,6 @@ export const AdminRolesView = observer(function AdminRolesView() {
   );
 
   React.useEffect(() => {
-    if (panel === "users") {
-      return;
-    }
-
     let active = true;
     setLoading(true);
     setError("");
@@ -221,13 +190,9 @@ export const AdminRolesView = observer(function AdminRolesView() {
     return () => {
       active = false;
     };
-  }, [admin, panel]);
+  }, [admin]);
 
   React.useEffect(() => {
-    if (panel === "users") {
-      return;
-    }
-
     const selected = roles.find((role) => role.id === selectedRoleId);
     if (selected) {
       setDraft(cloneDraft(selected));
@@ -241,7 +206,7 @@ export const AdminRolesView = observer(function AdminRolesView() {
     if (roles.length > 0) {
       setSelectedRoleId(roles[0].id);
     }
-  }, [panel, roles, selectedRoleId]);
+  }, [roles, selectedRoleId]);
 
   React.useEffect(() => {
     setDeleteError("");
@@ -261,11 +226,6 @@ export const AdminRolesView = observer(function AdminRolesView() {
       ...role.permissions
     ].some((value) => value.toLowerCase().includes(query)));
   }, [roles, search]);
-
-  const selectPanel = React.useCallback((nextPanel: "users" | "roles") => {
-    navigate(nextPanel === "roles" ? "/administration/roles" : "/administration/users");
-    setSearchParams(updateSearchParams(searchParams, { panel: nextPanel === "roles" ? "roles" : null }));
-  }, [navigate, searchParams, setSearchParams]);
 
   const startCreate = React.useCallback(() => {
     if (!canCreateRoles) {
@@ -416,6 +376,8 @@ export const AdminRolesView = observer(function AdminRolesView() {
     && canDeleteRoles
     && !selectedRole.isBuiltin
   );
+  const activeCategories = permissionCategories(draft.scope);
+  const roleTypeLabel = selectedRoleId === "__new__" ? "Nuevo" : selectedRole?.isBuiltin ? "Builtin" : "Custom";
 
   return (
     <div className="stack-lg">
@@ -423,216 +385,282 @@ export const AdminRolesView = observer(function AdminRolesView() {
         <div className="workspace-header">
           <div>
             <p className="workspace-context">Administración</p>
-            <h2 className="workspace-title">Usuarios y roles</h2>
-            <p className="muted">El panel queda dividido entre asignaciones por producto y gestión de roles con permisos explícitos.</p>
+            <h2 className="workspace-title">Roles</h2>
+            <p className="muted">Diseña roles con un alcance claro y una lectura de permisos que no ahogue la pantalla.</p>
+          </div>
+          <div className="row-actions compact">
+            <span className="pill">{roles.length} roles</span>
+            {canCreateRoles ? (
+              <button className="btn btn-primary" type="button" onClick={startCreate}>
+                Nuevo rol
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
 
-      {panel === "users" ? (
-        <AdminUsersManagementView />
-      ) : (
-        <div className="admin-users-layout admin-role-layout">
-          <section className="card admin-users-sidebar admin-role-sidebar">
-            <div className="admin-role-sidebar-tools">
-              <div className="section-head">
-                <div>
-                  <h3>Roles</h3>
-                  <p className="muted">{filteredRoles.length} de {roles.length} roles</p>
-                </div>
-                <button type="button" className="btn btn-primary" onClick={startCreate} disabled={!canCreateRoles}>
-                  Nuevo rol
+      <div className="admin-users-layout admin-backoffice-layout admin-role-layout">
+        <section className="card admin-users-sidebar admin-role-sidebar admin-sidebar-card">
+          <div className="admin-sidebar-tools">
+            <div className="section-head">
+              <div>
+                <h3>Listado</h3>
+                <p className="muted">{filteredRoles.length} de {roles.length} roles</p>
+              </div>
+              <button type="button" className="btn btn-secondary" onClick={startCreate} disabled={!canCreateRoles}>
+                Alta
+              </button>
+            </div>
+
+            <label className="admin-sidebar-filter">
+              Filtrar roles
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Título, key, scope o permiso"
+              />
+            </label>
+          </div>
+
+          <div className="admin-user-list admin-backoffice-list admin-role-list">
+            {filteredRoles.map((role) => {
+              const isSelected = selectedRoleId === role.id;
+              return (
+                <button
+                  key={role.id}
+                  type="button"
+                  className={`admin-user-list-item${isSelected ? " is-selected" : ""}`}
+                  onClick={() => selectRole(role)}
+                >
+                  <div className="admin-user-list-item-head">
+                    <div className="admin-list-item-copy">
+                      <strong>{role.title}</strong>
+                      <p className="muted">{role.key}</p>
+                    </div>
+                    <span className="pill">{role.scope}</span>
+                  </div>
+                  <div className="admin-user-list-item-meta">
+                    <span className="pill">{role.permissions.length} permisos</span>
+                    <span className="pill">{role.isBuiltin ? "Builtin" : "Custom"}</span>
+                  </div>
                 </button>
+              );
+            })}
+            {!loading && filteredRoles.length === 0 ? (
+              <p className="muted">No hay roles que coincidan con el filtro actual.</p>
+            ) : null}
+          </div>
+
+          {loading ? <p className="muted">Cargando roles...</p> : null}
+          {error ? <p className="error-text">{error}</p> : null}
+        </section>
+
+        <section className="card admin-users-detail admin-role-detail">
+          {(selectedRoleId === "__new__" || roles.some((role) => role.id === selectedRoleId)) ? (
+            <div className="stack-lg admin-detail-shell admin-role-shell">
+              <div className="admin-detail-header">
+                <div className="admin-detail-copy">
+                  <p className="admin-detail-breadcrumbs">
+                    <span>Roles</span>
+                    <span>/</span>
+                    <span>{selectedRoleId === "__new__" ? "Nuevo rol" : draft.title || selectedRole?.title || "Detalle"}</span>
+                    <span>/</span>
+                    <span>Definición</span>
+                  </p>
+                  <h3>{draft.title || "Rol sin título"}</h3>
+                  <p className="muted">
+                    {selectedRole
+                      ? `${selectedRole.key} · ${selectedRole.isBuiltin ? "Rol builtin con key fija." : "Rol editable definido por la organización."}`
+                      : "Define un rol custom con un alcance claro antes de recorrer las categorías de permisos."}
+                  </p>
+                </div>
+                <div className="admin-user-summary-pills admin-role-summary-pills">
+                  <span className="pill">{draft.scope}</span>
+                  <span className="pill">{draft.permissions.length} permisos</span>
+                  <span className="pill">{roleTypeLabel}</span>
+                </div>
               </div>
 
-              <label className="admin-role-filter">
-                Filtrar roles
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Título, key, scope o permiso"
-                />
-              </label>
-            </div>
-
-            <div className="admin-user-list admin-role-list">
-              {filteredRoles.map((role) => {
-                const isSelected = selectedRoleId === role.id;
-                return (
-                  <button
-                    key={role.id}
-                    type="button"
-                    className={`admin-user-list-item${isSelected ? " is-selected" : ""}`}
-                    onClick={() => selectRole(role)}
-                  >
-                    <div className="admin-user-list-item-head">
-                      <div>
-                        <strong>{role.title}</strong>
-                        <p className="muted">{role.key}</p>
-                      </div>
-                      <span className="pill">{role.scope}</span>
-                    </div>
-                    <div className="admin-user-list-item-meta">
-                      <span className="pill">{role.permissions.length} permisos</span>
-                      <span className="pill">{role.isBuiltin ? "Builtin" : "Custom"}</span>
-                    </div>
-                  </button>
-                );
-              })}
-              {!loading && filteredRoles.length === 0 ? (
-                <p className="muted">No hay roles que coincidan con el filtro actual.</p>
-              ) : null}
-            </div>
-
-            {loading ? <p className="muted">Cargando roles...</p> : null}
-            {error ? <p className="error-text">{error}</p> : null}
-          </section>
-
-          <section className="admin-users-detail admin-role-detail">
-            {(selectedRoleId === "__new__" || roles.some((role) => role.id === selectedRoleId)) ? (
-              <div className="stack-lg admin-role-shell">
-                <section className="card admin-user-section-card admin-role-header-card">
-                  <div className="admin-role-editor-intro">
-                    <div>
-                      <p className="workspace-context">
-                        {selectedRoleId === "__new__" ? "Roles / Nuevo rol" : "Roles / Editar rol"}
-                      </p>
-                      <h3>{draft.title || "Rol sin título"}</h3>
-                      <p className="muted">
-                        Ajusta el alcance del rol y organiza sus permisos sin perder contexto mientras recorres la
-                        lista completa.
-                      </p>
-                    </div>
-                    <div className="admin-user-summary-pills admin-role-summary-pills">
-                      <span className="pill">{draft.scope}</span>
-                      <span className="pill">{draft.permissions.length} permisos</span>
-                      {selectedRole?.isBuiltin ? <span className="pill">Builtin</span> : null}
-                    </div>
+              <section id="role-definition" className="card admin-user-section-card admin-role-toolbar-card">
+                <div className="section-head">
+                  <div>
+                    <h4>Definición</h4>
+                    <p className="muted">El editor principal queda compacto para dejar más espacio a la lectura de permisos.</p>
                   </div>
-                  <div className="admin-role-header-grid">
-                    <label>
-                      Título
-                      <input
-                        value={draft.title}
-                        onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-                        disabled={!canEditSelectedRole}
-                      />
-                    </label>
-                    <label>
-                      <span className="admin-role-field-label">
-                        <span>Alcance</span>
-                        <RoleScopeInfoPopover />
-                      </span>
-                      <SearchableSelect
-                        value={draft.scope}
-                        onChange={(value) => setDraft((current) => ({
-                          ...current,
-                          scope: value as RoleScope,
-                          permissions: []
-                        }))}
-                        options={[
-                          { value: "PRODUCT", label: "PRODUCT" },
-                          { value: "SYSTEM", label: "SYSTEM" }
-                        ]}
-                        disabled={!canEditSelectedRole}
-                        ariaLabel="Alcance"
-                      />
-                    </label>
-                    <label className="admin-role-description-field admin-role-header-description">
-                      Descripción
-                      <textarea
-                        value={draft.description}
-                        onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
-                        rows={2}
-                        disabled={!canEditSelectedRole}
-                      />
-                    </label>
-                    <div className="admin-role-actions">
+                  <span className="pill">{selectedRole ? `key: ${selectedRole.key}` : "rol custom"}</span>
+                </div>
+                <div className="admin-role-header-grid admin-role-toolbar-grid">
+                  <label>
+                    Título
+                    <input
+                      value={draft.title}
+                      onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                      disabled={!canEditSelectedRole}
+                    />
+                  </label>
+                  <label>
+                    <span className="admin-role-field-label">
+                      <span>Alcance</span>
+                      <RoleScopeInfoPopover />
+                    </span>
+                    <SearchableSelect
+                      value={draft.scope}
+                      onChange={(value) => setDraft((current) => ({
+                        ...current,
+                        scope: value as RoleScope,
+                        permissions: []
+                      }))}
+                      options={[
+                        { value: "PRODUCT", label: "PRODUCT" },
+                        { value: "SYSTEM", label: "SYSTEM" }
+                      ]}
+                      disabled={!canEditSelectedRole}
+                      ariaLabel="Alcance"
+                    />
+                  </label>
+                  <div className="admin-role-actions">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => void saveRole()}
+                      disabled={saving || !canEditSelectedRole}
+                    >
+                      {saving ? "Guardando..." : "Guardar rol"}
+                    </button>
+                    {selectedRoleId !== "__new__" ? (
                       <button
                         type="button"
-                        className="btn btn-primary"
-                        onClick={() => void saveRole()}
-                        disabled={saving || !canEditSelectedRole}
+                        className="btn btn-secondary"
+                        onClick={() => void handleDeleteRole()}
+                        disabled={deleteLoading || !canDeleteSelectedRole}
                       >
-                        {saving ? "Guardando..." : "Guardar rol"}
+                        {deleteLoading ? "Analizando..." : "Eliminar rol"}
                       </button>
-                      {selectedRoleId !== "__new__" ? (
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={() => void handleDeleteRole()}
-                          disabled={deleteLoading || !canDeleteSelectedRole}
-                        >
-                          {deleteLoading ? "Analizando..." : "Eliminar rol"}
-                        </button>
-                      ) : null}
-                    </div>
+                    ) : null}
                   </div>
-                </section>
+                  <label className="admin-role-description-field admin-role-header-description">
+                    Descripción
+                    <textarea
+                      value={draft.description}
+                      onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+                      rows={2}
+                      disabled={!canEditSelectedRole}
+                    />
+                  </label>
+                </div>
+              </section>
 
+              {saveError ? <p className="error-text">{saveError}</p> : null}
+              {saveSuccess ? <p className="success-text">{saveSuccess}</p> : null}
+              {deleteError ? <p className="error-text">{deleteError}</p> : null}
+
+              <section className="card admin-user-section-card admin-role-overview-card">
+                <div className="section-head">
+                  <div>
+                    <h4>Resumen del rol</h4>
+                    <p className="muted">Aclara de un vistazo el alcance, el volumen de permisos y el tipo de rol.</p>
+                  </div>
+                </div>
+                <div className="admin-role-overview-layout">
+                  <div className="metrics-grid metrics-summary-grid">
+                    <article className="metric">
+                      <h3>{draft.scope}</h3>
+                      <p>Alcance activo</p>
+                    </article>
+                    <article className="metric">
+                      <h3>{draft.permissions.length}</h3>
+                      <p>Permisos seleccionados</p>
+                    </article>
+                    <article className="metric">
+                      <h3>{activeCategories.length}</h3>
+                      <p>Categorías visibles</p>
+                    </article>
+                    <article className="metric">
+                      <h3>{roleTypeLabel}</h3>
+                      <p>Tipo de rol</p>
+                    </article>
+                  </div>
+                  <aside className="admin-side-note">
+                    <p className="workspace-context">Alcance y catálogo</p>
+                    <p className="muted">
+                      `PRODUCT` crea roles pensados para operar dentro de un producto concreto.
+                    </p>
+                    <p className="muted">
+                      `SYSTEM` se reserva para permisos administrativos globales. Cambiar el alcance reinicia permisos
+                      para evitar combinaciones incompatibles.
+                    </p>
+                  </aside>
+                </div>
+              </section>
+
+              <section id="role-permissions" className="stack-lg">
+                <div className="section-head">
+                  <div>
+                    <h4>Permisos</h4>
+                    <p className="muted">Las categorías quedan apiladas para escanearlas rápido sin pelear con la grilla.</p>
+                  </div>
+                  <span className="pill">{activeCategories.length} categorías</span>
+                </div>
                 <PermissionChecklist
                   scope={draft.scope}
                   permissions={draft.permissions}
                   onToggle={togglePermission}
                   disabled={saving || !canEditSelectedRole}
                 />
-
-                {selectedRoleId !== "__new__" && roleDependencies && roleDependencies.length === 0 && !selectedRole?.isBuiltin ? (
-                  <section className="card admin-user-section-card">
-                    <div className="section-head">
-                      <div>
-                        <h4>Dependencias del rol</h4>
-                        <p className="muted">El rol no tiene asignaciones activas y se puede eliminar tras confirmar.</p>
-                      </div>
-                      <span className="pill">0 asignaciones</span>
-                    </div>
-                  </section>
-                ) : null}
-
-                {roleDependencies && roleDependencies.length > 0 ? (
-                  <section className="card admin-user-section-card">
-                    <div className="section-head">
-                      <div>
-                        <h4>No se puede eliminar este rol</h4>
-                        <p className="muted">
-                          Antes de eliminarlo, revisa los usuarios y productos que todavía dependen de este rol.
-                        </p>
-                      </div>
-                      <span className="pill">{roleDependencies.length} asignaciones</span>
-                    </div>
-                    <div className="admin-role-dependencies-list">
-                      {roleDependencies.map((dependency) => (
-                        <article
-                          key={`${dependency.userId}:${dependency.productId}`}
-                          className="definition-note admin-role-dependency-item"
-                        >
-                          <strong>{dependency.userName}</strong>
-                          <span className="muted">{dependency.userEmail}</span>
-                          <span className="pill">
-                            {dependency.isSystem ? "SYSTEM" : dependency.productKey} · {dependency.productName}
-                          </span>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                ) : null}
-                {saveError ? <p className="error-text">{saveError}</p> : null}
-                {saveSuccess ? <p className="success-text">{saveSuccess}</p> : null}
-                {deleteError ? <p className="error-text">{deleteError}</p> : null}
-              </div>
-            ) : (
-              <section className="card page-state">
-                <h3>No hay rol seleccionado</h3>
-                <p>Selecciona un rol de la lista o crea uno nuevo para empezar a editarlo.</p>
-                <button type="button" className="btn btn-primary" onClick={startCreate}>
-                  Nuevo rol
-                </button>
               </section>
-            )}
-          </section>
-        </div>
-      )}
+
+              {selectedRoleId !== "__new__" && roleDependencies && roleDependencies.length === 0 && !selectedRole?.isBuiltin ? (
+                <section id="role-dependencies" className="card admin-user-section-card">
+                  <div className="section-head">
+                    <div>
+                      <h4>Dependencias del rol</h4>
+                      <p className="muted">El rol no tiene asignaciones activas y se puede eliminar tras confirmar.</p>
+                    </div>
+                    <span className="pill">0 asignaciones</span>
+                  </div>
+                </section>
+              ) : null}
+
+              {roleDependencies && roleDependencies.length > 0 ? (
+                <section id="role-dependencies" className="card admin-user-section-card">
+                  <div className="section-head">
+                    <div>
+                      <h4>No se puede eliminar este rol</h4>
+                      <p className="muted">
+                        Antes de eliminarlo, revisa los usuarios y productos que todavía dependen de este rol.
+                      </p>
+                    </div>
+                    <span className="pill">{roleDependencies.length} asignaciones</span>
+                  </div>
+                  <div className="admin-role-dependencies-list">
+                    {roleDependencies.map((dependency) => (
+                      <article
+                        key={`${dependency.userId}:${dependency.productId}`}
+                        className="definition-note admin-role-dependency-item"
+                      >
+                        <strong>{dependency.userName}</strong>
+                        <span className="muted">{dependency.userEmail}</span>
+                        <span className="pill">
+                          {dependency.isSystem ? "SYSTEM" : dependency.productKey} · {dependency.productName}
+                        </span>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+            </div>
+          ) : (
+            <section className="card page-state">
+              <h3>No hay rol seleccionado</h3>
+              <p>Selecciona un rol de la lista o crea uno nuevo para empezar a editarlo.</p>
+              <button type="button" className="btn btn-primary" onClick={startCreate}>
+                Nuevo rol
+              </button>
+            </section>
+          )}
+        </section>
+      </div>
     </div>
   );
 });
