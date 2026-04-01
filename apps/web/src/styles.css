@@ -2078,6 +2078,12 @@ html .drawer-content .card {
   gap: 0.75rem;
 }
 
+.task-message-card.is-reply-target {
+  border-color: color-mix(in srgb, var(--accent-a) 26%, var(--border-subtle));
+  background: color-mix(in srgb, var(--bg-card) 96%, var(--bg-hover));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-a) 12%, transparent);
+}
+
 .task-child-open {
   display: inline-flex;
   align-items: center;
@@ -2131,6 +2137,13 @@ html .drawer-content .card {
 .task-message-derived {
   display: grid;
   gap: 0.45rem;
+}
+
+.task-inline-reply {
+  display: grid;
+  gap: 0.85rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border-soft);
 }
 
 .definition-note-markdown,
