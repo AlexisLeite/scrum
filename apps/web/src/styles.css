@@ -2120,10 +2120,92 @@ html .drawer-content .card {
   gap: 1rem;
 }
 
+.task-context-label {
+  display: inline-block;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.task-parent-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid color-mix(in srgb, var(--accent-a) 22%, var(--border-soft));
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--bg-soft) 92%, transparent),
+      color-mix(in srgb, var(--bg-card) 96%, transparent));
+  box-shadow: 0 14px 30px color-mix(in srgb, #020817 14%, transparent);
+}
+
+.task-parent-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.task-parent-card-copy {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  flex: 1 1 18rem;
+}
+
+.task-parent-card-title {
+  font-size: 1.02rem;
+  line-height: 1.35;
+}
+
+.task-parent-card-hint,
+.task-child-summary-copy p,
+.task-child-empty {
+  margin: 0;
+}
+
+.task-parent-card-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .task-child-list,
 .task-thread {
   display: grid;
   gap: 0.75rem;
+}
+
+.task-child-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-soft) 76%, transparent);
+}
+
+.task-child-summary-copy {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.task-child-summary-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.25rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-hover) 78%, transparent);
+  color: var(--text-main);
+  font-size: 0.92rem;
 }
 
 .task-child-card,
@@ -2147,12 +2229,19 @@ html .drawer-content .card {
   align-items: center;
   gap: 0.65rem;
   justify-content: flex-start;
+  width: 100%;
   padding: 0;
   background: transparent;
   border: 0;
   color: var(--text-primary);
   font: inherit;
   cursor: pointer;
+  text-align: left;
+}
+
+.task-child-title {
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .task-child-check {
@@ -2179,6 +2268,13 @@ html .drawer-content .card {
   align-items: center;
 }
 
+.task-child-empty {
+  padding: 0.95rem 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+}
+
 .task-message-head {
   display: flex;
   justify-content: space-between;
@@ -2202,6 +2298,25 @@ html .drawer-content .card {
   gap: 0.85rem;
   padding-top: 0.25rem;
   border-top: 1px solid var(--border-soft);
+}
+
+@media (max-width: 760px) {
+  .task-parent-card,
+  .task-child-summary,
+  .task-child-card,
+  .task-message-card,
+  .task-child-empty {
+    padding-inline: 0.9rem;
+  }
+
+  .task-parent-card-head {
+    align-items: stretch;
+  }
+
+  .task-parent-card-head .status,
+  .task-child-summary-count {
+    width: fit-content;
+  }
 }
 
 .definition-note-markdown,

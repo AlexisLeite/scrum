@@ -502,29 +502,44 @@ export function TaskCollaborationPanel(props: {
         </div>
       ) : null}
       {detail?.parentTask ? (
-        <div className="definition-note">
-          <span className="muted">Tarea padre</span>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => void openTaskDrawerById(detail.parentTask!.id)}
-          >
-            {detail.parentTask.title}
-          </button>
-          <span className={taskStatusClass(detail.parentTask.status)}>{detail.parentTask.status}</span>
-        </div>
+        <article className="task-parent-card">
+          <div className="task-parent-card-head">
+            <div className="task-parent-card-copy">
+              <span className="task-context-label">Tarea padre</span>
+              <strong className="task-parent-card-title">{detail.parentTask.title}</strong>
+            </div>
+            <span className={taskStatusClass(detail.parentTask.status)}>{detail.parentTask.status}</span>
+          </div>
+          <p className="task-parent-card-hint muted">
+            Esta tarea forma parte de una cadena mayor. Abre la tarea padre para revisar el contexto completo antes de
+            tomar decisiones.
+          </p>
+          <div className="task-parent-card-actions">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => void openTaskDrawerById(detail.parentTask!.id)}
+            >
+              Abrir tarea padre
+            </button>
+          </div>
+        </article>
       ) : null}
       <div className="task-child-list">
         {detail ? (
-          <div className="section-head compact-head">
-            <p className="muted">
-              Hijos completados: {detail.childSummary.completed} de {detail.childSummary.total}
-            </p>
+          <div className="task-child-summary">
+            <div className="task-child-summary-copy">
+              <span className="task-context-label">Subtareas</span>
+              <p className="muted">Seguimiento del trabajo derivado y dependencias directas de esta tarea.</p>
+            </div>
+            <strong className="task-child-summary-count">
+              {detail.childSummary.completed}/{detail.childSummary.total}
+            </strong>
           </div>
         ) : null}
         {loading ? <p className="muted">Cargando actividad...</p> : null}
         {!loading && detail && detail.childTasks.length === 0 ? (
-          <p className="muted">Esta tarea aun no tiene elementos hijos.</p>
+          <p className="task-child-empty muted">Esta tarea aun no tiene elementos hijos.</p>
         ) : null}
         {detail?.childTasks.map((child) => (
           <article key={child.id} className="task-child-card">
@@ -532,7 +547,7 @@ export function TaskCollaborationPanel(props: {
               <span className={`task-child-check ${isTaskTerminalStatus(child.status) ? "is-done" : ""}`}>
                 {isTaskTerminalStatus(child.status) ? "?" : "·"}
               </span>
-              <span>{child.title}</span>
+              <span className="task-child-title">{child.title}</span>
             </button>
             <div className="task-child-meta">
               <span className={taskStatusClass(child.status)}>{child.status}</span>
