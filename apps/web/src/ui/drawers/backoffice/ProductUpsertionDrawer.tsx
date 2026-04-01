@@ -5,6 +5,7 @@ import { ProductController } from "../../../controllers";
 import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productRootDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
+import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { RichDescriptionField } from "../product-workspace/RichDescriptionField";
 import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { Drawer, DrawerRenderContext } from "../Drawer";
@@ -327,8 +328,7 @@ export function ProductUpsertionForm(props: {
           {closeLabel}
         </button>
       </div>
-      {saveError ? <p className="saveError error-text">{saveError}</p> : null}
-      {error ? <p className="error error-text">{error}</p> : null}
+      <DrawerErrorBanner messages={[saveError, error]} />
     </div>
   );
 }

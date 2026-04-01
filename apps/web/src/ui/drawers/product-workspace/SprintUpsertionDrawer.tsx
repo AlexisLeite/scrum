@@ -6,6 +6,7 @@ import { productSprintDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { TaskSearchPicker } from "../../../components/TaskSearchPicker";
 import { Drawer, DrawerRenderContext } from "../Drawer";
+import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { RichDescriptionField } from "./RichDescriptionField";
@@ -439,6 +440,7 @@ export function SprintUpsertionForm(props: {
           </button>
         ) : null}
       </div>
+      <DrawerErrorBanner messages={[error]} />
 
       {sprint && canManageTasks ? (
         <section className="card sprint-task-manager">
@@ -587,7 +589,6 @@ export function SprintUpsertionForm(props: {
       ) : null}
 
       {sprint ? <ActivityTimeline controller={controller} entityType="SPRINT" entityId={sprint.id} /> : null}
-      {error ? <p className="error-text">{error}</p> : null}
     </form>
   );
 }

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../../api/client";
 import { TeamController } from "../../../controllers";
 import { teamDefinitionPath } from "../../../routes/backoffice-routes";
+import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { RichDescriptionField } from "../product-workspace/RichDescriptionField";
 import { Drawer, DrawerRenderContext } from "../Drawer";
@@ -392,7 +393,7 @@ export function TeamUpsertionForm(props: {
           {closeLabel}
         </button>
       </div>
-      {error ? <p className="error-text">{error}</p> : null}
+      <DrawerErrorBanner messages={[error]} />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productTaskDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../Drawer";
+import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { ActivityTimeline, type ActivityEntry, type ActivityListResult } from "./ActivityTimeline";
 import { TaskCollaborationPanel, type TaskCollaborationDetail } from "./TaskCollaborationPanel";
@@ -606,6 +607,7 @@ export function TaskUpsertionForm(props: {
             {readOnly ? "Cerrar" : closeLabel}
           </button>
         </div>
+        <DrawerErrorBanner messages={[saveError, error]} />
         {task ? (
           <ActivityTimeline
             controller={controller}
@@ -631,8 +633,6 @@ export function TaskUpsertionForm(props: {
             onChanged={onDone}
           />
         ) : null}
-        {saveError ? <p className="error-text">{saveError}</p> : null}
-        {error ? <p className="error-text">{error}</p> : null}
       </div>
 
       <TaskCompletionDialog

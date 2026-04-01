@@ -64,6 +64,26 @@
   overflow: auto;
 }
 
+.drawer-error-banner {
+  position: sticky;
+  bottom: 0.85rem;
+  z-index: 4;
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bad-bg) 88%, var(--bg-card));
+  box-shadow: 0 16px 28px rgba(12, 37, 67, 0.18);
+  backdrop-filter: blur(10px);
+}
+
+.drawer-error-banner .error-text {
+  margin: 0;
+  color: color-mix(in srgb, var(--danger) 86%, var(--text-main));
+}
+
 .modal-host {
   position: fixed;
   inset: 0;

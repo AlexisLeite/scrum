@@ -6,6 +6,7 @@ import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productStoryDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../Drawer";
+import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { ModalsController } from "../../modals/ModalsController";
 import { ActivityTimeline } from "./ActivityTimeline";
@@ -449,6 +450,7 @@ export function StoryUpsertionForm(props: {
           {closeLabel}
         </button>
       </div>
+      <DrawerErrorBanner messages={[saveError, error]} />
       {story ? (
         <section className="card">
           <div className="section-head">
@@ -480,8 +482,6 @@ export function StoryUpsertionForm(props: {
         </section>
       ) : null}
       {story ? <ActivityTimeline controller={controller} entityType="STORY" entityId={story.id} /> : null}
-      {saveError ? <p className="error-text">{saveError}</p> : null}
-      {error ? <p className="error-text">{error}</p> : null}
     </div>
   );
 }
