@@ -104,7 +104,9 @@ export const StoryTasksView = observer(function StoryTasksView() {
       new TaskUpsertionDrawer({
         controller,
         productId,
-        stories: [{ id: storyId, title: currentStory?.title ?? "Historia actual" }],
+        stories: task
+          ? stories.map((story) => ({ id: story.id, title: story.title }))
+          : [{ id: storyId, title: currentStory?.title ?? "Historia actual" }],
         sprints,
         assignees: assignableUsers,
         statusOptions,
@@ -113,7 +115,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
         allowTaskCreation: canCreateTaskFromMessage(user?.role),
         allowMessageCreation: task ? canCommentOnVisibleTask(user?.role, task, user?.id) : true,
         task,
-        defaultStoryId: storyId,
+        defaultStoryId: task ? undefined : storyId,
         onDone: reloadStoryTasks
       })
     );

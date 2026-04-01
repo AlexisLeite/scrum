@@ -96,6 +96,10 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsString()
   sprintId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  storyId?: string;
 }
 
 export class CreateTaskMessageDto {

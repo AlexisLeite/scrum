@@ -335,6 +335,7 @@ export class TasksService {
     const hasStatus = dto.status !== undefined;
     const hasAssigneeId = dto.assigneeId !== undefined;
     const hasSprintId = dto.sprintId !== undefined;
+    const hasStoryId = dto.storyId !== undefined;
     const nextSprintId = hasSprintId ? dto.sprintId ?? null : current.sprintId;
     const isLeavingCurrentSprint = hasSprintId && nextSprintId !== current.sprintId;
 
@@ -361,6 +362,25 @@ export class TasksService {
 
     if (hasStatus && typeof dto.status !== "string") {
       throw new BadRequestException("Task status must be a string");
+    }
+    if (hasStoryId && typeof dto.storyId !== "string") {
+      throw new BadRequestException("Task story must be a string");
+    }
+    if (hasStoryId && !dto.storyId?.trim()) {
+      throw new BadRequestException("Task story is required");
+    }
+
+    if (hasStoryId && dto.storyId !== current.storyId) {
+      const story = await this.prisma.userStory.findUnique({
+        where: { id: dto.storyId },
+        select: { id: true, productId: true }
+      });
+      if (!story) {
+        throw new BadRequestException("Story not found");
+      }
+      if (story.productId !== current.productId) {
+        throw new BadRequestException("Story does not belong to task product");
+      }
     }
 
     let targetTeamId: string | null | undefined;
@@ -389,6 +409,7 @@ export class TasksService {
         effortPoints: dto.effortPoints,
         estimatedHours: dto.estimatedHours,
         actualHours: dto.actualHours,
+        storyId: hasStoryId ? dto.storyId : undefined,
         status: hasStatus ? dto.status : undefined,
         assigneeId: hasAssigneeId ? dto.assigneeId ?? null : undefined,
         sprintId: hasSprintId ? dto.sprintId ?? null : undefined,
@@ -406,8 +427,11 @@ export class TasksService {
       });
     }
 
-    if (hasStatus || hasSprintId) {
+    if (hasStatus || hasSprintId || hasStoryId) {
       await this.recomputeStoryStatus(current.storyId);
+      if (updated.storyId !== current.storyId) {
+        await this.recomputeStoryStatus(updated.storyId);
+      }
     }
     if (current.sprintId && movesBoardColumn) {
       await this.reindexSprintColumn(current.sprintId, current.status);
@@ -421,7 +445,8 @@ export class TasksService {
       entityId: updated.id,
       action,
       metadataJson: {
-        storyId: current.storyId,
+        storyId: updated.storyId,
+        previousStoryId: current.storyId !== updated.storyId ? current.storyId : undefined,
         changedFields,
         actualHours: updated.actualHours
       },
@@ -1068,6 +1093,7 @@ export class TasksService {
 
   private getTaskChangedFields(
       before: {
+        storyId: string;
         title: string;
         description: string | null;
         effortPoints: number | null;
@@ -1079,6 +1105,7 @@ export class TasksService {
         boardOrder: number;
       },
     after: {
+        storyId: string;
         title: string;
         description: string | null;
         effortPoints: number | null;
@@ -1091,6 +1118,7 @@ export class TasksService {
       }
   ): string[] {
     const keys: Array<keyof typeof before> = [
+      "storyId",
       "title",
       "description",
       "effortPoints",

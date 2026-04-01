@@ -258,9 +258,9 @@ export function TaskUpsertionForm(props: {
   const formDisabled = readOnly || saving || isHydratingRemote;
 
   const shouldSelectStory = !defaultStoryId || Boolean(fixedSprintId) || Boolean(task);
-  const storySelectionLocked = Boolean(defaultStoryId);
+  const storySelectionLocked = !task && Boolean(defaultStoryId);
   const canChangeSprint = allowSprintChange && !fixedSprintId;
-  const selectedStoryId = (defaultStoryId || storyId || "").trim();
+  const selectedStoryId = (task ? storyId || task.storyId || defaultStoryId || "" : defaultStoryId || storyId || "").trim();
   const estimatedHours =
     selectedEstimatedPreset !== null ? selectedEstimatedPreset : toOptionalNumber(customEstimatedHours);
   const parentReference = defaultParentTaskLabel ?? (defaultParentTaskId ? `Tarea ${defaultParentTaskId.slice(0, 8)}` : "");
@@ -303,7 +303,7 @@ export function TaskUpsertionForm(props: {
       return;
     }
 
-    if (!task && !selectedStoryId) {
+    if (!selectedStoryId) {
       setError("Debes elegir una historia.");
       return;
     }
@@ -323,6 +323,7 @@ export function TaskUpsertionForm(props: {
       if (task) {
         await controller.updateTask(task.id, {
           ...payload,
+          storyId: selectedStoryId,
           assigneeId: assigneeId || null,
           sprintId: canChangeSprint ? (sprintId || null) : fixedSprintId || null
         });
@@ -444,7 +445,7 @@ export function TaskUpsertionForm(props: {
           <label>
             Historia
             <SearchableSelect
-              value={defaultStoryId ? defaultStoryId : storyId}
+              value={task ? storyId : defaultStoryId ? defaultStoryId : storyId}
               onChange={(value) => setForm((current) => ({ ...current, storyId: value }))}
               options={[
                 { value: "", label: "Seleccionar historia" },
