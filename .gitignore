@@ -12,3 +12,5 @@ logs
 public
 assets
 shared/media
+*.log
+deploy
