@@ -12,7 +12,7 @@
     ]
   },
   "scripts": {
-    "dev": "pnpm db:push && pnpm db:generate && pnpm db:seed && WEB_ORIGIN='https://vmi3181573.contaboserver.net:5443' PUBLIC_API_URL='https://vmi3181573.contaboserver.net:5444' VITE_API_BASE='https://vmi3181573.contaboserver.net:5444/api/v1' PORT=5001 MCP_PORT=5002 turbo run dev --parallel",
+    "dev": "WEB_ORIGIN='https://vmi3181573.contaboserver.net:5443' PUBLIC_API_URL='https://vmi3181573.contaboserver.net:5444' VITE_API_BASE='https://vmi3181573.contaboserver.net:5444/api/v1' PORT=5001 MCP_PORT=5002 turbo run dev --parallel",
     "build": "turbo run build && node scripts/publish-deploy.mjs && bash scripts/restart-prod.sh",
     "build-dev-mode": "BUILD_DEV_MODE=1 turbo run build",
     "lint": "turbo run lint",
