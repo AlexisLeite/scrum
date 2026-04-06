@@ -517,6 +517,9 @@ export interface UserProfileDto {
 export interface ApiKeyDto {
   id: string;
   name: string;
+  productId: string | null;
+  productName: string | null;
+  productKey: string | null;
   prefix: string;
   maskedCode: string;
   lastUsedAt: string | null;

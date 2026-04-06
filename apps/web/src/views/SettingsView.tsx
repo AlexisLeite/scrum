@@ -1,6 +1,6 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
-import { ApiKeyDto } from "@scrum/contracts";
+import { ApiKeyDto, ProductDto } from "@scrum/contracts";
 import { apiClient } from "../api/client";
 import { AuthController, ProductController } from "../controllers";
 import { getUserInitials } from "../lib/permissions";
@@ -36,8 +36,10 @@ export const SettingsView = observer(function SettingsView() {
   const [apiKeysLoading, setApiKeysLoading] = React.useState(true);
   const [apiKeysError, setApiKeysError] = React.useState("");
   const [newApiKeyName, setNewApiKeyName] = React.useState("");
+  const [newApiKeyProductId, setNewApiKeyProductId] = React.useState("");
   const [newApiKeyCode, setNewApiKeyCode] = React.useState("");
   const [apiKeysBusy, setApiKeysBusy] = React.useState(false);
+  const [availableProducts, setAvailableProducts] = React.useState<ProductDto[]>([]);
 
   React.useEffect(() => {
     setName(user?.name ?? "");
@@ -80,6 +82,33 @@ export const SettingsView = observer(function SettingsView() {
     if (!user) {
       return;
     }
+
+    let active = true;
+    void productController.loadProducts()
+      .then((products) => {
+        if (!active) {
+          return;
+        }
+        setAvailableProducts(products);
+        setNewApiKeyProductId((current) => current || products[0]?.id || "");
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+        setAvailableProducts([]);
+        setNewApiKeyProductId("");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [productController, user]);
+
+  React.useEffect(() => {
+    if (!user) {
+      return;
+    }
     let active = true;
     void (async () => {
       try {
@@ -109,6 +138,12 @@ export const SettingsView = observer(function SettingsView() {
   if (!user) {
     return null;
   }
+
+  const apiKeyProductOptions = availableProducts.map((product) => ({
+    value: product.id,
+    label: `${product.name} (${product.key})`,
+    searchText: `${product.name} ${product.key}`
+  }));
 
   return (
     <div className="stack-lg">
@@ -171,7 +206,7 @@ export const SettingsView = observer(function SettingsView() {
         <div className="section-head">
           <div>
             <h3>API keys</h3>
-            <p className="muted">Cada key usa tus mismos permisos y sirve para autenticar el servidor MCP por `x-api-key`.</p>
+            <p className="muted">Cada key se asigna a un producto accesible y usa tu rol vigente sobre ese producto al autenticar el MCP por `x-api-key`.</p>
           </div>
         </div>
         <div className="definition-grid">
@@ -184,17 +219,34 @@ export const SettingsView = observer(function SettingsView() {
                 placeholder="Ej. Claude Desktop"
               />
             </label>
+            <label>
+              Producto
+              <SearchableSelect
+                value={newApiKeyProductId}
+                onChange={setNewApiKeyProductId}
+                options={apiKeyProductOptions}
+                placeholder={availableProducts.length > 0 ? "Seleccionar producto" : "Sin productos disponibles"}
+                searchPlaceholder="Buscar producto..."
+                emptyMessage="No hay productos coincidentes."
+                ariaLabel="Seleccionar producto para la API key"
+                disabled={apiKeysBusy || availableProducts.length === 0}
+              />
+            </label>
             <div className="row-actions">
               <button
                 className="btn btn-primary"
-                disabled={apiKeysBusy || newApiKeyName.trim().length < 2}
+                disabled={apiKeysBusy || newApiKeyName.trim().length < 2 || !newApiKeyProductId}
                 onClick={() => void (async () => {
                   setApiKeysBusy(true);
                   try {
-                    const created = await auth.createApiKey({ name: newApiKeyName.trim() });
+                    const created = await auth.createApiKey({
+                      name: newApiKeyName.trim(),
+                      productId: newApiKeyProductId
+                    });
                     setApiKeys((current) => [created.apiKey, ...current]);
                     setNewApiKeyCode(created.code);
                     setNewApiKeyName("");
+                    setNewApiKeyProductId((current) => current || availableProducts[0]?.id || "");
                     setApiKeysError("");
                   } catch (error) {
                     setApiKeysError(error instanceof Error ? error.message : "No se pudo crear la API key.");
@@ -216,6 +268,9 @@ export const SettingsView = observer(function SettingsView() {
           </div>
           <div className="stack-lg">
             {apiKeysLoading ? <p className="muted">Cargando API keys...</p> : null}
+            {!apiKeysLoading && availableProducts.length === 0 ? (
+              <p className="muted">No tenes productos accesibles para asociar nuevas API keys.</p>
+            ) : null}
             {!apiKeysLoading && apiKeys.length === 0 ? (
               <p className="muted">Todavia no creaste ninguna API key.</p>
             ) : null}
@@ -223,6 +278,9 @@ export const SettingsView = observer(function SettingsView() {
               <div key={apiKey.id} className="definition-note">
                 <span className="muted">{apiKey.name}</span>
                 <strong>{apiKey.maskedCode}</strong>
+                <span className="pill">
+                  {apiKey.productKey && apiKey.productName ? `${apiKey.productKey} · ${apiKey.productName}` : "Sin producto asignado"}
+                </span>
                 <span className="muted">
                   Creada {new Date(apiKey.createdAt).toLocaleString()} · Ultimo uso {apiKey.lastUsedAt ? new Date(apiKey.lastUsedAt).toLocaleString() : "sin uso"}
                 </span>

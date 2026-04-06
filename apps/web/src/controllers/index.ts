@@ -83,7 +83,7 @@ export class AuthController {
     return apiClient.get<ApiKeyDto[]>("/api-keys");
   }
 
-  async createApiKey(payload: { name: string }) {
+  async createApiKey(payload: { name: string; productId: string }) {
     return apiClient.post<{ apiKey: ApiKeyDto; code: string }>("/api-keys", payload);
   }
 
