@@ -52,6 +52,11 @@ type CompletionRequest =
     snapshot: KanbanColumn[];
   };
 
+type ColumnPreferences = {
+  hiddenColumns: string[];
+  widths: Record<string, number>;
+};
+
 type KanbanBoardProps = {
   columns: KanbanColumn[];
   assignees: KanbanAssignee[];
@@ -196,6 +201,29 @@ function assigneeOptionsEqual(left: KanbanAssignee[], right: KanbanAssignee[]) {
     return false;
   }
   return left.every((entry, index) => entry.id === right[index]?.id && entry.name === right[index]?.name);
+}
+
+function sanitizeColumnPreferences(value: unknown): ColumnPreferences {
+  if (!value || typeof value !== "object") {
+    return { hiddenColumns: [], widths: {} };
+  }
+  const candidate = value as { hiddenColumns?: unknown; widths?: unknown };
+  const hiddenColumns = Array.isArray(candidate.hiddenColumns)
+    ? candidate.hiddenColumns.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const widths = candidate.widths && typeof candidate.widths === "object"
+    ? Object.fromEntries(
+      Object.entries(candidate.widths as Record<string, unknown>)
+        .filter((entry): entry is [string, number] => typeof entry[0] === "string" && typeof entry[1] === "number" && Number.isFinite(entry[1]))
+    )
+    : {};
+  return { hiddenColumns, widths };
+}
+
+function buildKanbanPreferencesKey(columns: KanbanColumn[]) {
+  const columnKey = columns.map((column) => column.name).sort().join("|");
+  const path = typeof window === "undefined" ? "server" : window.location.pathname;
+  return `kanban:preferences:${path}:${columnKey}`;
 }
 
 function resolveDragPreview(
@@ -476,6 +504,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
   getTaskAssignees: (task: KanbanTask, assignees: KanbanAssignee[]) => KanbanAssignee[];
   expandedTaskIds: Set<string>;
   onExpandDescription: (taskId: string) => void;
+  setColumnElement: (columnName: string, node: HTMLElement | null) => void;
   activeDrag: ActiveDragState | null;
   dragPreview: DragPreviewState | null;
   onCreateTask: (defaultStatus: string) => void;
@@ -500,6 +529,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
     getTaskAssignees,
     expandedTaskIds,
     onExpandDescription,
+    setColumnElement,
     activeDrag,
     dragPreview,
     onCreateTask,
@@ -521,23 +551,30 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
     [renderItems]
   );
 
+  const setRefs = React.useCallback((node: HTMLElement | null) => {
+    setNodeRef(node);
+    setColumnElement(column.name, node);
+  }, [column.name, setColumnElement, setNodeRef]);
+
   return (
-    <section ref={setNodeRef} className={`kb-column ${isOver || showGhost ? "is-drop-column" : ""}`}>
+    <section ref={setRefs} className={`kb-column ${isOver || showGhost ? "is-drop-column" : ""}`}>
       <header className="kb-column-head">
-        <h4>{column.name}</h4>
-        <div className="row-actions compact">
-          <span className="pill">{column.tasks.length}</span>
-          {allowCreateTask && canCreateTask(column.name) ? (
-            <button
-              type="button"
-              className="btn btn-secondary btn-icon"
-              onClick={() => onCreateTask(column.name)}
-              aria-label={`Crear tarea en ${column.name}`}
-              disabled={readOnly}
-            >
-              +
-            </button>
-          ) : null}
+        <div className="kb-column-head-main">
+          <h4>{column.name}</h4>
+          <div className="row-actions compact">
+            <span className="pill">{column.tasks.length}</span>
+            {allowCreateTask && canCreateTask(column.name) ? (
+              <button
+                type="button"
+                className="btn btn-secondary btn-icon"
+                onClick={() => onCreateTask(column.name)}
+                aria-label={`Crear tarea en ${column.name}`}
+                disabled={readOnly}
+              >
+                +
+              </button>
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -611,6 +648,25 @@ function KanbanDragOverlay(props: { task: KanbanTask | null; width?: number | nu
   );
 }
 
+function KanbanColumnResizeHandle(props: {
+  leftColumnName: string;
+  rightColumnName: string;
+  onResizeStart: (leftColumnName: string, rightColumnName: string, event: React.PointerEvent<HTMLButtonElement>) => void;
+}) {
+  const { leftColumnName, rightColumnName, onResizeStart } = props;
+  return (
+    <div className="kb-column-divider" aria-hidden="true">
+      <button
+        type="button"
+        className="kb-column-divider-handle"
+        aria-label={`Cambiar ancho entre ${leftColumnName} y ${rightColumnName}`}
+        title={`Cambiar ancho entre ${leftColumnName} y ${rightColumnName}`}
+        onPointerDown={(event) => onResizeStart(leftColumnName, rightColumnName, event)}
+      />
+    </div>
+  );
+}
+
 export function KanbanBoard({
   columns,
   assignees,
@@ -635,6 +691,7 @@ export function KanbanBoard({
   onAssigneeChange,
   onMoveTask
 }: KanbanBoardProps) {
+  const preferenceKey = React.useMemo(() => buildKanbanPreferencesKey(columns), [columns]);
   const [search, setSearch] = React.useState("");
   const [assigneeFilter, setAssigneeFilter] = React.useState<AssigneeFilter>("all");
   const [localColumns, setLocalColumns] = React.useState<KanbanColumn[]>(() => copyColumns(columns));
@@ -642,10 +699,89 @@ export function KanbanBoard({
   const [dragPreview, setDragPreview] = React.useState<DragPreviewState | null>(null);
   const [completionRequest, setCompletionRequest] = React.useState<CompletionRequest | null>(null);
   const [expandedTaskIds, setExpandedTaskIds] = React.useState<Set<string>>(() => new Set());
+  const [columnsMenuOpen, setColumnsMenuOpen] = React.useState(false);
+  const [hiddenColumns, setHiddenColumns] = React.useState<string[]>([]);
+  const [columnWidths, setColumnWidths] = React.useState<Record<string, number>>({});
+  const columnsMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const columnElementRefs = React.useRef(new Map<string, HTMLElement>());
+  const resizeStateRef = React.useRef<{
+    leftColumnName: string;
+    rightColumnName: string;
+    startX: number;
+    startLeftWidth: number;
+    startRightWidth: number;
+  } | null>(null);
 
   React.useEffect(() => {
     setLocalColumns(copyColumns(columns));
   }, [columns]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      const stored = window.localStorage.getItem(preferenceKey);
+      const preferences = sanitizeColumnPreferences(stored ? JSON.parse(stored) : null);
+      setHiddenColumns(preferences.hiddenColumns);
+      setColumnWidths(preferences.widths);
+    } catch {
+      setHiddenColumns([]);
+      setColumnWidths({});
+    }
+  }, [preferenceKey]);
+
+  React.useEffect(() => {
+    const validColumnNames = new Set(columns.map((column) => column.name));
+    setHiddenColumns((current) => {
+      const next = current.filter((columnName) => validColumnNames.has(columnName));
+      return next.length === current.length ? current : next;
+    });
+    setColumnWidths((current) => {
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([columnName]) => validColumnNames.has(columnName))
+      );
+      return Object.keys(next).length === Object.keys(current).length ? current : next;
+    });
+  }, [columns]);
+
+  const setColumnElement = React.useCallback((columnName: string, node: HTMLElement | null) => {
+    if (node) {
+      columnElementRefs.current.set(columnName, node);
+      return;
+    }
+    columnElementRefs.current.delete(columnName);
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(
+        preferenceKey,
+        JSON.stringify({
+          hiddenColumns,
+          widths: columnWidths
+        } satisfies ColumnPreferences)
+      );
+    } catch {
+      // Ignore persistence failures and keep in-memory preferences.
+    }
+  }, [columnWidths, hiddenColumns, preferenceKey]);
+
+  React.useEffect(() => {
+    if (!columnsMenuOpen) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!columnsMenuRef.current?.contains(event.target as Node)) {
+        setColumnsMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [columnsMenuOpen]);
 
   React.useEffect(() => {
     const validFilters = new Set<AssigneeFilter>(["all", "unassigned", ...assigneeFilterOptions.map((user) => user.id)]);
@@ -662,10 +798,11 @@ export function KanbanBoard({
 
   const filteredColumns = React.useMemo(() => {
     const q = normalizeText(search);
+    const visibleColumns = localColumns.filter((column) => !hiddenColumns.includes(column.name));
     if (!q && assigneeFilter === "all") {
-      return localColumns;
+      return visibleColumns;
     }
-    return localColumns.map((column) => ({
+    return visibleColumns.map((column) => ({
       ...column,
       tasks: column.tasks.filter((task) => {
         if (assigneeFilter === "unassigned" && task.assigneeId) return false;
@@ -677,7 +814,16 @@ export function KanbanBoard({
         return haystack.includes(q);
       })
     }));
-  }, [assigneeFilter, localColumns, search]);
+  }, [assigneeFilter, hiddenColumns, localColumns, search]);
+  const columnsGridTemplate = React.useMemo(
+    () => filteredColumns
+      .flatMap((column, index) => {
+        const track = columnWidths[column.name] ? `${columnWidths[column.name]}px` : "minmax(300px, 1fr)";
+        return index < filteredColumns.length - 1 ? [track, "16px"] : [track];
+      })
+      .join(" "),
+    [columnWidths, filteredColumns]
+  );
 
   const visibleCount = React.useMemo(
     () => filteredColumns.reduce((acc, column) => acc + column.tasks.length, 0),
@@ -706,6 +852,76 @@ export function KanbanBoard({
     (task: KanbanTask) => typeof editActionLabel === "function" ? editActionLabel(task) : editActionLabel,
     [editActionLabel]
   );
+  const visibleColumnCount = columns.length - hiddenColumns.length;
+  const handleToggleColumnVisibility = React.useCallback((columnName: string) => {
+    setHiddenColumns((current) => {
+      if (current.includes(columnName)) {
+        return current.filter((entry) => entry !== columnName);
+      }
+      if (visibleColumnCount <= 1) {
+        return current;
+      }
+      return [...current, columnName];
+    });
+  }, [visibleColumnCount]);
+  const handleResetColumns = React.useCallback(() => {
+    setHiddenColumns([]);
+    setColumnWidths({});
+  }, []);
+  const handleResizeStart = React.useCallback((leftColumnName: string, rightColumnName: string, event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const startLeftWidth = columnElementRefs.current.get(leftColumnName)?.getBoundingClientRect().width ?? columnWidths[leftColumnName] ?? 320;
+    const startRightWidth = columnElementRefs.current.get(rightColumnName)?.getBoundingClientRect().width ?? columnWidths[rightColumnName] ?? 320;
+    resizeStateRef.current = {
+      leftColumnName,
+      rightColumnName,
+      startX: event.clientX,
+      startLeftWidth,
+      startRightWidth
+    };
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const resizeState = resizeStateRef.current;
+      if (
+        !resizeState
+        || resizeState.leftColumnName !== leftColumnName
+        || resizeState.rightColumnName !== rightColumnName
+      ) {
+        return;
+      }
+      const delta = moveEvent.clientX - resizeState.startX;
+      const totalWidth = resizeState.startLeftWidth + resizeState.startRightWidth;
+      let nextLeftWidth = Math.max(260, Math.min(760, Math.round(resizeState.startLeftWidth + delta)));
+      let nextRightWidth = totalWidth - nextLeftWidth;
+
+      if (nextRightWidth < 260) {
+        nextRightWidth = 260;
+        nextLeftWidth = totalWidth - nextRightWidth;
+      } else if (nextRightWidth > 760) {
+        nextRightWidth = 760;
+        nextLeftWidth = totalWidth - nextRightWidth;
+      }
+
+      setColumnWidths((current) => {
+        if (current[leftColumnName] === nextLeftWidth && current[rightColumnName] === nextRightWidth) {
+          return current;
+        }
+        return {
+          ...current,
+          [leftColumnName]: nextLeftWidth,
+          [rightColumnName]: nextRightWidth
+        };
+      });
+    };
+    const handlePointerUp = () => {
+      resizeStateRef.current = null;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  }, [columnWidths]);
 
   const persistMove = React.useCallback(
     async (task: KanbanTask, fromColumn: string, targetColumn: string, targetIndex: number, actualHours?: number) => {
@@ -894,6 +1110,46 @@ export function KanbanBoard({
               ariaLabel="Filtrar por usuario"
             />
           </label>
+          <div className="kb-column-menu" ref={columnsMenuRef}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setColumnsMenuOpen((current) => !current)}
+              aria-expanded={columnsMenuOpen}
+              aria-label="Elegir columnas visibles"
+            >
+              Columnas
+            </button>
+            {columnsMenuOpen ? (
+              <div className="kb-column-menu-popover">
+                <div className="kb-column-menu-head">
+                  <strong>Columnas visibles</strong>
+                  <button type="button" className="btn btn-secondary" onClick={handleResetColumns}>
+                    Reset
+                  </button>
+                </div>
+                <div className="kb-column-menu-list">
+                  {columns.map((column) => {
+                    const checked = !hiddenColumns.includes(column.name);
+                    return (
+                      <label key={column.name} className="kb-column-option">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={checked && visibleColumnCount <= 1}
+                          onChange={() => handleToggleColumnVisibility(column.name)}
+                        />
+                        <span>{column.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="muted kb-column-menu-help">
+                  Arrastra el separador entre columnas para cambiar sus anchos.
+                </p>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <DndContext
@@ -909,33 +1165,42 @@ export function KanbanBoard({
             clearDrag();
           }}
         >
-          <div className="kb-columns">
-            {filteredColumns.map((column) => (
-              <KanbanColumnView
-                key={column.name}
-                column={column}
-                assignees={assignees}
-                statusOptions={statusOptions}
-                readOnly={readOnly}
-                canReorder={canReorder}
-                allowCreateTask={allowCreateTask}
-                canMoveTask={canMoveTask}
-                getEditActionLabel={resolveEditActionLabel}
-                isTaskPending={isTaskPending}
-                canCreateTask={canCreateTask}
-                canChangeAssignee={canChangeAssignee}
-                canEditTask={canEditTask}
-                canChangeStatus={canChangeStatus}
-                getTaskAssignees={getTaskAssignees}
-                expandedTaskIds={expandedTaskIds}
-                onExpandDescription={expandDescription}
-                activeDrag={activeDrag}
-                dragPreview={dragPreview}
-                onCreateTask={onCreateTask}
-                onEditTask={onEditTask}
-                onAssigneeChange={onAssigneeChange}
-                onStatusChange={handleStatusSelect}
-              />
+          <div className="kb-columns" style={columnsGridTemplate ? { gridTemplateColumns: columnsGridTemplate } : undefined}>
+            {filteredColumns.map((column, index) => (
+              <React.Fragment key={column.name}>
+                <KanbanColumnView
+                  column={column}
+                  assignees={assignees}
+                  statusOptions={statusOptions}
+                  readOnly={readOnly}
+                  canReorder={canReorder}
+                  allowCreateTask={allowCreateTask}
+                  canMoveTask={canMoveTask}
+                  getEditActionLabel={resolveEditActionLabel}
+                  isTaskPending={isTaskPending}
+                  canCreateTask={canCreateTask}
+                  canChangeAssignee={canChangeAssignee}
+                  canEditTask={canEditTask}
+                  canChangeStatus={canChangeStatus}
+                  getTaskAssignees={getTaskAssignees}
+                  expandedTaskIds={expandedTaskIds}
+                  onExpandDescription={expandDescription}
+                  setColumnElement={setColumnElement}
+                  activeDrag={activeDrag}
+                  dragPreview={dragPreview}
+                  onCreateTask={onCreateTask}
+                  onEditTask={onEditTask}
+                  onAssigneeChange={onAssigneeChange}
+                  onStatusChange={handleStatusSelect}
+                />
+                {index < filteredColumns.length - 1 ? (
+                  <KanbanColumnResizeHandle
+                    leftColumnName={column.name}
+                    rightColumnName={filteredColumns[index + 1].name}
+                    onResizeStart={handleResizeStart}
+                  />
+                ) : null}
+              </React.Fragment>
             ))}
           </div>
 

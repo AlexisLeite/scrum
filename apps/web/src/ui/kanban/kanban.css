@@ -6,7 +6,7 @@
 .kb-toolbar {
   display: grid;
   gap: 0.65rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 0.8fr) auto;
   align-items: end;
 }
 
@@ -17,9 +17,10 @@
 }
 
 .kb-columns {
-  display: flex;
-  gap: 0.7rem;
-  align-items: start;
+  display: grid;
+  gap: 0;
+  position: relative;
+  align-items: stretch;
   overflow-x: auto;
   padding-bottom: 0.35rem;
   scroll-snap-type: x proximity;
@@ -34,8 +35,8 @@
   background: color-mix(in srgb, var(--bg-soft) 84%, transparent);
   padding: 0.65rem;
   min-height: 460px;
-  min-width: 300px;
-  flex: 1 0 320px;
+  min-width: 0;
+  width: 100%;
   align-items: stretch;
   transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
   height: 100%;
@@ -55,8 +56,106 @@
   gap: 0.5rem;
 }
 
+.kb-column-head-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .kb-column-head h4 {
   margin: 0;
+}
+
+.kb-column-divider {
+  align-self: stretch;
+  display: flex;
+  width: 16px;
+  min-width: 16px;
+  justify-content: center;
+  scroll-snap-align: start;
+  touch-action: none;
+}
+
+.kb-column-divider-handle {
+  width: 14px;
+  min-width: 14px;
+  min-height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      to right,
+      transparent 0,
+      transparent 4px,
+      color-mix(in srgb, var(--border-soft) 80%, transparent) 4px,
+      color-mix(in srgb, var(--border-soft) 80%, transparent) 10px,
+      transparent 10px,
+      transparent 100%
+    );
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.kb-column-divider-handle:hover {
+  background:
+    linear-gradient(
+      to right,
+      transparent 0,
+      transparent 4px,
+      color-mix(in srgb, var(--accent-a) 42%, transparent) 4px,
+      color-mix(in srgb, var(--accent-a) 42%, transparent) 10px,
+      transparent 10px,
+      transparent 100%
+    );
+}
+
+.kb-column-menu {
+  position: relative;
+  justify-self: end;
+}
+
+.kb-column-menu-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 20;
+  width: min(320px, 86vw);
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-card) 96%, white);
+  box-shadow: 0 18px 42px rgba(3, 8, 18, 0.18);
+}
+
+.kb-column-menu-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.kb-column-menu-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.kb-column-option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.9rem;
+}
+
+.kb-column-menu-help {
+  margin: 0;
+  font-size: 0.78rem;
 }
 
 .kb-task-list {
@@ -255,6 +354,18 @@
 }
 
 @media (max-width: 760px) {
+  .kb-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .kb-column-menu {
+    justify-self: stretch;
+  }
+
+  .kb-column-menu .btn {
+    width: 100%;
+  }
+
   .kb-columns {
     padding-bottom: 0.5rem;
   }
