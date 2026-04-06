@@ -15,7 +15,6 @@ import { canCommentOnVisibleTask, canCreateTaskFromMessage, canCreateTasks, canE
 import { useProductAssignableUsers } from "../hooks/useProductAssignableUsers";
 import { useRootStore } from "../stores/root-store";
 import { SearchableSelect } from "../ui/SearchableSelect";
-import { Drawer, DrawerRenderContext } from "../ui/drawers/Drawer";
 import { useEChartsTheme } from "../ui/charts/echarts-theme";
 import { buildBurndownOption } from "../ui/charts/burndown-chart";
 import { TaskUpsertionDrawer } from "../ui/drawers/product-workspace/TaskUpsertionDrawer";
@@ -68,6 +67,57 @@ type FocusedCreationContext = {
   teamId?: string | null;
 };
 
+const FOCUSED_CONTEXT_STORAGE_KEY = "focused:selected-context";
+
+function buildFocusedContextKey(context: Pick<FocusedCreationContext, "productId" | "sprintId">) {
+  return `${context.productId}:${context.sprintId}`;
+}
+
+function sortFocusedContexts(contexts: FocusedCreationContext[]) {
+  return [...contexts].sort((left, right) =>
+    `${left.productName} ${left.sprintName}`.localeCompare(`${right.productName} ${right.sprintName}`)
+  );
+}
+
+function mergeFocusedContexts(...collections: FocusedCreationContext[][]) {
+  return sortFocusedContexts(
+    Array.from(
+      new Map(
+        collections
+          .flat()
+          .filter((context) => context.productId && context.sprintId)
+          .map((context) => [buildFocusedContextKey(context), context])
+      ).values()
+    )
+  );
+}
+
+function readStoredFocusedContextKey() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  try {
+    return window.localStorage.getItem(FOCUSED_CONTEXT_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function persistFocusedContextKey(value: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    if (value) {
+      window.localStorage.setItem(FOCUSED_CONTEXT_STORAGE_KEY, value);
+      return;
+    }
+    window.localStorage.removeItem(FOCUSED_CONTEXT_STORAGE_KEY);
+  } catch {
+    // Ignore persistence failures and keep the in-memory selection.
+  }
+}
+
 function mergeUniqueOptions(options: DrawerOption[]) {
   return Array.from(new Map(options.map((entry) => [entry.id, entry])).values());
 }
@@ -93,11 +143,13 @@ function buildCurrentTaskAssigneeOption(task: FocusedTask) {
 const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
   loading: boolean;
   columns: FocusedBoard["columns"];
+  taskCount: number;
   assignees: DrawerOption[];
   assigneeFilterOptions: DrawerOption[];
   statusOptions: string[];
   canCreateTask: boolean;
   editLabel: string;
+  emptyMessage: string;
   canCreateInColumn: (columnName: string) => boolean;
   canChangeAssignee: (task: FocusedTask) => boolean;
   canChangeStatus: (task: FocusedTask) => boolean;
@@ -113,11 +165,13 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
   const {
     loading,
     columns,
+    taskCount,
     assignees,
     assigneeFilterOptions,
     statusOptions,
     canCreateTask,
     editLabel,
+    emptyMessage,
     canCreateInColumn,
     canChangeAssignee,
     canChangeStatus,
@@ -164,8 +218,8 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
         onStatusChange={onStatusChange}
         onMoveTask={onMoveTask}
       />
-      {!loading && columns.length === 0 ? (
-        <p className="muted">No hay tareas visibles en kanban para mostrar ahora.</p>
+      {!loading && taskCount === 0 ? (
+        <p className="muted">{emptyMessage}</p>
       ) : null}
     </section>
   );
@@ -242,105 +296,17 @@ function placeTaskInBoard(board: FocusedBoard, updatedTask: FocusedTask, targetS
 }
 
 function buildCreationContexts(tasks: FocusedTask[]): FocusedCreationContext[] {
-  return Array.from(
-    new Map(
-      tasks
-        .filter((task) => (task.productId ?? task.product?.id) && (task.sprintId ?? task.sprint?.id))
-        .map((task) => {
-          const productId = task.productId ?? task.product?.id ?? "";
-          const sprintId = task.sprintId ?? task.sprint?.id ?? "";
-          const key = `${productId}:${sprintId}`;
-          return [
-            key,
-            {
-              productId,
-              productName: task.product?.name ?? "Producto",
-              productKey: task.product?.key ?? null,
-              sprintId,
-              sprintName: task.sprint?.name ?? "Sprint activo",
-              teamId: task.sprint?.teamId ?? null
-            } satisfies FocusedCreationContext
-          ];
-        })
-    ).values()
-  ).sort((left, right) =>
-    `${left.productName} ${left.sprintName}`.localeCompare(`${right.productName} ${right.sprintName}`)
-  );
-}
-
-class FocusedTaskCreationContextDrawer extends Drawer {
-  constructor(
-    private readonly options: {
-      contexts: FocusedCreationContext[];
-      onSelect: (context: FocusedCreationContext) => void;
-    }
-  ) {
-    super("Crear tarea en Focused", { size: "sm" });
-  }
-
-  render(context: DrawerRenderContext): React.ReactNode {
-    return (
-      <FocusedTaskCreationContextDrawerBody
-        contexts={this.options.contexts}
-        onSelect={this.options.onSelect}
-        close={context.close}
-      />
-    );
-  }
-}
-
-function FocusedTaskCreationContextDrawerBody(props: {
-  contexts: FocusedCreationContext[];
-  onSelect: (context: FocusedCreationContext) => void;
-  close: () => void;
-}) {
-  const { contexts, onSelect, close } = props;
-  const [selectedKey, setSelectedKey] = React.useState(
-    contexts[0] ? `${contexts[0].productId}:${contexts[0].sprintId}` : ""
-  );
-
-  const selectedContext = React.useMemo(
-    () => contexts.find((entry) => `${entry.productId}:${entry.sprintId}` === selectedKey) ?? contexts[0],
-    [contexts, selectedKey]
-  );
-
-  return (
-    <div className="form-grid">
-      <label>
-        Contexto
-        <SearchableSelect
-          value={selectedKey}
-          onChange={setSelectedKey}
-          options={contexts.map((entry) => ({
-            value: `${entry.productId}:${entry.sprintId}`,
-            label: `${entry.productKey ? `${entry.productKey} · ` : ""}${entry.productName} / ${entry.sprintName}`,
-            searchText: `${entry.productName} ${entry.productKey ?? ""} ${entry.sprintName}`
-          }))}
-          ariaLabel="Contexto"
-        />
-      </label>
-      <p className="muted">
-        La tarea se abrira con el sprint ya fijado, igual que en la ejecucion del sprint.
-      </p>
-      <div className="row-actions compact">
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => {
-            if (!selectedContext) {
-              return;
-            }
-            close();
-            onSelect(selectedContext);
-          }}
-        >
-          Continuar
-        </button>
-        <button type="button" className="btn btn-secondary" onClick={close}>
-          Cancelar
-        </button>
-      </div>
-    </div>
+  return mergeFocusedContexts(
+    tasks
+      .filter((task) => (task.productId ?? task.product?.id) && (task.sprintId ?? task.sprint?.id))
+      .map((task) => ({
+        productId: task.productId ?? task.product?.id ?? "",
+        productName: task.product?.name ?? "Producto",
+        productKey: task.product?.key ?? null,
+        sprintId: task.sprintId ?? task.sprint?.id ?? "",
+        sprintName: task.sprint?.name ?? "Sprint activo",
+        teamId: task.sprint?.teamId ?? null
+      } satisfies FocusedCreationContext))
   );
 }
 
@@ -358,8 +324,9 @@ export const FocusedView = observer(function FocusedView() {
   const [error, setError] = React.useState("");
   const [pendingTaskIds, setPendingTaskIds] = React.useState<Record<string, boolean>>({});
   const [chartLoading, setChartLoading] = React.useState(false);
-  const [selectedChartContextKey, setSelectedChartContextKey] = React.useState("");
+  const [selectedContextKey, setSelectedContextKey] = React.useState(() => readStoredFocusedContextKey());
   const [chartRefreshToken, setChartRefreshToken] = React.useState(0);
+  const [availableContexts, setAvailableContexts] = React.useState<FocusedCreationContext[]>([]);
   const taskDrawerCatalogRef = React.useRef<{
     storiesByProductId: Map<string, StoryItem[]>;
     sprintsByProductId: Map<string, SprintItem[]>;
@@ -392,6 +359,63 @@ export const FocusedView = observer(function FocusedView() {
     return () => window.clearInterval(intervalId);
   }, [reloadBoard]);
 
+  const focusedProductIds = user?.focusedProductIds ?? [];
+  const focusedProductIdsKey = focusedProductIds.join("|");
+
+  React.useEffect(() => {
+    if (!user || focusedProductIds.length === 0) {
+      setAvailableContexts([]);
+      return;
+    }
+
+    let active = true;
+
+    void (async () => {
+      try {
+        const [products, sprintCollections] = await Promise.all([
+          productController.loadProducts(),
+          Promise.all(
+            focusedProductIds.map(async (productId) => ({
+              productId,
+              sprints: await productController.loadSprints(productId)
+            }))
+          )
+        ]);
+
+        if (!active) {
+          return;
+        }
+
+        const productById = new Map(
+          products.map((product) => [product.id, { name: product.name ?? "Producto", key: product.key ?? null }])
+        );
+
+        const contexts = sprintCollections.flatMap(({ productId, sprints }) =>
+          (sprints as Array<{ id: string; name: string; teamId?: string | null; status?: string }>)
+            .filter((sprint) => sprint.status === "ACTIVE")
+            .map((sprint) => ({
+              productId,
+              productName: productById.get(productId)?.name ?? "Producto",
+              productKey: productById.get(productId)?.key ?? null,
+              sprintId: sprint.id,
+              sprintName: sprint.name,
+              teamId: sprint.teamId ?? null
+            } satisfies FocusedCreationContext))
+        );
+
+        setAvailableContexts(contexts);
+      } catch {
+        if (active) {
+          setAvailableContexts([]);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [focusedProductIds, focusedProductIdsKey, productController, user]);
+
   const allAssignableUsers = React.useMemo<DrawerOption[]>(
     () => assignableUsers.map((entry) => ({ id: entry.id, name: entry.name })),
     [assignableUsers]
@@ -418,29 +442,54 @@ export const FocusedView = observer(function FocusedView() {
     [board.columns]
   );
   const allTasks = React.useMemo(() => board.columns.flatMap((column) => column.tasks), [board.columns]);
+  const creationContexts = React.useMemo(() => buildCreationContexts(allTasks), [allTasks]);
+  const visibleContexts = React.useMemo(
+    () => mergeFocusedContexts(availableContexts, creationContexts),
+    [availableContexts, creationContexts]
+  );
+  const selectedContext = React.useMemo(
+    () => visibleContexts.find((context) => buildFocusedContextKey(context) === selectedContextKey)
+      ?? visibleContexts[0]
+      ?? null,
+    [selectedContextKey, visibleContexts]
+  );
+  const selectedChartProductId = selectedContext?.productId ?? "";
+  const selectedChartSprintId = selectedContext?.sprintId ?? "";
+  const selectedBoard = React.useMemo<FocusedBoard>(() => {
+    if (!selectedContext) {
+      return board;
+    }
+    return {
+      ...board,
+      columns: board.columns.map((column) => ({
+        ...column,
+        tasks: column.tasks.filter((task) => {
+          const taskProductId = task.productId ?? task.product?.id ?? "";
+          const taskSprintId = task.sprintId ?? task.sprint?.id ?? "";
+          return taskProductId === selectedContext.productId && taskSprintId === selectedContext.sprintId;
+        })
+      }))
+    };
+  }, [board, selectedContext]);
+  const selectedTasks = React.useMemo(() => selectedBoard.columns.flatMap((column) => column.tasks), [selectedBoard.columns]);
   const ownTaskCount = React.useMemo(
-    () => allTasks.filter((task) => task.assigneeId === user?.id).length,
-    [allTasks, user?.id]
+    () => selectedTasks.filter((task) => task.assigneeId === user?.id).length,
+    [selectedTasks, user?.id]
   );
   const unassignedTaskCount = React.useMemo(
-    () => allTasks.filter((task) => !task.assigneeId).length,
-    [allTasks]
+    () => selectedTasks.filter((task) => !task.assigneeId).length,
+    [selectedTasks]
   );
   const blockedTaskCount = React.useMemo(
-    () => allTasks.filter((task) => task.status.toLowerCase() === "blocked").length,
-    [allTasks]
+    () => selectedTasks.filter((task) => task.status.toLowerCase() === "blocked").length,
+    [selectedTasks]
   );
-  const creationContexts = React.useMemo(() => buildCreationContexts(allTasks), [allTasks]);
-  const showNoPendingTasksState = !loading && !board.hasActiveSprint && allTasks.length === 0;
-  const selectedChartContext = React.useMemo(
-    () => creationContexts.find((context) => `${context.productId}:${context.sprintId}` === selectedChartContextKey)
-      ?? creationContexts[0]
-      ?? null,
-    [creationContexts, selectedChartContextKey]
-  );
-  const selectedChartProductId = selectedChartContext?.productId ?? "";
-  const selectedChartSprintId = selectedChartContext?.sprintId ?? "";
+  const showNoPendingTasksState = !loading && visibleContexts.length === 0 && !board.hasActiveSprint;
   const canCreateTaskFromFocusedMessage = canCreateTaskFromMessage(user?.role);
+  const handleContextChange = React.useCallback((value: string) => {
+    persistFocusedContextKey(value);
+    setSelectedContextKey(value);
+  }, []);
 
   const ensureTaskDrawerCatalog = React.useCallback(
     async (productId: string): Promise<TaskDrawerCatalog> => {
@@ -480,14 +529,19 @@ export const FocusedView = observer(function FocusedView() {
   );
 
   React.useEffect(() => {
-    const nextKey = creationContexts[0] ? `${creationContexts[0].productId}:${creationContexts[0].sprintId}` : "";
-    setSelectedChartContextKey((current) => {
-      if (current && creationContexts.some((context) => `${context.productId}:${context.sprintId}` === current)) {
-        return current;
-      }
-      return nextKey;
-    });
-  }, [creationContexts]);
+    if (!selectedContext && visibleContexts.length === 0) {
+      return;
+    }
+    const nextKey = selectedContext ? buildFocusedContextKey(selectedContext) : "";
+    persistFocusedContextKey(nextKey);
+    if (nextKey && nextKey !== selectedContextKey) {
+      setSelectedContextKey(nextKey);
+      return;
+    }
+    if (!nextKey && selectedContextKey) {
+      setSelectedContextKey("");
+    }
+  }, [selectedContext, selectedContextKey, visibleContexts.length]);
 
   React.useEffect(() => {
     if (!selectedChartProductId || !selectedChartSprintId) {
@@ -658,24 +712,13 @@ export const FocusedView = observer(function FocusedView() {
       if (!canCreateFocusedTasks) {
         return;
       }
-      if (creationContexts.length === 0) {
+      if (!selectedContext) {
         setError("No hay un sprint activo visible en Focused donde crear una tarea.");
         return;
       }
-      if (creationContexts.length === 1) {
-        void openFocusedCreationDrawer(defaultStatus, creationContexts[0]);
-        return;
-      }
-      store.drawers.add(
-        new FocusedTaskCreationContextDrawer({
-          contexts: creationContexts,
-          onSelect: (selectedContext) => {
-            void openFocusedCreationDrawer(defaultStatus, selectedContext);
-          }
-        })
-      );
+      void openFocusedCreationDrawer(defaultStatus, selectedContext);
     },
-    [canCreateFocusedTasks, creationContexts, openFocusedCreationDrawer, store.drawers]
+    [canCreateFocusedTasks, openFocusedCreationDrawer, selectedContext]
   );
 
   const canChangeFocusedAssignee = React.useCallback(
@@ -797,6 +840,26 @@ export const FocusedView = observer(function FocusedView() {
         <p className="muted">
           El tablero y la grafica comparten el mismo contexto visible para que el ritmo de ejecucion se lea sobre el mismo sprint.
         </p>
+        {visibleContexts.length > 1 ? (
+          <label>
+            Sprint de trabajo
+            <SearchableSelect
+              value={selectedContext ? buildFocusedContextKey(selectedContext) : ""}
+              onChange={handleContextChange}
+              options={visibleContexts.map((context) => ({
+                value: buildFocusedContextKey(context),
+                label: `${context.productKey ? `${context.productKey} · ` : ""}${context.productName} / ${context.sprintName}`,
+                searchText: `${context.productName} ${context.productKey ?? ""} ${context.sprintName}`
+              }))}
+              ariaLabel="Sprint de trabajo"
+            />
+          </label>
+        ) : selectedContext ? (
+          <span className="pill">
+            {selectedContext.productKey ? `${selectedContext.productKey} · ` : ""}
+            {selectedContext.productName} / {selectedContext.sprintName}
+          </span>
+        ) : null}
         {error ? <p className="error-text">{error}</p> : null}
       </section>
 
@@ -804,7 +867,7 @@ export const FocusedView = observer(function FocusedView() {
         <div className="focused-kpis metrics-grid metrics-summary-grid">
           <article className="card metric metric-kpi">
             <span className="metric-kpi-label">En tablero</span>
-            <strong>{allTasks.length}</strong>
+            <strong>{selectedTasks.length}</strong>
           </article>
           <article className="card metric metric-kpi">
             <span className="metric-kpi-label">Asignadas a ti</span>
@@ -826,31 +889,15 @@ export const FocusedView = observer(function FocusedView() {
               <h3>Burndown del sprint</h3>
               <p className="muted">Trabajo restante real contra linea ideal, con series de equipo y usuario cuando existen.</p>
             </div>
-            {selectedChartContext ? (
+            {selectedContext ? (
               <span className="pill">
-                {selectedChartContext.productKey ? `${selectedChartContext.productKey} · ` : ""}
-                {selectedChartContext.sprintName}
+                {selectedContext.productKey ? `${selectedContext.productKey} · ` : ""}
+                {selectedContext.sprintName}
               </span>
             ) : null}
           </div>
 
-          {creationContexts.length > 1 ? (
-            <label>
-              Contexto visible
-              <SearchableSelect
-                value={selectedChartContextKey}
-                onChange={setSelectedChartContextKey}
-                options={creationContexts.map((context) => ({
-                  value: `${context.productId}:${context.sprintId}`,
-                  label: `${context.productKey ? `${context.productKey} · ` : ""}${context.productName} / ${context.sprintName}`,
-                  searchText: `${context.productName} ${context.productKey ?? ""} ${context.sprintName}`
-                }))}
-                ariaLabel="Contexto visible"
-              />
-            </label>
-          ) : null}
-
-          {!selectedChartContext ? (
+          {!selectedContext ? (
             <p className="muted">No hay un sprint activo visible para calcular burnup y burndown.</p>
           ) : store.burndown.length > 0 ? (
             <ReactECharts
@@ -878,12 +925,16 @@ export const FocusedView = observer(function FocusedView() {
       ) : (
         <FocusedKanbanSection
           loading={loading}
-          columns={board.columns}
+          columns={selectedBoard.columns}
+          taskCount={selectedTasks.length}
           assignees={allAssignableUsers}
           assigneeFilterOptions={visibleFilterUsers}
           statusOptions={statusOptions}
           canCreateTask={canCreateFocusedTasks}
           editLabel={editLabel}
+          emptyMessage={selectedContext
+            ? `No hay tareas visibles en kanban para ${selectedContext.sprintName} ahora mismo.`
+            : "No hay tareas visibles en kanban para mostrar ahora."}
           canCreateInColumn={canCreateInColumn}
           canChangeAssignee={canChangeFocusedAssignee}
           canChangeStatus={canChangeFocusedStatus}
