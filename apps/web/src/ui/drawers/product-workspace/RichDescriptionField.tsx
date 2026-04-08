@@ -39,6 +39,12 @@ type RichDescriptionFieldProps = {
   rows?: number;
   disabled?: boolean;
   productId?: string;
+  autoFocus?: boolean;
+};
+
+export type RichDescriptionFieldHandle = {
+  focus: () => void;
+  refreshLayout: () => void;
 };
 
 type UploadingImage = {
@@ -77,8 +83,8 @@ const CODE_BLOCK_LANGUAGES: Record<string, string> = {
 
 const ALLOWED_HEADING_LEVELS = [2, 3, 4, 5, 6] as const;
 
-export function RichDescriptionField(props: RichDescriptionFieldProps) {
-  const { label, value, onChange, rows = 6, disabled = false, productId } = props;
+export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle, RichDescriptionFieldProps>(function RichDescriptionField(props, ref) {
+  const { label, value, onChange, rows = 6, disabled = false, productId, autoFocus = false } = props;
   const minHeight = Math.max(rows, 4) * 24;
   const editorRef = React.useRef<MDXEditorMethods | null>(null);
   const fieldRef = React.useRef<HTMLDivElement | null>(null);
@@ -154,11 +160,46 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
     scheduleHeightSync();
   }, [scheduleHeightSync, value]);
 
+  const focusEditor = React.useCallback(() => {
+    const editorContent = fieldRef.current?.querySelector<HTMLElement>('[contenteditable="true"]');
+    if (!editorContent) {
+      return;
+    }
+    editorContent.focus();
+    scheduleHeightSync();
+  }, [scheduleHeightSync]);
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      focus: focusEditor,
+      refreshLayout: scheduleHeightSync
+    }),
+    [focusEditor, scheduleHeightSync]
+  );
+
   React.useEffect(() => {
     const handleResize = () => scheduleHeightSync();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [scheduleHeightSync]);
+
+  React.useEffect(() => {
+    if (!autoFocus || disabled) {
+      return;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      focusEditor();
+      const currentMarkdown = editorRef.current?.getMarkdown();
+      if (currentMarkdown !== undefined) {
+        editorRef.current?.setMarkdown(currentMarkdown);
+      }
+      scheduleHeightSync();
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [autoFocus, disabled, focusEditor, scheduleHeightSync]);
 
   const replaceActiveAnchor = React.useCallback((reference: ReferenceSearchResult) => {
     if (!activeAnchor || !editorRef.current) {
@@ -522,7 +563,7 @@ export function RichDescriptionField(props: RichDescriptionFieldProps) {
       <style>{`.rich-description-content { min-height: ${minHeight}px; max-height: 75vh; }`}</style>
     </div>
   );
-}
+});
 
 function buildUploadingImageMarkdown(alt: string, previewUrl: string) {
   return `![${escapeMarkdownLabel(alt)}](${previewUrl})`;

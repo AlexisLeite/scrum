@@ -2183,6 +2183,17 @@ html .drawer-content .card {
   gap: 0.75rem;
 }
 
+.task-conversation-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.task-conversation-sort {
+  display: grid;
+  gap: 0.4rem;
+  min-width: min(100%, 18rem);
+}
+
 .task-child-summary {
   display: flex;
   align-items: center;

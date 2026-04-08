@@ -6,7 +6,7 @@ import { canCommentOnVisibleTask, canEditTaskFields } from "../../../lib/permiss
 import { useRootStore } from "../../../stores/root-store";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import { MarkdownPreview } from "./MarkdownPreview";
-import { RichDescriptionField } from "./RichDescriptionField";
+import { RichDescriptionField, type RichDescriptionFieldHandle } from "./RichDescriptionField";
 import { isTaskTerminalStatus } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 
 type StoryOption = { id: string; title: string };
@@ -84,6 +84,23 @@ function sortMessageNodes(nodes: TaskMessageNode[], root = true): TaskMessageNod
     }));
 }
 
+function sortConversation(nodes: TaskMessageNode[], rootOrder: "desc" | "asc"): TaskMessageNode[] {
+  const sortedRoots = sortMessageNodes(nodes, rootOrder === "desc");
+  if (rootOrder === "desc") {
+    return sortedRoots;
+  }
+  return [...sortedRoots].reverse();
+}
+
+function messageTreeContains(nodes: TaskMessageNode[], messageId: string): boolean {
+  for (const node of nodes) {
+    if (node.id === messageId || messageTreeContains(node.replies, messageId)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function previewText(value: string | null | undefined): string {
   if (!value?.trim()) return "Sin descripcion";
   return value.replace(/\s+/g, " ").trim();
@@ -94,7 +111,7 @@ function taskStatusClass(status: string) {
   return `status status-${normalized}`;
 }
 
-function TaskMessageThread(props: {
+type TaskMessageThreadProps = {
   nodes: TaskMessageNode[];
   onReply: (message: TaskMessageNode) => void;
   onCreateTask: (message: TaskMessageNode) => void;
@@ -109,13 +126,23 @@ function TaskMessageThread(props: {
   allowMessageCreation: boolean;
   submittingReply: boolean;
   depth?: number;
-}) {
+};
+
+type TaskMessageItemProps = TaskMessageThreadProps & {
+  message: TaskMessageNode;
+  isActive: boolean;
+  hasActiveBranch: boolean;
+};
+
+const TaskMessageItem = React.memo(function TaskMessageItem(props: TaskMessageItemProps) {
   const {
-    nodes,
+    message,
     onReply,
     onCreateTask,
     onOpenDerivedTask,
     activeReplyId,
+    isActive,
+    hasActiveBranch,
     replyBody,
     onReplyBodyChange,
     onSubmitReply,
@@ -128,103 +155,155 @@ function TaskMessageThread(props: {
   } = props;
 
   return (
-    <div className="task-thread">
-      {nodes.map((message) => (
-        <article
-          key={message.id}
-          className={`task-message-card ${activeReplyId === message.id ? "is-reply-target" : ""}`.trim()}
-          style={{ marginLeft: `${depth * 20}px` }}
-        >
-          <div className="task-message-head">
-            <div>
-              <strong>{message.authorUser?.name ?? message.authorUser?.email ?? "Sistema"}</strong>
-              <span className="muted"> · {formatDateTime(message.createdAt)}</span>
-            </div>
+    <article
+      className={`task-message-card ${isActive ? "is-reply-target" : ""}`.trim()}
+      style={{ marginLeft: `${depth * 20}px` }}
+    >
+      <div className="task-message-head">
+        <div>
+          <strong>{message.authorUser?.name ?? message.authorUser?.email ?? "Sistema"}</strong>
+          <span className="muted"> · {formatDateTime(message.createdAt)}</span>
+        </div>
+      </div>
+      <MarkdownPreview markdown={message.body} className="task-message-body markdown-preview-card" />
+      {message.derivedTasks.length > 0 ? (
+        <div className="task-message-derived">
+          <span className="muted">Tareas derivadas</span>
+          <div className="task-derived-list">
+            {message.derivedTasks.map((task) => (
+              <button
+                key={task.id}
+                type="button"
+                className="task-derived-pill"
+                onClick={() => onOpenDerivedTask(task.id)}
+              >
+                {task.title} · {task.status}
+              </button>
+            ))}
           </div>
-          <MarkdownPreview markdown={message.body} className="task-message-body markdown-preview-card" />
-          {message.derivedTasks.length > 0 ? (
-            <div className="task-message-derived">
-              <span className="muted">Tareas derivadas</span>
-              <div className="task-derived-list">
-                {message.derivedTasks.map((task) => (
-                  <button
-                    key={task.id}
-                    type="button"
-                    className="task-derived-pill"
-                    onClick={() => onOpenDerivedTask(task.id)}
-                  >
-                    {task.title} · {task.status}
-                  </button>
-                ))}
-              </div>
-            </div>
+        </div>
+      ) : null}
+      {allowMessageCreation && isActive ? (
+        <TaskInlineReplyEditor
+          replyBody={replyBody}
+          onReplyBodyChange={onReplyBodyChange}
+          onSubmitReply={onSubmitReply}
+          onCancelReply={onCancelReply}
+          productId={productId}
+          submittingReply={submittingReply}
+        />
+      ) : (
+        <div className="row-actions compact">
+          {allowTaskCreation ? (
+            <button type="button" className="btn btn-secondary" onClick={() => onCreateTask(message)}>
+              Crear tarea
+            </button>
           ) : null}
-          {allowMessageCreation && activeReplyId === message.id ? (
-            <div className="task-inline-reply">
-              <RichDescriptionField
-                label="Tu respuesta"
-                value={replyBody}
-                onChange={onReplyBodyChange}
-                rows={6}
-                disabled={submittingReply}
-                productId={productId}
-              />
-              <div className="row-actions compact">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={onCancelReply}
-                  disabled={submittingReply}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => void onSubmitReply()}
-                  disabled={submittingReply || !replyBody.trim()}
-                >
-                  Responder
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="row-actions compact">
-              {allowTaskCreation ? (
-                <button type="button" className="btn btn-secondary" onClick={() => onCreateTask(message)}>
-                  Crear tarea
-                </button>
-              ) : null}
-              {allowMessageCreation ? (
-                <button type="button" className="btn btn-secondary" onClick={() => onReply(message)}>
-                  Responder
-                </button>
-              ) : null}
-            </div>
-          )}
-          {message.replies.length > 0 ? (
-            <TaskMessageThread
-              nodes={message.replies}
-              onReply={onReply}
-              onCreateTask={onCreateTask}
-              onOpenDerivedTask={onOpenDerivedTask}
-              activeReplyId={activeReplyId}
-              replyBody={replyBody}
-              onReplyBodyChange={onReplyBodyChange}
-              onSubmitReply={onSubmitReply}
-              onCancelReply={onCancelReply}
-              productId={productId}
-              allowTaskCreation={allowTaskCreation}
-              allowMessageCreation={allowMessageCreation}
-              submittingReply={submittingReply}
-              depth={depth + 1}
-            />
+          {allowMessageCreation ? (
+            <button type="button" className="btn btn-secondary" onClick={() => onReply(message)}>
+              Responder
+            </button>
           ) : null}
-        </article>
-      ))}
+        </div>
+      )}
+      {message.replies.length > 0 ? (
+        <TaskMessageThread
+          nodes={message.replies}
+          onReply={onReply}
+          onCreateTask={onCreateTask}
+          onOpenDerivedTask={onOpenDerivedTask}
+          activeReplyId={hasActiveBranch ? activeReplyId : null}
+          replyBody={replyBody}
+          onReplyBodyChange={onReplyBodyChange}
+          onSubmitReply={onSubmitReply}
+          onCancelReply={onCancelReply}
+          productId={productId}
+          allowTaskCreation={allowTaskCreation}
+          allowMessageCreation={allowMessageCreation}
+          submittingReply={submittingReply}
+          depth={depth + 1}
+        />
+      ) : null}
+    </article>
+  );
+}, (prevProps, nextProps) => {
+  if (prevProps.message !== nextProps.message) return false;
+  if (prevProps.isActive !== nextProps.isActive) return false;
+  if (prevProps.hasActiveBranch !== nextProps.hasActiveBranch) return false;
+  if ((prevProps.isActive || nextProps.isActive) && prevProps.replyBody !== nextProps.replyBody) return false;
+  if (prevProps.submittingReply !== nextProps.submittingReply) return false;
+  return true;
+});
+
+function TaskMessageThread(props: TaskMessageThreadProps) {
+  const { nodes, activeReplyId, ...rest } = props;
+
+  return (
+    <div className="task-thread">
+      {nodes.map((message) => {
+        const isActive = activeReplyId === message.id;
+        const hasActiveBranch = activeReplyId ? messageTreeContains(message.replies, activeReplyId) : false;
+
+        return (
+          <TaskMessageItem
+            key={message.id}
+            message={message}
+            nodes={nodes}
+            activeReplyId={activeReplyId}
+            isActive={isActive}
+            hasActiveBranch={hasActiveBranch}
+            {...rest}
+          />
+        );
+      })}
     </div>
   );
 }
+
+const TaskInlineReplyEditor = React.memo(function TaskInlineReplyEditor(props: {
+  replyBody: string;
+  onReplyBodyChange: (value: string) => void;
+  onSubmitReply: () => void;
+  onCancelReply: () => void;
+  productId: string;
+  submittingReply: boolean;
+}) {
+  const { replyBody, onReplyBodyChange, onSubmitReply, onCancelReply, productId, submittingReply } = props;
+  const editorRef = React.useRef<RichDescriptionFieldHandle | null>(null);
+
+  React.useEffect(() => {
+    editorRef.current?.focus();
+    editorRef.current?.refreshLayout();
+  }, []);
+
+  return (
+    <div className="task-inline-reply">
+      <RichDescriptionField
+        ref={editorRef}
+        label="Tu respuesta"
+        value={replyBody}
+        onChange={onReplyBodyChange}
+        rows={6}
+        disabled={submittingReply}
+        productId={productId}
+        autoFocus
+      />
+      <div className="row-actions compact">
+        <button type="button" className="btn btn-secondary" onClick={onCancelReply} disabled={submittingReply}>
+          Cancelar
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => void onSubmitReply()}
+          disabled={submittingReply || !replyBody.trim()}
+        >
+          Responder
+        </button>
+      </div>
+    </div>
+  );
+});
 
 export function TaskCollaborationPanel(props: {
   controller: ProductController;
@@ -265,6 +344,7 @@ export function TaskCollaborationPanel(props: {
   const [error, setError] = React.useState("");
   const [submittingMessage, setSubmittingMessage] = React.useState(false);
   const [replyTarget, setReplyTarget] = React.useState<TaskMessageNode | null>(null);
+  const [rootSortOrder, setRootSortOrder] = React.useState<"desc" | "asc">("desc");
   const draft = useDraftPersistence({
     userId: store.session.user?.id,
     entityType: "TASK_MESSAGE",
@@ -280,8 +360,8 @@ export function TaskCollaborationPanel(props: {
   const { value: messageDraft, setValue: setMessageDraft, isHydratingRemote, saveError, clearDraft } = draft;
   const messageBody = typeof messageDraft.body === "string" ? messageDraft.body : "";
   const orderedConversation = React.useMemo(
-    () => sortMessageNodes(detail?.conversation ?? []),
-    [detail?.conversation]
+    () => sortConversation(detail?.conversation ?? [], rootSortOrder),
+    [detail?.conversation, rootSortOrder]
   );
 
   const findMessageById = React.useCallback((nodes: TaskMessageNode[], messageId: string): TaskMessageNode | null => {
@@ -334,12 +414,12 @@ export function TaskCollaborationPanel(props: {
     setReplyTarget(findMessageById(detail.conversation, replyTargetId));
   }, [detail, findMessageById, messageDraft.replyTargetId]);
 
-  const refresh = async () => {
+  const refresh = React.useCallback(async () => {
     await loadDetail();
     if (onChanged) {
       await onChanged();
     }
-  };
+  }, [loadDetail, onChanged]);
 
   const openTaskDrawerFromDetail = React.useCallback(
     (taskDetail: TaskCollaborationDetail) => {
@@ -402,7 +482,7 @@ export function TaskCollaborationPanel(props: {
     [controller, openTaskDrawerFromDetail]
   );
 
-  const openNewChildDrawer = () => {
+  const openNewChildDrawer = React.useCallback(() => {
     if (!detail?.story?.id) return;
     store.drawers.add(
       new TaskUpsertionDrawer({
@@ -423,13 +503,26 @@ export function TaskCollaborationPanel(props: {
         onDone: refresh
       })
     );
-  };
+  }, [
+    allowMessageCreation,
+    allowTaskCreation,
+    assignees,
+    controller,
+    detail,
+    productId,
+    readOnly,
+    refresh,
+    sprints,
+    statusOptions,
+    stories,
+    store.drawers
+  ]);
 
-  const openChildTaskDrawer = async (childTaskId: string) => {
+  const openChildTaskDrawer = React.useCallback(async (childTaskId: string) => {
     await openTaskDrawerById(childTaskId);
-  };
+  }, [openTaskDrawerById]);
 
-  const openDerivedTaskDrawer = (message: TaskMessageNode) => {
+  const openDerivedTaskDrawer = React.useCallback((message: TaskMessageNode) => {
     if (!detail?.story?.id) return;
     store.drawers.add(
       new TaskUpsertionDrawer({
@@ -452,9 +545,22 @@ export function TaskCollaborationPanel(props: {
         onDone: refresh
       })
     );
-  };
+  }, [
+    allowMessageCreation,
+    allowTaskCreation,
+    assignees,
+    controller,
+    detail,
+    productId,
+    readOnly,
+    refresh,
+    sprints,
+    statusOptions,
+    stories,
+    store.drawers
+  ]);
 
-  const submitMessage = async () => {
+  const submitMessage = React.useCallback(async () => {
     if (!allowMessageCreation || !messageBody.trim()) {
       return;
     }
@@ -474,7 +580,26 @@ export function TaskCollaborationPanel(props: {
     } finally {
       setSubmittingMessage(false);
     }
-  };
+  }, [allowMessageCreation, clearDraft, controller, messageBody, refresh, replyTarget?.id, setMessageDraft, taskId]);
+
+  const handleReply = React.useCallback((message: TaskMessageNode) => {
+    setReplyTarget(message);
+    setMessageDraft((current) => {
+      if (current.replyTargetId === message.id) {
+        return current;
+      }
+      return { ...current, replyTargetId: message.id };
+    });
+  }, [setMessageDraft]);
+
+  const handleReplyBodyChange = React.useCallback((nextValue: string) => {
+    setMessageDraft((current) => ({ ...current, body: nextValue }));
+  }, [setMessageDraft]);
+
+  const handleCancelReply = React.useCallback(() => {
+    setReplyTarget(null);
+    setMessageDraft((current) => ({ ...current, body: "", replyTargetId: "" }));
+  }, [setMessageDraft]);
 
   return (
     <section className="card task-definition-conversation">
@@ -489,6 +614,17 @@ export function TaskCollaborationPanel(props: {
           </button>
         ) : null}
       </div>
+      {detail && orderedConversation.length > 1 ? (
+        <div className="task-conversation-toolbar">
+          <label className="task-conversation-sort">
+            <span className="muted">Orden de mensajes</span>
+            <select value={rootSortOrder} onChange={(event) => setRootSortOrder(event.target.value as "desc" | "asc")}>
+              <option value="desc">Mas recientes primero</option>
+              <option value="asc">Mas antiguos primero</option>
+            </select>
+          </label>
+        </div>
+      ) : null}
       {detail?.sourceMessage ? (
         <div className="definition-note">
           <span className="muted">Mensaje origen</span>
@@ -562,7 +698,7 @@ export function TaskCollaborationPanel(props: {
           <RichDescriptionField
             label="Nuevo mensaje"
             value={messageBody}
-            onChange={(nextValue) => setMessageDraft((current) => ({ ...current, body: nextValue }))}
+            onChange={handleReplyBodyChange}
             rows={7}
             disabled={submittingMessage || isHydratingRemote}
             productId={productId}
@@ -584,20 +720,14 @@ export function TaskCollaborationPanel(props: {
       {detail ? (
         <TaskMessageThread
           nodes={orderedConversation}
-          onReply={(message) => {
-            setReplyTarget(message);
-            setMessageDraft((current) => ({ ...current, replyTargetId: message.id }));
-          }}
+          onReply={handleReply}
           onCreateTask={openDerivedTaskDrawer}
           onOpenDerivedTask={(derivedTaskId) => void openTaskDrawerById(derivedTaskId)}
           activeReplyId={replyTarget?.id ?? null}
           replyBody={messageBody}
-          onReplyBodyChange={(nextValue) => setMessageDraft((current) => ({ ...current, body: nextValue }))}
+          onReplyBodyChange={handleReplyBodyChange}
           onSubmitReply={submitMessage}
-          onCancelReply={() => {
-            setReplyTarget(null);
-            setMessageDraft((current) => ({ ...current, body: "", replyTargetId: "" }));
-          }}
+          onCancelReply={handleCancelReply}
           productId={productId}
           allowTaskCreation={allowTaskCreation}
           allowMessageCreation={allowMessageCreation}
