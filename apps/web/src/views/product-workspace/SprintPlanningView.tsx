@@ -51,17 +51,22 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
             </button>
           ) : null}
         </div>
-        <div className="sprint-grid">
+        <div className="sprint-grid sprint-planning-grid">
           {sprints.map((sprint) => (
-            <article key={sprint.id} className="sprint-tile">
-              <div className="section-head">
-                <h4>{sprint.name}</h4>
+            <article key={sprint.id} className="sprint-tile sprint-planning-tile">
+              <div className="section-head sprint-planning-tile-head">
+                <h4 className="sprint-planning-tile-title">{sprint.name}</h4>
                 <span className={statusClass(sprint.status)}>{sprint.status}</span>
               </div>
-              <MarkdownPreview markdown={sprint.goal} compact emptyLabel="Sin objetivo definido" />
-              <p className="muted">Inicio: {fmtDate(sprint.startDate)} | Fin: {fmtDate(sprint.endDate)}</p>
-              <p className="muted">Completar sprint: cierra el ciclo y evita nuevos cambios de planificacion.</p>
-              <div className="row-actions compact">
+              <MarkdownPreview
+                markdown={sprint.goal}
+                compact
+                emptyLabel="Sin objetivo definido"
+                className="sprint-planning-tile-goal"
+              />
+              <p className="muted sprint-planning-tile-meta">Inicio: {fmtDate(sprint.startDate)} | Fin: {fmtDate(sprint.endDate)}</p>
+              <p className="muted sprint-planning-tile-meta">Completar sprint: cierra el ciclo y evita nuevos cambios de planificacion.</p>
+              <div className="row-actions compact sprint-planning-tile-actions">
                 {canManageSprintPlanning ? <button className="btn btn-secondary" onClick={() => openSprintDrawer(sprint)}>Editar</button> : null}
                 {canManageSprintPlanning ? (
                   <button

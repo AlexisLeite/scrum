@@ -1113,6 +1113,11 @@ a.btn-secondary,
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.sprint-planning-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  align-items: start;
+}
+
 .product-tile,
 .team-tile,
 .sprint-tile {
@@ -1127,6 +1132,47 @@ a.btn-secondary,
   font-size: 0.8rem;
   font-weight: 700;
   color: color-mix(in srgb, var(--accent-a) 80%, var(--text-main));
+}
+
+.sprint-planning-tile {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.sprint-planning-tile-head {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.sprint-planning-tile-title {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sprint-planning-tile-goal,
+.sprint-planning-tile-goal.markdown-preview {
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+}
+
+.sprint-planning-tile-goal > :first-child,
+.sprint-planning-tile-goal > :last-child,
+.sprint-planning-tile-meta {
+  margin: 0;
+}
+
+.sprint-planning-tile-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.sprint-planning-tile-actions .btn,
+.sprint-planning-tile-actions a.btn {
+  flex: 0 1 auto;
 }
 
 .tile-actions {
