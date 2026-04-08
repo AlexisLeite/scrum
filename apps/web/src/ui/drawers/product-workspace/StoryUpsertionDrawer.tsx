@@ -29,6 +29,7 @@ type StoryUpsertionDrawerOptions = {
   productId: string;
   story?: EditableStory;
   onDone?: () => Promise<void> | void;
+  onSavedStory?: (story: EditableStory) => Promise<void> | void;
 };
 
 const manualStoryStatuses: Array<"DRAFT" | "READY"> = ["DRAFT", "READY"];
@@ -103,7 +104,7 @@ export function StoryUpsertionForm(props: {
     definitionHref,
     closeOnSubmit = true
   } = props;
-  const { controller, productId, story, onDone } = options;
+  const { controller, productId, story, onDone, onSavedStory } = options;
   const store = useRootStore();
   const navigate = useNavigate();
   const { assignableUsers } = useProductAssignableUsers(controller, [productId]);
@@ -223,14 +224,15 @@ export function StoryUpsertionForm(props: {
         status
       };
 
-      if (story) {
-        await controller.updateStory(story.id, payload);
-      } else {
-        await controller.createStory(productId, payload);
-      }
+      const savedStory = story
+        ? await controller.updateStory(story.id, payload)
+        : await controller.createStory(productId, payload);
 
       setCloseBaseline(currentCloseSnapshot);
       await clearDraft();
+      if (savedStory && onSavedStory) {
+        await onSavedStory(savedStory);
+      }
       if (onDone) {
         await onDone();
       }

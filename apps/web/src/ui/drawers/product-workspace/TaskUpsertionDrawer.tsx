@@ -13,6 +13,7 @@ import { ActivityTimeline, type ActivityEntry, type ActivityListResult } from ".
 import { TaskCollaborationPanel, type TaskCollaborationDetail } from "./TaskCollaborationPanel";
 import { RichDescriptionField } from "./RichDescriptionField";
 import { TaskCompletionDialog } from "./TaskCompletionDialog";
+import { StoryUpsertionDrawer } from "./StoryUpsertionDrawer";
 import "./task-upsertion-form.css";
 
 type EditableTask = {
@@ -41,6 +42,7 @@ type PrefetchedTaskDrawerData = {
 const EFFORT_POINT_VALUES = [1, 2, 3, 5, 8, 13, 21] as const;
 const ESTIMATED_HOUR_PRESETS = [4, 8, 16, 24] as const;
 const DEFAULT_NEW_TASK_EFFORT_POINTS = "5";
+const CREATE_STORY_OPTION_VALUE = "__create_new_story__";
 
 type TaskUpsertionDrawerOptions = {
   controller: ProductController;
@@ -209,6 +211,7 @@ export function TaskUpsertionForm(props: {
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false);
+  const [storyOptions, setStoryOptions] = React.useState(stories);
   const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
     title: task?.title ?? "",
     description: task?.description ?? "",
@@ -271,6 +274,10 @@ export function TaskUpsertionForm(props: {
     setError("");
     setCompletionDialogOpen(false);
   }, [task, defaultStoryId, fixedSprintId, defaultStatus, statusOptions]);
+
+  React.useEffect(() => {
+    setStoryOptions(stories);
+  }, [stories]);
 
   React.useEffect(() => {
     if (task || isHydratingRemote || effortPoints) {
@@ -371,6 +378,32 @@ export function TaskUpsertionForm(props: {
     setForm((current) => ({ ...current, status: nextStatus }));
   };
 
+  const handleStoryCreated = React.useCallback(async (savedStory: TaskStoryOption) => {
+    const latestStories = await controller.loadStories(options.productId) as TaskStoryOption[];
+    const nextStoryOptions = latestStories.map((story) => ({ id: story.id, title: story.title }));
+    setStoryOptions(nextStoryOptions);
+    setForm((current) => ({ ...current, storyId: savedStory.id }));
+  }, [controller, options.productId, setForm]);
+
+  const openCreateStoryDrawer = React.useCallback(() => {
+    setForm((current) => ({ ...current, storyId: "" }));
+    store.drawers.add(
+      new StoryUpsertionDrawer({
+        controller,
+        productId: options.productId,
+        onSavedStory: handleStoryCreated
+      })
+    );
+  }, [controller, handleStoryCreated, options.productId, setForm, store.drawers]);
+
+  const handleStoryChange = React.useCallback((value: string) => {
+    if (value === CREATE_STORY_OPTION_VALUE) {
+      openCreateStoryDrawer();
+      return;
+    }
+    setForm((current) => ({ ...current, storyId: value }));
+  }, [openCreateStoryDrawer, setForm]);
+
   const showActualHoursField = status === "Done" || task?.actualHours != null;
   const currentCloseSnapshot = React.useMemo(
     () => JSON.stringify({
@@ -446,10 +479,11 @@ export function TaskUpsertionForm(props: {
             Historia
             <SearchableSelect
               value={task ? storyId : defaultStoryId ? defaultStoryId : storyId}
-              onChange={(value) => setForm((current) => ({ ...current, storyId: value }))}
+              onChange={handleStoryChange}
               options={[
                 { value: "", label: "Seleccionar historia" },
-                ...stories.map((story) => ({ value: story.id, label: story.title }))
+                ...storyOptions.map((story) => ({ value: story.id, label: story.title })),
+                { value: CREATE_STORY_OPTION_VALUE, label: "Crear nueva historia" }
               ]}
               disabled={storySelectionLocked || formDisabled}
               ariaLabel="Historia"

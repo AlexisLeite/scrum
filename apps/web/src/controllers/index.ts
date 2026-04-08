@@ -259,11 +259,13 @@ export class ProductController {
   async createStory(productId: string, payload: { title: string; description?: string; storyPoints: number; status: string }) {
     const story = await apiClient.post<any>(`/products/${productId}/stories`, payload);
     this.store.stories.upsert(story);
+    return story;
   }
 
   async updateStory(storyId: string, payload: { title?: string; description?: string; storyPoints?: number; status?: string }) {
     const story = await apiClient.patch<any>(`/stories/${storyId}`, payload);
     this.store.stories.upsert(story);
+    return story;
   }
 
   async rankStory(storyId: string, backlogRank: number) {
