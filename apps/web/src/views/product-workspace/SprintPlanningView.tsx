@@ -1,29 +1,26 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
 import { NavLink, useParams } from "react-router-dom";
-import { ProductController, TeamController } from "../../controllers";
+import { ProductController } from "../../controllers";
 import { productBoardPath } from "../../routes/product-routes";
 import { useRootStore } from "../../stores/root-store";
 import { SprintUpsertionDrawer } from "../../ui/drawers/product-workspace/SprintUpsertionDrawer";
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
 import { canManageSprints } from "../../lib/permissions";
-import { fmtDate, SprintItem, statusClass, TeamItem } from "./ProductWorkspaceViewShared";
+import { fmtDate, SprintItem, statusClass } from "./ProductWorkspaceViewShared";
 
 export const SprintPlanningView = observer(function SprintPlanningView() {
   const store = useRootStore();
-  const teamController = React.useMemo(() => new TeamController(store), [store]);
   const productController = React.useMemo(() => new ProductController(store), [store]);
   const { productId } = useParams<{ productId: string }>();
   const canManageSprintPlanning = canManageSprints(store.session.user?.role);
 
   React.useEffect(() => {
-    void teamController.loadTeams();
     if (productId) void productController.loadSprints(productId);
-  }, [teamController, productController, productId]);
+  }, [productController, productId]);
 
   if (!productId) return null;
 
-  const teams = store.teams.items as TeamItem[];
   const sprints = store.sprints.items as SprintItem[];
 
   const openSprintDrawer = (sprint?: SprintItem) => {
@@ -31,7 +28,6 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
       new SprintUpsertionDrawer({
         controller: productController,
         productId,
-        teams: teams.map((team) => ({ id: team.id, name: team.name })),
         sprint,
         onDone: async () => {
           await productController.loadSprints(productId);

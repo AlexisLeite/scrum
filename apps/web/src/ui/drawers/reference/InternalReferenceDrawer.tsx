@@ -284,12 +284,6 @@ function UserReferenceCard(props: {
             {user?.role ? <span className={`status status-${user.role.toLowerCase()}`}>{user.role}</span> : null}
           </div>
         </div>
-        <div className="definition-context-grid">
-          <div>
-            <span className="muted">Equipos</span>
-            <strong>{user?.teams?.map((team) => team.name).join(", ") || "Sin datos"}</strong>
-          </div>
-        </div>
       </section>
       <section className="card">
         <h4>Actividad reciente</h4>

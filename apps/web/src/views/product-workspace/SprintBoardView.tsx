@@ -2,9 +2,8 @@ import React from "react";
 import { observer } from "mobx-react-lite";
 import ReactECharts from "echarts-for-react";
 import { useParams } from "react-router-dom";
-import { ProductController, TeamController } from "../../controllers";
+import { ProductController } from "../../controllers";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
-import { filterAssignableUsersByTeam } from "../../lib/assignable-users";
 import { useRootStore } from "../../stores/root-store";
 import { TaskUpsertionDrawer } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { KanbanBoard } from "../../ui/kanban";
@@ -18,19 +17,16 @@ import {
 } from "../../lib/permissions";
 import {
   BoardTask,
-  buildAssignableUsers,
   DEFAULT_TASK_STATUS_OPTIONS,
   getErrorMessage,
   SprintItem,
   statusClass,
-  StoryItem,
-  TeamItem
+  StoryItem
 } from "./ProductWorkspaceViewShared";
 
 export const SprintBoardView = observer(function SprintBoardView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
-  const teamController = React.useMemo(() => new TeamController(store), [store]);
   const chartTheme = useEChartsTheme();
   const { productId, sprintId } = useParams<{ productId: string; sprintId: string }>();
   const user = store.session.user;
@@ -48,23 +44,21 @@ export const SprintBoardView = observer(function SprintBoardView() {
     void reloadBoardData();
     void controller.loadStories(productId);
     void controller.loadSprints(productId);
-    void teamController.loadTeams();
     const id = window.setInterval(() => {
       void reloadBoardData();
     }, 15000);
     return () => window.clearInterval(id);
-  }, [controller, productId, sprintId, reloadBoardData, teamController]);
+  }, [controller, productId, sprintId, reloadBoardData]);
 
   if (!productId || !sprintId) return null;
 
   const stories = store.stories.items as StoryItem[];
   const sprints = store.sprints.items as SprintItem[];
-  const teams = store.teams.items as TeamItem[];
   const { assignableUsers } = useProductAssignableUsers(controller, [productId]);
   const currentSprint = sprints.find((sprint) => sprint.id === sprintId);
   const isClosedSprint = currentSprint?.status === "COMPLETED" || currentSprint?.status === "CANCELLED";
   const boardReadOnly = currentSprint?.status !== "ACTIVE" || !canManageSprintBoard;
-  const boardAssignees = filterAssignableUsersByTeam(assignableUsers, teams, currentSprint?.teamId);
+  const boardAssignees = assignableUsers;
   const workflowStatuses = (store.board?.columns ?? []).map((column) => column.name);
   const statusOptions = workflowStatuses.length > 0 ? workflowStatuses : [...DEFAULT_TASK_STATUS_OPTIONS];
 

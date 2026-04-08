@@ -50,7 +50,6 @@ export function buildBurndownOption(points: BurndownPoint[], theme: ChartTheme) 
           : undefined
       },
       { name: "Ideal", type: "line", smooth: true, lineStyle: { type: "dashed" }, data: points.map((point) => point.idealRemainingPoints) },
-      { name: "Equipo", type: "line", smooth: true, data: points.map((point) => point.teamRemainingPoints) },
       { name: "Usuario", type: "line", smooth: true, data: points.map((point) => point.userRemainingPoints) }
     ]
   };

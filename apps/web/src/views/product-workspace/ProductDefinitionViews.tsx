@@ -1,7 +1,7 @@
 ﻿import React from "react";
 import { observer } from "mobx-react-lite";
 import { NavLink, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ProductController, TeamController } from "../../controllers";
+import { ProductController } from "../../controllers";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
 import {
   productBacklogPath,
@@ -38,22 +38,10 @@ type SprintItem = {
   id: string;
   name: string;
   goal: string | null;
-  teamId: string;
+  teamId?: string | null;
   status: "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
   startDate: string | null;
   endDate: string | null;
-};
-
-type TeamMember = {
-  userId: string;
-  user?: { id: string; name: string; email: string };
-};
-
-type TeamItem = {
-  id: string;
-  name: string;
-  description: string | null;
-  members?: TeamMember[];
 };
 
 type DetailTask = {
@@ -71,7 +59,7 @@ type DetailTask = {
   updatedAt: string;
   assignee?: { id: string; name: string; email: string } | null;
   story?: { id: string; title: string; storyPoints: number; status: string } | null;
-  sprint?: { id: string; name: string; status: string; teamId: string } | null;
+  sprint?: { id: string; name: string; status: string; teamId?: string | null } | null;
   parentTask?: { id: string; title: string; status: string } | null;
   sourceMessage?: {
     id: string;
@@ -310,25 +298,22 @@ export const StoryDefinitionView = observer(function StoryDefinitionView() {
 export const SprintDefinitionView = observer(function SprintDefinitionView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
-  const teamController = React.useMemo(() => new TeamController(store), [store]);
   const { productId, sprintId } = useParams<{ productId: string; sprintId: string }>();
   const navigate = useNavigate();
 
   React.useEffect(() => {
     if (!productId) return;
     void controller.loadSprints(productId);
-    void teamController.loadTeams();
-  }, [controller, productId, teamController]);
+  }, [controller, productId]);
 
   if (!productId || !sprintId) {
     return <Navigate to="/products" replace />;
   }
 
   const sprints = store.sprints.items as SprintItem[];
-  const teams = store.teams.items as TeamItem[];
   const sprint = sprints.find((entry) => entry.id === sprintId);
 
-  if (!sprint && (store.sprints.loading || store.teams.loading)) {
+  if (!sprint && store.sprints.loading) {
     return (
       <section className="card page-state">
         <h2>Cargando sprint</h2>
@@ -355,21 +340,13 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
         eyebrow="Definicion de sprint"
         title={sprint.name}
         description="Planifica el sprint, ajusta objetivo y administra sus tareas en una vista completa."
-        context={
-          <>
-            <span className={taskStatusClass(sprint.status)}>{sprint.status}</span>
-            <span className="pill">
-              Equipo {teams.find((team) => team.id === sprint.teamId)?.name ?? sprint.teamId.slice(0, 8)}
-            </span>
-          </>
-        }
+        context={<span className={taskStatusClass(sprint.status)}>{sprint.status}</span>}
       />
       <section className="card definition-page-card">
         <SprintUpsertionForm
           options={{
             controller,
             productId,
-            teams: teams.map((team) => ({ id: team.id, name: team.name })),
             sprint,
             onDone: async () => {
               await controller.loadSprints(productId);

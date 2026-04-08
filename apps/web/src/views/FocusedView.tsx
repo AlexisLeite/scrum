@@ -887,7 +887,7 @@ export const FocusedView = observer(function FocusedView() {
           <div className="section-head">
             <div>
               <h3>Burndown del sprint</h3>
-              <p className="muted">Trabajo restante real contra linea ideal, con series de equipo y usuario cuando existen.</p>
+              <p className="muted">Trabajo restante real contra linea ideal, con detalle por usuario cuando existe.</p>
             </div>
             {selectedContext ? (
               <span className="pill">

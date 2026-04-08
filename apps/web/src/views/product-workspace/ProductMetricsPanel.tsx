@@ -34,12 +34,10 @@ type ProductStatsSummary = {
 type ProductMetricsPanelProps = {
   windowSize: "week" | "month" | "semester" | "year";
   sprintName: string;
-  teamName: string;
   userName: string;
   productStats: ProductStatsSummary;
   burnup: BurnupPoint[];
   burndown: BurndownPoint[];
-  teamVelocity: VelocityPoint[];
   userVelocity: VelocityPoint[];
 };
 
@@ -103,18 +101,15 @@ function buildVelocityOption(title: string, points: VelocityPoint[], theme: Retu
 export function ProductMetricsPanel({
   windowSize,
   sprintName,
-  teamName,
   userName,
   productStats,
   burnup,
   burndown,
-  teamVelocity,
   userVelocity
 }: ProductMetricsPanelProps) {
   const chartTheme = useEChartsTheme();
   const completedPoints = productStats?.velocity.completedPoints ?? 0;
   const completionRate = productStats?.tasks.completionRate ?? 0;
-  const totalVelocityPoints = teamVelocity.reduce((acc, point) => acc + point.completedPoints, 0);
   const totalUserVelocityPoints = userVelocity.reduce((acc, point) => acc + point.completedPoints, 0);
 
   return (
@@ -148,10 +143,6 @@ export function ProductMetricsPanel({
         <div>
           <span className="metric-kpi-label">Sprint analizado</span>
           <strong>{sprintName || "Selecciona un sprint"}</strong>
-        </div>
-        <div>
-          <span className="metric-kpi-label">Equipo</span>
-          <strong>{teamName || "Sin equipo"}</strong>
         </div>
         <div>
           <span className="metric-kpi-label">Usuario</span>
@@ -212,26 +203,6 @@ export function ProductMetricsPanel({
       </section>
 
       <section className="metrics-grid">
-        <article className="card chart-card">
-          <div className="section-head">
-            <div>
-              <h3>Velocidad del equipo</h3>
-              <p className="muted">Puntos completados por sprint del equipo seleccionado.</p>
-            </div>
-            <span className="pill">{totalVelocityPoints} pts</span>
-          </div>
-          {teamVelocity.length > 0 ? (
-            <>
-              <ReactECharts option={buildVelocityOption("Equipo", teamVelocity, chartTheme)} style={{ height: 260 }} />
-              <p className="muted metrics-footnote">
-                Ultimo sprint: {teamVelocity[teamVelocity.length - 1]?.sprintName ?? "-"} con {teamVelocity[teamVelocity.length - 1]?.completedPoints ?? 0} pts
-              </p>
-            </>
-          ) : (
-            <p className="muted">No hay sprints completados para calcular velocidad de equipo.</p>
-          )}
-        </article>
-
         <article className="card chart-card">
           <div className="section-head">
             <div>

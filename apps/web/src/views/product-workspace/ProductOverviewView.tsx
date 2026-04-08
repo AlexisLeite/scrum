@@ -191,7 +191,7 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
           <div>
             <h2>{product?.name ?? "Producto"}</h2>
             <p className="product-overview-lead">
-              Una vista mas ejecutiva del producto con ritmo de entrega, estado del sprint y actividad reciente del equipo.
+              Una vista mas ejecutiva del producto con ritmo de entrega, estado del sprint y actividad reciente del producto.
             </p>
           </div>
           <MarkdownPreview

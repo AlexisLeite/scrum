@@ -5,7 +5,6 @@ import { canCommentOnVisibleTask, canCreateTaskFromMessage, canEditTaskFields } 
 import { productSprintDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { TaskSearchPicker } from "../../../components/TaskSearchPicker";
-import { SearchableSelect } from "../../SearchableSelect";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
@@ -14,13 +13,11 @@ import { RichDescriptionField } from "./RichDescriptionField";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import "./sprint-upsertion-form.css";
 
-type SprintTeamOption = { id: string; name: string };
-
 type EditableSprint = {
   id: string;
   name: string;
   goal: string | null;
-  teamId: string;
+  teamId?: string | null;
   startDate: string | null;
   endDate: string | null;
   status: "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
@@ -40,7 +37,6 @@ type PendingTask = {
 type SprintUpsertionDrawerOptions = {
   controller: ProductController;
   productId: string;
-  teams: SprintTeamOption[];
   sprint?: EditableSprint;
   onDone?: () => Promise<void> | void;
 };
@@ -128,14 +124,13 @@ export function SprintUpsertionForm(props: {
     closeOnSubmit = true,
     showCloseAction = true
   } = props;
-  const { controller, productId, teams, sprint, onDone } = options;
+  const { controller, productId, sprint, onDone } = options;
   const store = useRootStore();
   const navigate = useNavigate();
   const user = store.session.user;
 
   const [name, setName] = React.useState(sprint?.name ?? "");
   const [goal, setGoal] = React.useState(sprint?.goal ?? "");
-  const [teamId, setTeamId] = React.useState(sprint?.teamId ?? "");
   const [startDate, setStartDate] = React.useState(asDateInput(sprint?.startDate));
   const [endDate, setEndDate] = React.useState(asDateInput(sprint?.endDate));
   const [error, setError] = React.useState("");
@@ -148,7 +143,6 @@ export function SprintUpsertionForm(props: {
   const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
     name: sprint?.name ?? "",
     goal: sprint?.goal ?? "",
-    teamId: sprint?.teamId ?? "",
     startDate: asDateInput(sprint?.startDate),
     endDate: asDateInput(sprint?.endDate)
   }));
@@ -157,11 +151,10 @@ export function SprintUpsertionForm(props: {
     () => JSON.stringify({
       name,
       goal,
-      teamId,
       startDate,
       endDate
     }),
-    [endDate, goal, name, startDate, teamId]
+    [endDate, goal, name, startDate]
   );
   const hasUnsavedChanges = !saving && currentCloseSnapshot !== closeBaseline;
 
@@ -209,10 +202,6 @@ export function SprintUpsertionForm(props: {
       setError("El sprint necesita un nombre.");
       return;
     }
-    if (!teamId) {
-      setError("Debes seleccionar un equipo.");
-      return;
-    }
     if (!startDate || !endDate) {
       setError("Las fechas de inicio y fin son obligatorias.");
       return;
@@ -226,7 +215,6 @@ export function SprintUpsertionForm(props: {
       const payload = {
         name: name.trim(),
         goal: goal.trim(),
-        teamId,
         startDate,
         endDate
       };
@@ -346,18 +334,6 @@ export function SprintUpsertionForm(props: {
         <label>
           Nombre
           <input value={name} onChange={(event) => setName(event.target.value)} required />
-        </label>
-        <label>
-          Equipo
-          <SearchableSelect
-            value={teamId}
-            onChange={setTeamId}
-            options={[
-              { value: "", label: "Seleccionar equipo" },
-              ...teams.map((team) => ({ value: team.id, label: team.name }))
-            ]}
-            ariaLabel="Equipo"
-          />
         </label>
       </div>
 

@@ -272,7 +272,7 @@ export function ProductUpsertionForm(props: {
           <div className="section-head">
             <div>
               <h4>Usuarios con acceso</h4>
-              <p className="muted">Este producto ya no gestiona equipos. Aqui se muestran los usuarios con acceso y los roles que tienen en el producto.</p>
+              <p className="muted">Aqui se muestran los usuarios con acceso y los roles que tienen en el producto.</p>
             </div>
           </div>
           <div className="stack-sm">

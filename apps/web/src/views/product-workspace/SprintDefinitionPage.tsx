@@ -1,7 +1,7 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
 import { NavLink, Navigate, useNavigate, useParams } from "react-router-dom";
-import { ProductController, TeamController } from "../../controllers";
+import { ProductController } from "../../controllers";
 import { productSprintsPath } from "../../routes/product-routes";
 import { useRootStore } from "../../stores/root-store";
 import { SprintUpsertionForm } from "../../ui/drawers/product-workspace/SprintUpsertionDrawer";
@@ -10,18 +10,15 @@ type SprintItem = {
   id: string;
   name: string;
   goal: string | null;
-  teamId: string;
+  teamId?: string | null;
   startDate: string | null;
   endDate: string | null;
   status: "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
 };
 
-type TeamItem = { id: string; name: string };
-
 export const SprintDefinitionPage = observer(function SprintDefinitionPage() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
-  const teamController = React.useMemo(() => new TeamController(store), [store]);
   const navigate = useNavigate();
   const { productId, sprintId } = useParams<{ productId: string; sprintId: string }>();
   const [loading, setLoading] = React.useState(true);
@@ -35,7 +32,7 @@ export const SprintDefinitionPage = observer(function SprintDefinitionPage() {
       setLoading(true);
       setError("");
       try {
-        await Promise.all([controller.loadSprints(productId), teamController.loadTeams()]);
+        await controller.loadSprints(productId);
       } catch (loadError) {
         if (active) {
           setError(loadError instanceof Error ? loadError.message : "No se pudo cargar el sprint.");
@@ -52,14 +49,13 @@ export const SprintDefinitionPage = observer(function SprintDefinitionPage() {
     return () => {
       active = false;
     };
-  }, [controller, productId, teamController]);
+  }, [controller, productId]);
 
   if (!productId || !sprintId) {
     return <Navigate to="/products" replace />;
   }
 
   const sprint = (store.sprints.items as SprintItem[]).find((entry) => entry.id === sprintId);
-  const teams = store.teams.items as TeamItem[];
 
   if (loading) {
     return (
@@ -103,7 +99,6 @@ export const SprintDefinitionPage = observer(function SprintDefinitionPage() {
           options={{
             controller,
             productId,
-            teams: teams.map((team) => ({ id: team.id, name: team.name })),
             sprint,
             onDone: async () => {
               await controller.loadSprints(productId);
