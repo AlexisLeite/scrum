@@ -37,3 +37,12 @@ password = "completar"
 email = "completar"
 password = "completar"
 ```
+
+## Playwright
+
+- Prioriza las credenciales de `.codex/local/credentials.toml` para cualquier validación autenticada.
+- En este repo `Playwright` no está instalado como dependencia fija, así que para pruebas por consola conviene usar un paquete temporal y el navegador del sistema.
+- El navegador disponible y validado en este entorno es `/usr/bin/google-chrome`.
+- Al automatizar contra `https://vmi3181573.contaboserver.net:5443`, usa `--ignore-certificate-errors` porque el entorno remoto puede presentar advertencias de certificado.
+- No asumas que un login exitoso siempre redirige fuera de `/login` o deja cookies visibles. En este entorno hubo casos donde la autenticación respondió bien pero la URL no cambió inmediatamente. Verifica también contenido autenticado real en pantalla.
+- Si una vista no muestra datos suficientes para validar layout, documenta explícitamente esa limitación del entorno en lugar de inventar datos o alterar contenido productivo.
