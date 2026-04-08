@@ -49,7 +49,7 @@
   position: absolute;
   top: calc(100% + 0.38rem);
   left: 0;
-  right: 0;
+  right: auto;
   z-index: 40;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -58,6 +58,14 @@
   padding: 0.55rem;
   display: grid;
   gap: 0.5rem;
+  width: max-content;
+  min-width: 220px;
+  max-width: min(360px, calc(100vw - 24px));
+}
+
+.searchable-select-popover.is-align-right {
+  left: auto;
+  right: 0;
 }
 
 .searchable-select-search {

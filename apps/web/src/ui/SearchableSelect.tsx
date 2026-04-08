@@ -44,10 +44,12 @@ export function SearchableSelect(props: SearchableSelectProps) {
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
+  const popoverRef = React.useRef<HTMLDivElement | null>(null);
   const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [activeIndex, setActiveIndex] = React.useState(-1);
+  const [alignRight, setAlignRight] = React.useState(false);
   const listboxId = React.useId();
   const optionIdPrefix = React.useId();
 
@@ -113,6 +115,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
     if (!open) {
       setQuery("");
       setActiveIndex(-1);
+      setAlignRight(false);
       return;
     }
 
@@ -154,6 +157,33 @@ export function SearchableSelect(props: SearchableSelectProps) {
       return firstEnabledIndex;
     });
   }, [filteredOptions, firstEnabledIndex, open, selectedEnabledIndex]);
+
+  React.useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const reposition = () => {
+      const rootRect = rootRef.current?.getBoundingClientRect();
+      const popoverRect = popoverRef.current?.getBoundingClientRect();
+      if (!rootRect || !popoverRect) {
+        setAlignRight(false);
+        return;
+      }
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const padding = 12;
+      const wouldOverflowRight = rootRect.left + popoverRect.width > viewportWidth - padding;
+      const canAlignRight = rootRect.right - popoverRect.width >= padding;
+      setAlignRight(wouldOverflowRight && canAlignRight);
+    };
+
+    const timer = window.setTimeout(reposition, 0);
+    window.addEventListener("resize", reposition);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [open, options]);
 
   React.useEffect(() => {
     if (!open || activeIndex < 0) {
@@ -256,7 +286,10 @@ export function SearchableSelect(props: SearchableSelectProps) {
         </span>
       </button>
       {open ? (
-        <div className="searchable-select-popover">
+        <div
+          ref={popoverRef}
+          className={`searchable-select-popover${alignRight ? " is-align-right" : ""}`}
+        >
           <input
             ref={searchInputRef}
             className="searchable-select-search"
