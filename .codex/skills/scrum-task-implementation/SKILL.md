@@ -18,7 +18,7 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 7. Implementa solo lo que pida la tarea, respetando el estado actual del worktree.
 8. Ejecuta validaciones razonables para el cambio: pruebas focalizadas, lint o build parcial si aplica.
 9. Prueba con el MCP de Playwright el flujo afectado en `https://vmi3181573.contaboserver.net:5443/` siempre que el cambio tenga impacto verificable desde UI o navegador.
-10. Usa el entorno watch con HMR para verificar los cambios en tiempo real iniciando sesion con `email:test_agent@scrum.local` y `password:test_agent@scrum.local`.
+10. Usa el entorno watch con HMR para verificar los cambios en tiempo real iniciando sesion con `email:test_agent@scrum.local` y `password:Lagransiete12!Lagransiete12!`.
 11. Haz un commit al finalizar cualquier tarea con cambios de codigo o archivos, incluyendo el id de la tarea en el mensaje de commit.
 12. Cambia la tarea a `Done` cuando la implementacion, la validacion y el commit esten terminados.
 13. Publica un comentario final en markdown valido, exhaustivo y autocontenido con resumen, justificacion, validaciones, pruebas, archivos tocados y el id del commit generado.

@@ -85,7 +85,7 @@ function sortMessageNodes(nodes: TaskMessageNode[], root = true): TaskMessageNod
 }
 
 function sortConversation(nodes: TaskMessageNode[], rootOrder: "desc" | "asc"): TaskMessageNode[] {
-  const sortedRoots = sortMessageNodes(nodes, rootOrder === "desc");
+  const sortedRoots = sortMessageNodes(nodes, true);
   if (rootOrder === "desc") {
     return sortedRoots;
   }
