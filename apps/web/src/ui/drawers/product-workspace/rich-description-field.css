@@ -78,6 +78,24 @@
   color: var(--text-main);
 }
 
+.rich-description-editor .cm-editor ::selection,
+.rich-description-editor .cm-editor .cm-line::selection,
+.rich-description-editor .cm-editor .cm-line *::selection,
+.rich-description-editor .cm-editor .cm-gutterElement::selection {
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--accent-a) 28%, var(--bg-soft));
+}
+
+.rich-description-editor .cm-editor .cm-selectionBackground,
+.rich-description-editor .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background: color-mix(in srgb, var(--accent-a) 28%, var(--bg-soft));
+}
+
+.rich-description-editor .cm-editor .cm-activeLine,
+.rich-description-editor .cm-editor .cm-activeLineGutter {
+  background: transparent;
+}
+
 .rich-description-editor a {
   color: var(--accent-a);
 }
