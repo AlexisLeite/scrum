@@ -171,8 +171,8 @@ export const SettingsView = observer(function SettingsView() {
             <p className="muted">Nombre y avatar que aparecen en menus, actividad y colaboracion.</p>
           </div>
         </div>
-        <div className="definition-grid">
-          <div className="form-grid">
+        <div className="definition-grid api-keys-grid">
+          <div className="form-grid api-keys-form">
             <label>
               Nombre
               <input value={name} onChange={(event) => setName(event.target.value)} />
@@ -259,14 +259,14 @@ export const SettingsView = observer(function SettingsView() {
               </button>
             </div>
             {newApiKeyCode ? (
-              <div className="definition-note">
+              <div className="definition-note api-key-card">
                 <span className="muted">Codigo generado</span>
                 <strong style={{ wordBreak: "break-all" }}>{newApiKeyCode}</strong>
                 <span className="muted">Se muestra una sola vez. Usalo como header `x-api-key` al conectar el MCP.</span>
               </div>
             ) : null}
           </div>
-          <div className="stack-lg">
+          <div className="stack-lg api-keys-list">
             {apiKeysLoading ? <p className="muted">Cargando API keys...</p> : null}
             {!apiKeysLoading && availableProducts.length === 0 ? (
               <p className="muted">No tenes productos accesibles para asociar nuevas API keys.</p>
@@ -275,10 +275,10 @@ export const SettingsView = observer(function SettingsView() {
               <p className="muted">Todavia no creaste ninguna API key.</p>
             ) : null}
             {apiKeys.map((apiKey) => (
-              <div key={apiKey.id} className="definition-note">
+              <div key={apiKey.id} className="definition-note api-key-card">
                 <span className="muted">{apiKey.name}</span>
                 <strong>{apiKey.maskedCode}</strong>
-                <span className="pill">
+                <span className="pill api-key-pill">
                   {apiKey.productKey && apiKey.productName ? `${apiKey.productKey} · ${apiKey.productName}` : "Sin producto asignado"}
                 </span>
                 <span className="muted">
