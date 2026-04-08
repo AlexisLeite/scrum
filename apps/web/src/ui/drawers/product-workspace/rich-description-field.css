@@ -52,7 +52,7 @@
 
 .rich-description-content img {
   display: block;
-  width: 30vw;
+  width: auto;
   max-width: 30vw;
   max-height: 30vw;
   height: auto;
