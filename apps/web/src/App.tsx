@@ -509,6 +509,16 @@ const LoginView = observer(function LoginView() {
     }
   }, [navigate, store.session.user]);
 
+  const handleSubmit = React.useCallback(async (event?: React.FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    try {
+      await auth.login({ email, password });
+      navigate(returnTo, { replace: true });
+    } catch {
+      return;
+    }
+  }, [auth, email, navigate, password, returnTo]);
+
   return (
     <section className="auth-card">
       <div className="auth-card-header">
@@ -517,39 +527,31 @@ const LoginView = observer(function LoginView() {
           <h1>Scrum</h1>
         </div>
       </div>
-      <div className="form-grid">
-        <label>
-          Email
-          <input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-          />
-        </label>
-      </div>
-      <div className="row-actions">
-        <button
-          className="btn btn-primary"
-          onClick={async () => {
-            try {
-              await auth.login({ email, password });
-              navigate(returnTo, { replace: true });
-            } catch {
-              return;
-            }
-          }}
-        >
-          Entrar
-        </button>
-        <button className="btn btn-secondary" onClick={() => void auth.getGitLabRedirect()}>
-          Entrar con GitLab
-        </button>
-      </div>
+      <form onSubmit={(event) => void handleSubmit(event)}>
+        <div className="form-grid">
+          <label>
+            Email
+            <input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+            />
+          </label>
+        </div>
+        <div className="row-actions">
+          <button className="btn btn-primary" type="submit">
+            Entrar
+          </button>
+          <button className="btn btn-secondary" type="button" onClick={() => void auth.getGitLabRedirect()}>
+            Entrar con GitLab
+          </button>
+        </div>
+      </form>
       {store.session.error ? <p className="error-text">{store.session.error}</p> : null}
     </section>
   );
