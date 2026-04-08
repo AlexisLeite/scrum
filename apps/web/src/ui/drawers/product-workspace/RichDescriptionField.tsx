@@ -234,7 +234,10 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     setUploadingImages((current) => [...current, { id: upload.id, alt: upload.alt }]);
     setUploadError("");
 
-    editorRef.current.insertMarkdown(`${upload.placeholderMarkdown}\n`);
+    const currentMarkdown = editorRef.current.getMarkdown();
+    const needsLeadingBreak = currentMarkdown.trim().length > 0;
+    const insertion = `${needsLeadingBreak ? "\n" : ""}${upload.placeholderMarkdown}\n\n`;
+    editorRef.current.insertMarkdown(insertion);
     syncControlledValue();
 
     try {
