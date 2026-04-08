@@ -2591,8 +2591,14 @@ th {
   color: var(--text-secondary);
 }
 
+.auth-card form {
+  display: grid;
+  gap: 1rem;
+}
+
 .auth-card .row-actions {
-  justify-content: flex-start;
+  justify-content: center;
+  margin-top: 0.2rem;
 }
 
 .auth-card .btn {
