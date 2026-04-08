@@ -1855,6 +1855,13 @@ a.btn-secondary,
   background: var(--pill-bg);
 }
 
+.admin-user-list-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
 .status {
   border-radius: var(--radius-pill);
   border: 1px solid transparent;
