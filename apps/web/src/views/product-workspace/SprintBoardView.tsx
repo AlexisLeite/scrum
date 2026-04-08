@@ -195,9 +195,11 @@ export const SprintBoardView = observer(function SprintBoardView() {
           ) : null}
         </div>
         <p className="muted">
-          {boardReadOnly
-            ? "El sprint esta cerrado. El tablero queda en modo solo lectura y conserva las tareas no terminadas registradas al cierre, aunque hoy puedan estar trabajandose en otro sprint."
-            : "Actualiza estados y propiedades de tareas desde los drawers por columna o tarjeta."}
+          {isClosedSprint
+            ? "El sprint esta cerrado. Ya no se pueden crear ni reordenar tareas desde este tablero, pero las tareas existentes siguen siendo editables desde sus controles y drawers."
+            : boardReadOnly
+              ? "No tienes permisos para reordenar o administrar este tablero."
+              : "Actualiza estados y propiedades de tareas desde los drawers por columna o tarjeta."}
         </p>
         {boardError ? <p className="error-text">{boardError}</p> : null}
         <KanbanBoard

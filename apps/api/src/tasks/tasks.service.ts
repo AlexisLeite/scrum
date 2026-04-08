@@ -427,7 +427,9 @@ export class TasksService {
     }
 
     if (!isLeavingCurrentSprint) {
-      await this.assertSprintIsMutable(current.sprintId, user);
+      await this.assertSprintIsMutable(current.sprintId, user, {
+        allowTaskUpdatesOnClosedSprint: true
+      });
     }
 
     if (hasStatus && typeof dto.status !== "string") {
@@ -1203,7 +1205,13 @@ export class TasksService {
     return keys.filter((key) => before[key] !== after[key]);
   }
 
-  private async assertSprintIsMutable(sprintId: string | null | undefined, user?: AuthUser) {
+  private async assertSprintIsMutable(
+    sprintId: string | null | undefined,
+    user?: AuthUser,
+    options?: {
+      allowTaskUpdatesOnClosedSprint?: boolean;
+    }
+  ) {
     if (!sprintId) {
       return;
     }
@@ -1212,10 +1220,19 @@ export class TasksService {
       where: { id: sprintId },
       select: { status: true }
     });
-    this.assertSprintStatusAllowsChanges(sprint?.status, user);
+    this.assertSprintStatusAllowsChanges(sprint?.status, user, options);
   }
 
-  private assertSprintStatusAllowsChanges(status: SprintStatus | null | undefined, user?: AuthUser) {
+  private assertSprintStatusAllowsChanges(
+    status: SprintStatus | null | undefined,
+    user?: AuthUser,
+    options?: {
+      allowTaskUpdatesOnClosedSprint?: boolean;
+    }
+  ) {
+    if (options?.allowTaskUpdatesOnClosedSprint && user) {
+      return;
+    }
     if (user && this.canManageClosedSprintResults(user)) {
       return;
     }
