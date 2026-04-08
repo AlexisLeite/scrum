@@ -704,6 +704,7 @@ export function KanbanBoard({
   const [columnWidths, setColumnWidths] = React.useState<Record<string, number>>({});
   const columnsMenuRef = React.useRef<HTMLDivElement | null>(null);
   const columnElementRefs = React.useRef(new Map<string, HTMLElement>());
+  const columnsContainerRef = React.useRef<HTMLDivElement | null>(null);
   const resizeStateRef = React.useRef<{
     leftColumnName: string;
     rightColumnName: string;
@@ -824,6 +825,77 @@ export function KanbanBoard({
       .join(" "),
     [columnWidths, filteredColumns]
   );
+  const columnsGap = 16;
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+    const container = columnsContainerRef.current;
+    if (!container) {
+      return undefined;
+    }
+    if (filteredColumns.length === 0) {
+      return undefined;
+    }
+
+    const handleResize = () => {
+      if (resizeStateRef.current) {
+        return;
+      }
+      const visibleColumns = filteredColumns.filter((column) => !hiddenColumns.includes(column.name));
+      if (visibleColumns.length === 0) {
+        return;
+      }
+
+      const availableWidth = Math.max(
+        0,
+        container.clientWidth - columnsGap * Math.max(0, visibleColumns.length - 1)
+      );
+      if (!availableWidth) {
+        return;
+      }
+
+      const currentWidths = visibleColumns.map((column) => {
+        const explicit = columnWidths[column.name];
+        if (explicit) {
+          return explicit;
+        }
+        const measured = columnElementRefs.current.get(column.name)?.getBoundingClientRect().width;
+        return measured && Number.isFinite(measured) ? measured : 320;
+      });
+
+      const totalCurrent = currentWidths.reduce((acc, width) => acc + width, 0);
+      if (!totalCurrent) {
+        return;
+      }
+
+      const scale = availableWidth / totalCurrent;
+      if (!Number.isFinite(scale) || Math.abs(scale - 1) < 0.01) {
+        return;
+      }
+
+      setColumnWidths((current) => {
+        const next: Record<string, number> = { ...current };
+        visibleColumns.forEach((column, index) => {
+          const scaled = Math.round(currentWidths[index] * scale);
+          const bounded = Math.max(260, Math.min(760, scaled));
+          if (next[column.name] !== bounded) {
+            next[column.name] = bounded;
+          }
+        });
+        return next;
+      });
+    };
+
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(container);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [columnWidths, filteredColumns, hiddenColumns]);
 
   const visibleCount = React.useMemo(
     () => filteredColumns.reduce((acc, column) => acc + column.tasks.length, 0),
@@ -1165,7 +1237,11 @@ export function KanbanBoard({
             clearDrag();
           }}
         >
-          <div className="kb-columns" style={columnsGridTemplate ? { gridTemplateColumns: columnsGridTemplate } : undefined}>
+          <div
+            ref={columnsContainerRef}
+            className="kb-columns"
+            style={columnsGridTemplate ? { gridTemplateColumns: columnsGridTemplate } : undefined}
+          >
             {filteredColumns.map((column, index) => (
               <React.Fragment key={column.name}>
                 <KanbanColumnView
