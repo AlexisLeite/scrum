@@ -176,6 +176,10 @@
   gap: 0.9rem;
 }
 
+.admin-user-assignment-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .admin-user-summary-layout,
 .admin-role-overview-layout {
   display: grid;
@@ -344,6 +348,7 @@
 
   .admin-backoffice-layout,
   .admin-role-layout,
+  .admin-user-assignment-grid,
   .admin-user-summary-layout,
   .admin-role-overview-layout,
   .admin-role-header-grid,

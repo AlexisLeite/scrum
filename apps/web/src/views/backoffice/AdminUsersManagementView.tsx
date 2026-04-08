@@ -147,7 +147,7 @@ function ProductAssignmentMatrix({
           <p className="muted">{subtitle}</p>
         </div>
       </div>
-      <div className="definition-grid admin-user-access-grid">
+      <div className="definition-grid admin-user-access-grid admin-user-assignment-grid">
         {catalog.products.map((product) => {
           const roleOptions = roleKeysForProduct(catalog, product.id);
           const selected = draft[product.id] ?? [];
