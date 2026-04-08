@@ -12,6 +12,7 @@ import { isTaskTerminalStatus } from "../../../views/product-workspace/ProductWo
 type StoryOption = { id: string; title: string };
 type SprintOption = { id: string; name: string };
 type AssigneeOption = { id: string; name: string };
+type RootSortOrder = "desc" | "asc";
 
 type TaskMessageNode = {
   id: string;
@@ -84,7 +85,26 @@ function sortMessageNodes(nodes: TaskMessageNode[], root = true): TaskMessageNod
     }));
 }
 
-function sortConversation(nodes: TaskMessageNode[], rootOrder: "desc" | "asc"): TaskMessageNode[] {
+const DEFAULT_ROOT_SORT_ORDER: RootSortOrder = "desc";
+const TASK_CONVERSATION_SORT_STORAGE_KEY = "scrum.task-conversation.root-sort-order";
+
+function isRootSortOrder(value: string): value is RootSortOrder {
+  return value === "desc" || value === "asc";
+}
+
+function loadRootSortOrder(): RootSortOrder {
+  if (typeof window === "undefined") {
+    return DEFAULT_ROOT_SORT_ORDER;
+  }
+  try {
+    const storedValue = window.localStorage.getItem(TASK_CONVERSATION_SORT_STORAGE_KEY);
+    return storedValue && isRootSortOrder(storedValue) ? storedValue : DEFAULT_ROOT_SORT_ORDER;
+  } catch {
+    return DEFAULT_ROOT_SORT_ORDER;
+  }
+}
+
+function sortConversation(nodes: TaskMessageNode[], rootOrder: RootSortOrder): TaskMessageNode[] {
   const sortedRoots = sortMessageNodes(nodes, true);
   if (rootOrder === "desc") {
     return sortedRoots;
@@ -344,7 +364,7 @@ export function TaskCollaborationPanel(props: {
   const [error, setError] = React.useState("");
   const [submittingMessage, setSubmittingMessage] = React.useState(false);
   const [replyTarget, setReplyTarget] = React.useState<TaskMessageNode | null>(null);
-  const [rootSortOrder, setRootSortOrder] = React.useState<"desc" | "asc">("desc");
+  const [rootSortOrder, setRootSortOrder] = React.useState<RootSortOrder>(() => loadRootSortOrder());
   const draft = useDraftPersistence({
     userId: store.session.user?.id,
     entityType: "TASK_MESSAGE",
@@ -413,6 +433,21 @@ export function TaskCollaborationPanel(props: {
     }
     setReplyTarget(findMessageById(detail.conversation, replyTargetId));
   }, [detail, findMessageById, messageDraft.replyTargetId]);
+
+  React.useEffect(() => {
+    setRootSortOrder(loadRootSortOrder());
+  }, [taskId]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(TASK_CONVERSATION_SORT_STORAGE_KEY, rootSortOrder);
+    } catch {
+      // Ignore localStorage write failures and keep the in-memory fallback.
+    }
+  }, [rootSortOrder]);
 
   const refresh = React.useCallback(async () => {
     await loadDetail();
@@ -614,17 +649,6 @@ export function TaskCollaborationPanel(props: {
           </button>
         ) : null}
       </div>
-      {detail && orderedConversation.length > 1 ? (
-        <div className="task-conversation-toolbar">
-          <label className="task-conversation-sort">
-            <span className="muted">Orden de mensajes</span>
-            <select value={rootSortOrder} onChange={(event) => setRootSortOrder(event.target.value as "desc" | "asc")}>
-              <option value="desc">Mas recientes primero</option>
-              <option value="asc">Mas antiguos primero</option>
-            </select>
-          </label>
-        </div>
-      ) : null}
       {detail?.sourceMessage ? (
         <div className="definition-note">
           <span className="muted">Mensaje origen</span>
@@ -715,6 +739,17 @@ export function TaskCollaborationPanel(props: {
             </button>
           </div>
         </>
+      ) : null}
+      {detail && orderedConversation.length > 1 ? (
+        <div className="task-conversation-toolbar">
+          <label className="task-conversation-sort">
+            <span className="muted">Orden de mensajes</span>
+            <select value={rootSortOrder} onChange={(event) => setRootSortOrder(event.target.value as RootSortOrder)}>
+              <option value="desc">Mas recientes primero</option>
+              <option value="asc">Mas antiguos primero</option>
+            </select>
+          </label>
+        </div>
       ) : null}
       {!loading && detail && orderedConversation.length === 0 ? <p className="muted">Aun no hay mensajes.</p> : null}
       {detail ? (
