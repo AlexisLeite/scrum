@@ -18,7 +18,7 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 7. Implementa solo lo que pida la tarea, respetando el estado actual del worktree.
 8. Ejecuta validaciones razonables para el cambio: pruebas focalizadas, lint o build parcial si aplica.
 9. Prueba con el MCP de Playwright el flujo afectado en `https://vmi3181573.contaboserver.net:5443/` siempre que el cambio tenga impacto verificable desde UI o navegador.
-10. Usa el entorno watch con HMR para verificar los cambios en tiempo real iniciando sesion con `email:test_agent@scrum.local` y `password:Lagransiete12!Lagransiete12!`.
+10. Antes de usar Playwright o probar manualmente en navegador, lee `.codex/local/credentials.toml`, elige `default_role` salvo que la tarea requiera otro rol y usa ese `email` / `password` para iniciar sesion.
 11. Haz un commit al finalizar cualquier tarea con cambios de codigo o archivos, incluyendo el id de la tarea en el mensaje de commit.
 12. Cambia la tarea a `Done` cuando la implementacion, la validacion y el commit esten terminados.
 13. Publica un comentario final en markdown valido, exhaustivo y autocontenido con resumen, justificacion, validaciones, pruebas, archivos tocados y el id del commit generado.
@@ -41,7 +41,8 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 - No marques la tarea como `Done` si no llegaste a implementar o validar el cambio principal.
 - Si el cambio afecta una experiencia navegable, usa el MCP de Playwright para probarla contra `https://vmi3181573.contaboserver.net:5443/`.
 - Ese entorno corre en modo watch con HMR; aprovecha ese comportamiento para revalidar rapido despues de cada ajuste relevante.
-- Usa las credenciales de prueba `test_agent@scrum.local` / `test_agent@scrum.local` para ingresar en el entorno de validacion.
+- Las credenciales del entorno de validacion viven en `.codex/local/credentials.toml`, archivo local ignorado por git.
+- Si el archivo no existe, si falta `default_role` o si el rol elegido no tiene `email` y `password`, detente y explica el bloqueo en vez de improvisar credenciales.
 - El usuario de prueba ya dispone de un producto habilitado para trabajar sin restricciones; usa ese contexto en las pruebas en vez de reconfigurar datos.
 
 ## Implementacion
@@ -57,10 +58,19 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 - Documenta en tus notas y en el comentario final que probaste con Playwright, que flujo cubriste y cual fue el resultado.
 - Si haces una suposicion relevante, documentala en la respuesta final y en el comentario de la tarea.
 
+## Credenciales Locales
+
+- Usa `.codex/local/credentials.toml` como fuente de verdad para credenciales locales del repo.
+- Ese archivo no se debe versionar; si falta, toma como plantilla `.codex/local/credentials.example.toml`.
+- La estructura esperada es un `default_role` y una tabla `[roles.<nombre>]` con `email` y `password` por rol.
+- Los roles admitidos en este repo son `scrum_master`, `product_owner`, `team_member` y `quality_assurance`.
+- Para pruebas normales, usa `default_role` salvo que la tarea pida explicitamente validar con otro rol.
+- Si necesitas inspeccionar el archivo desde shell, usa una lectura local con `python3` y `tomllib`; no copies credenciales a archivos versionados, comentarios de codigo ni commits.
+
 ## Validacion Con Playwright
 
 - Usa el MCP de Playwright para navegar a `https://vmi3181573.contaboserver.net:5443/`.
-- Inicia sesion con `email:test_agent@scrum.local` y `password:test_agent@scrum.local`.
+- Lee `.codex/local/credentials.toml`, resuelve el rol a usar y luego inicia sesion con ese `email` / `password`.
 - Si el cambio tiene impacto visible o funcional en UI, recorre el flujo afectado y verifica el resultado esperado directamente en navegador.
 - Si el cambio no es razonablemente verificable en navegador, deja constancia explicita de por que no correspondia una prueba con Playwright.
 - Si Playwright falla por un problema del entorno o de infraestructura, documenta el intento y el bloqueo con suficiente detalle.
