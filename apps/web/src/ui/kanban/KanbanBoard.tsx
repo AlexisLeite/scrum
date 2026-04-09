@@ -226,6 +226,11 @@ function buildKanbanPreferencesKey(columns: KanbanColumn[]) {
   return `kanban:preferences:${path}:${columnKey}`;
 }
 
+function parseCssPixels(value: string | null | undefined) {
+  const parsed = Number.parseFloat(value ?? "");
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function resolveDragPreview(
   columns: KanbanColumn[],
   activeDrag: ActiveDragState,
@@ -848,9 +853,17 @@ export function KanbanBoard({
         return;
       }
 
+      const computedStyles = window.getComputedStyle(container);
+      const paddingInline = parseCssPixels(computedStyles.paddingLeft) + parseCssPixels(computedStyles.paddingRight);
+      const gridGap = parseCssPixels(computedStyles.columnGap || computedStyles.gap);
+      const dividerCount = Math.max(0, visibleColumns.length - 1);
+      const renderedTrackCount = visibleColumns.length + dividerCount;
       const availableWidth = Math.max(
         0,
-        container.clientWidth - columnsGap * Math.max(0, visibleColumns.length - 1)
+        container.clientWidth
+          - paddingInline
+          - columnsGap * dividerCount
+          - gridGap * Math.max(0, renderedTrackCount - 1)
       );
       if (!availableWidth) {
         return;
