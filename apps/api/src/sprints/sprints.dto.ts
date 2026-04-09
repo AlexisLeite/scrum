@@ -1,6 +1,6 @@
 import { SprintStatus } from "@prisma/client";
 import { Type } from "class-transformer";
-import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, Min, MinLength } from "class-validator";
+import { ArrayUnique, IsArray, IsDateString, IsEnum, IsNumber, IsOptional, IsString, Min, MinLength } from "class-validator";
 
 export class CreateSprintDto {
   @IsString()
@@ -105,4 +105,12 @@ export class MoveSprintTaskDto {
   @IsNumber()
   @Min(0)
   actualHours?: number;
+}
+
+export class SetSprintMembersDto {
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MinLength(3, { each: true })
+  userIds!: string[];
 }

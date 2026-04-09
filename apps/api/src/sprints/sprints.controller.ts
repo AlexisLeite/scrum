@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from "@nestjs/common";
 import { AuthUser, CurrentUser } from "../common/current-user.decorator";
 import { JwtAuthGuard } from "../common/jwt-auth.guard";
-import { CreateSprintDto, CreateSprintTaskDto, MoveSprintTaskDto, UpdateSprintDto } from "./sprints.dto";
+import { CreateSprintDto, CreateSprintTaskDto, MoveSprintTaskDto, SetSprintMembersDto, UpdateSprintDto } from "./sprints.dto";
 import { SprintsService } from "./sprints.service";
 
 @Controller()
@@ -47,6 +47,16 @@ export class SprintsController {
   @Get("sprints/:id/board")
   board(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.sprintsService.board(id, user);
+  }
+
+  @Get("sprints/:id/members")
+  members(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.sprintsService.listMembers(id, user);
+  }
+
+  @Put("sprints/:id/members")
+  setMembers(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: SetSprintMembersDto) {
+    return this.sprintsService.setMembers(id, dto, user);
   }
 
   @Get("sprints/:id/pending-tasks")

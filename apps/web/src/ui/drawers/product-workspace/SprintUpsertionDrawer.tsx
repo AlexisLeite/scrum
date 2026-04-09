@@ -112,6 +112,9 @@ export function SprintUpsertionForm(props: {
   definitionHref?: string;
   closeOnSubmit?: boolean;
   showCloseAction?: boolean;
+  showTaskManager?: boolean;
+  showActivity?: boolean;
+  requireGoal?: boolean;
 }) {
   const {
     options,
@@ -122,7 +125,10 @@ export function SprintUpsertionForm(props: {
     closeLabel = "Cancelar",
     definitionHref,
     closeOnSubmit = true,
-    showCloseAction = true
+    showCloseAction = true,
+    showTaskManager = true,
+    showActivity = true,
+    requireGoal = false
   } = props;
   const { controller, productId, sprint, onDone } = options;
   const store = useRootStore();
@@ -146,7 +152,7 @@ export function SprintUpsertionForm(props: {
     startDate: asDateInput(sprint?.startDate),
     endDate: asDateInput(sprint?.endDate)
   }));
-  const canManageTasks = Boolean(sprint && (sprint.status === "PLANNED" || sprint.status === "ACTIVE"));
+  const canManageTasks = Boolean(showTaskManager && sprint && (sprint.status === "PLANNED" || sprint.status === "ACTIVE"));
   const currentCloseSnapshot = React.useMemo(
     () => JSON.stringify({
       name,
@@ -202,6 +208,10 @@ export function SprintUpsertionForm(props: {
       setError("El sprint necesita un nombre.");
       return;
     }
+    if (requireGoal && !goal.trim()) {
+      setError("El objetivo del sprint es obligatorio.");
+      return;
+    }
     if (!startDate || !endDate) {
       setError("Las fechas de inicio y fin son obligatorias.");
       return;
@@ -219,15 +229,20 @@ export function SprintUpsertionForm(props: {
         endDate
       };
 
+      let createdSprintId: string | null = null;
       if (sprint) {
         await controller.updateSprint(sprint.id, payload);
       } else {
-        await controller.createSprint(productId, payload);
+        const created = await controller.createSprint(productId, payload);
+        createdSprintId = created?.id ?? null;
       }
 
       setCloseBaseline(currentCloseSnapshot);
       if (onDone) {
         await onDone();
+      }
+      if (createdSprintId) {
+        navigate(productSprintDefinitionPath(productId, createdSprintId));
       }
       if (closeOnSubmit) {
         close();
@@ -559,14 +574,14 @@ export function SprintUpsertionForm(props: {
             ))}
           </div>
         </section>
-      ) : sprint ? (
+      ) : sprint && showTaskManager ? (
         <section className="card sprint-task-manager">
           <h4>Tareas del sprint</h4>
           <p className="muted">El sprint esta cerrado. La reasignacion ya no se hace desde este drawer; revisa el kanban para ver las tareas no terminadas registradas al cierre.</p>
         </section>
       ) : null}
 
-      {sprint ? <ActivityTimeline controller={controller} entityType="SPRINT" entityId={sprint.id} /> : null}
+      {sprint && showActivity ? <ActivityTimeline controller={controller} entityType="SPRINT" entityId={sprint.id} /> : null}
     </form>
   );
 }

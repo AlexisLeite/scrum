@@ -94,6 +94,7 @@ model User {
   apiKeys       ApiKey[]
   drafts        UserDraft[]
   backupsInitiated BackupRecord[]
+  sprintMembers SprintMember[]
 }
 
 model ApiKey {
@@ -226,10 +227,22 @@ model Sprint {
   team        Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
   tasks       Task[]
   unfinishedTasks TaskUnfinishedSprint[]
+  members     SprintMember[]
 
   @@index([productId])
   @@index([teamId])
   @@index([status])
+}
+
+model SprintMember {
+  sprintId  String
+  userId    String
+  createdAt DateTime @default(now())
+  sprint    Sprint  @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sprintId, userId])
+  @@index([userId])
 }
 
 model UserStory {

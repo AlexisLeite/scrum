@@ -2,7 +2,7 @@ import React from "react";
 import { observer } from "mobx-react-lite";
 import { NavLink, useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
-import { productBoardPath } from "../../routes/product-routes";
+import { productBoardPath, productSprintDefinitionPath } from "../../routes/product-routes";
 import { useRootStore } from "../../stores/root-store";
 import { SprintUpsertionDrawer } from "../../ui/drawers/product-workspace/SprintUpsertionDrawer";
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
@@ -64,6 +64,11 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
               <p className="muted sprint-planning-tile-meta">Completar sprint: cierra el ciclo y evita nuevos cambios de planificacion.</p>
               <div className="row-actions compact sprint-planning-tile-actions">
                 {canManageSprintPlanning ? <button className="btn btn-secondary" onClick={() => openSprintDrawer(sprint)}>Editar</button> : null}
+                {canManageSprintPlanning && sprint.status === "PLANNED" ? (
+                  <NavLink to={productSprintDefinitionPath(productId, sprint.id)} className="btn btn-secondary">
+                    Planificar
+                  </NavLink>
+                ) : null}
                 {canManageSprintPlanning ? (
                   <button
                     className="btn btn-secondary"

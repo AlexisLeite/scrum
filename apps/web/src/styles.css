@@ -1175,6 +1175,83 @@ a.btn-secondary,
   flex: 0 1 auto;
 }
 
+.sprint-definition-grid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+}
+
+.sprint-planning-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.sprint-member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.sprint-member-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+}
+
+.sprint-member-avatar {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.sprint-member-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent-c) 22%, var(--bg-soft));
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.sprint-task-table-shell {
+  margin-top: 0.8rem;
+  overflow-x: auto;
+}
+
+.sprint-task-table th:first-child,
+.sprint-task-table td:first-child,
+.sprint-task-table th:last-child,
+.sprint-task-table td:last-child {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.sprint-task-table td {
+  vertical-align: middle;
+}
+
+.sprint-task-drag-button {
+  cursor: grab;
+}
+
+.sprint-task-drag-button:active {
+  cursor: grabbing;
+}
+
+.sprint-task-table tr.is-dragging td {
+  opacity: 0.6;
+}
+
+@media (max-width: 980px) {
+  .sprint-definition-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .tile-actions {
   display: flex;
   flex-wrap: wrap;

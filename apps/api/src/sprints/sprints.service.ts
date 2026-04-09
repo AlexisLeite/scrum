@@ -5,7 +5,7 @@ import { AuthUser } from "../common/current-user.decorator";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TasksService } from "../tasks/tasks.service";
-import { CreateSprintDto, CreateSprintTaskDto, MoveSprintTaskDto, UpdateSprintDto } from "./sprints.dto";
+import { CreateSprintDto, CreateSprintTaskDto, MoveSprintTaskDto, SetSprintMembersDto, UpdateSprintDto } from "./sprints.dto";
 
 const TERMINAL_TASK_STATUSES = ["Done", "Closed"] as const;
 const DEFAULT_OPEN_TASK_STATUS = "Todo" as const;
@@ -52,6 +52,16 @@ export class SprintsService {
         endDate: dto.endDate ? new Date(dto.endDate) : null
       }
     });
+    const productMembers = await this.prisma.productMember.findMany({
+      where: { productId },
+      select: { userId: true }
+    });
+    if (productMembers.length > 0) {
+      await this.prisma.sprintMember.createMany({
+        data: productMembers.map((member) => ({ sprintId: sprint.id, userId: member.userId })),
+        skipDuplicates: true
+      });
+    }
     await this.activityService.record({
       actorUserId: user.sub,
       teamId: sprint.teamId ?? undefined,
@@ -67,6 +77,111 @@ export class SprintsService {
       afterJson: sprint
     });
     return sprint;
+  }
+
+  async listMembers(id: string, user: AuthUser) {
+    const sprint = await this.getSprintOrThrow(id);
+    await this.assertSprintAccess(user, sprint);
+    this.permissionsService.assertProductPermission(
+      user,
+      sprint.productId,
+      "product.admin.sprint.read",
+      "Insufficient product permission"
+    );
+
+    const members = await this.prisma.sprintMember.findMany({
+      where: { sprintId: id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatarUrl: true
+          }
+        }
+      },
+      orderBy: {
+        user: { name: "asc" }
+      }
+    });
+
+    if (members.length > 0) {
+      return members.map((member) => ({
+        id: member.user.id,
+        name: member.user.name,
+        email: member.user.email,
+        avatarUrl: member.user.avatarUrl
+      }));
+    }
+
+    const productMembers = await this.prisma.productMember.findMany({
+      where: { productId: sprint.productId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatarUrl: true
+          }
+        }
+      },
+      orderBy: {
+        user: { name: "asc" }
+      }
+    });
+
+    if (productMembers.length > 0) {
+      await this.prisma.sprintMember.createMany({
+        data: productMembers.map((member) => ({ sprintId: id, userId: member.userId })),
+        skipDuplicates: true
+      });
+    }
+
+    return productMembers.map((member) => ({
+      id: member.user.id,
+      name: member.user.name,
+      email: member.user.email,
+      avatarUrl: member.user.avatarUrl
+    }));
+  }
+
+  async setMembers(id: string, dto: SetSprintMembersDto, user: AuthUser) {
+    const sprint = await this.getSprintOrThrow(id);
+    await this.assertSprintAccess(user, sprint);
+    this.permissionsService.assertProductPermission(
+      user,
+      sprint.productId,
+      "product.admin.sprint.update",
+      "Insufficient product permission"
+    );
+
+    if (sprint.status !== SprintStatus.PLANNED) {
+      throw new BadRequestException("Only planned sprints can update members");
+    }
+
+    const productMembers = await this.prisma.productMember.findMany({
+      where: { productId: sprint.productId },
+      select: { userId: true }
+    });
+    const allowedIds = new Set(productMembers.map((member) => member.userId));
+    const invalidIds = dto.userIds.filter((userId) => !allowedIds.has(userId));
+    if (invalidIds.length > 0) {
+      throw new BadRequestException("Some users are not members of this product");
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.sprintMember.deleteMany({ where: { sprintId: id } });
+      if (dto.userIds.length > 0) {
+        await tx.sprintMember.createMany({
+          data: dto.userIds.map((userId) => ({ sprintId: id, userId })),
+          skipDuplicates: true
+        });
+      }
+    });
+
+    return this.listMembers(id, user);
   }
 
   async update(id: string, dto: UpdateSprintDto, user: AuthUser) {

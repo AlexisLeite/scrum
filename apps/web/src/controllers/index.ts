@@ -369,6 +369,7 @@ export class ProductController {
   async createSprint(productId: string, payload: any) {
     const sprint = await apiClient.post<any>(`/products/${productId}/sprints`, payload);
     this.store.sprints.upsert(sprint);
+    return sprint;
   }
 
   async updateSprint(sprintId: string, payload: any) {
@@ -423,6 +424,14 @@ export class ProductController {
 
   async loadSprintPendingTasks(sprintId: string) {
     return apiClient.get<any[]>(`/sprints/${sprintId}/pending-tasks`);
+  }
+
+  async loadSprintMembers(sprintId: string) {
+    return apiClient.get<any[]>(`/sprints/${sprintId}/members`);
+  }
+
+  async setSprintMembers(sprintId: string, userIds: string[]) {
+    return apiClient.put<any[]>(`/sprints/${sprintId}/members`, { userIds });
   }
 
   async createTaskInSprint(sprintId: string, payload: any) {
