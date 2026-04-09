@@ -58,9 +58,8 @@
   padding: 0.55rem;
   display: grid;
   gap: 0.5rem;
-  width: max-content;
-  min-width: 220px;
-  max-width: min(360px, calc(100vw - 24px));
+  box-sizing: border-box;
+  width: min(max(100%, 400px), calc(100vw - 24px));
 }
 
 .searchable-select-popover.is-align-right {

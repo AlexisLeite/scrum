@@ -44,12 +44,12 @@ export function SearchableSelect(props: SearchableSelectProps) {
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
-  const popoverRef = React.useRef<HTMLDivElement | null>(null);
   const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [activeIndex, setActiveIndex] = React.useState(-1);
   const [alignRight, setAlignRight] = React.useState(false);
+  const [popoverWidth, setPopoverWidth] = React.useState<number | null>(null);
   const listboxId = React.useId();
   const optionIdPrefix = React.useId();
 
@@ -116,6 +116,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
       setQuery("");
       setActiveIndex(-1);
       setAlignRight(false);
+      setPopoverWidth(null);
       return;
     }
 
@@ -158,29 +159,30 @@ export function SearchableSelect(props: SearchableSelectProps) {
     });
   }, [filteredOptions, firstEnabledIndex, open, selectedEnabledIndex]);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!open) {
       return;
     }
 
     const reposition = () => {
       const rootRect = rootRef.current?.getBoundingClientRect();
-      const popoverRect = popoverRef.current?.getBoundingClientRect();
-      if (!rootRect || !popoverRect) {
+      if (!rootRect) {
         setAlignRight(false);
+        setPopoverWidth(null);
         return;
       }
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
       const padding = 12;
-      const wouldOverflowRight = rootRect.left + popoverRect.width > viewportWidth - padding;
-      const canAlignRight = rootRect.right - popoverRect.width >= padding;
+      const nextWidth = Math.min(Math.max(rootRect.width, 400), Math.max(viewportWidth - (padding * 2), 0));
+      const wouldOverflowRight = rootRect.left + nextWidth > viewportWidth - padding;
+      const canAlignRight = rootRect.right - nextWidth >= padding;
+      setPopoverWidth(nextWidth);
       setAlignRight(wouldOverflowRight && canAlignRight);
     };
 
-    const timer = window.setTimeout(reposition, 0);
+    reposition();
     window.addEventListener("resize", reposition);
     return () => {
-      window.clearTimeout(timer);
       window.removeEventListener("resize", reposition);
     };
   }, [open, options]);
@@ -287,8 +289,8 @@ export function SearchableSelect(props: SearchableSelectProps) {
       </button>
       {open ? (
         <div
-          ref={popoverRef}
           className={`searchable-select-popover${alignRight ? " is-align-right" : ""}`}
+          style={popoverWidth ? { width: `${popoverWidth}px` } : undefined}
         >
           <input
             ref={searchInputRef}
