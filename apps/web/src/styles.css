@@ -927,6 +927,10 @@ a.btn-secondary,
   gap: 0.9rem;
 }
 
+.product-overview-hero-side {
+  align-content: start;
+}
+
 .product-overview-badge-row {
   display: flex;
   flex-wrap: wrap;
@@ -973,6 +977,27 @@ a.btn-secondary,
   border-color: rgba(209, 231, 255, 0.24);
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-contrast);
+}
+
+.product-overview-hero-actions {
+  justify-content: flex-end;
+}
+
+.product-overview-print-action {
+  border-color: rgba(209, 231, 255, 0.28);
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-contrast);
+  box-shadow: 0 14px 24px rgba(9, 28, 52, 0.14);
+}
+
+.product-overview-print-action:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(209, 231, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.product-overview-print-action svg {
+  font-size: 1rem;
 }
 
 .product-overview-spotlight {
@@ -3119,6 +3144,15 @@ th {
 
   .product-overview-actions {
     justify-content: flex-start;
+  }
+
+  .product-overview-hero-actions {
+    justify-content: flex-start;
+  }
+
+  .product-overview-print-action {
+    width: 100%;
+    justify-content: center;
   }
 
   .definition-grid,

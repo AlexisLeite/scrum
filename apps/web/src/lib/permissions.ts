@@ -158,6 +158,26 @@ export function canViewProductDefinition(
     || hasAnyProductPermission(subject, productId, ["product.admin.workflow.read", "product.admin.workflow.update"]);
 }
 
+export function canManageProductAdministration(
+  subject: Role | SessionAccess | null | undefined,
+  productId: string
+): boolean {
+  if (!productId) {
+    return false;
+  }
+
+  if (!isSessionAccess(subject)) {
+    return subject === "platform_admin";
+  }
+
+  return subject.administrationProductIds?.includes(productId) || hasAnySystemPermission(subject, [
+    "system.administration.products.read",
+    "system.administration.products.create",
+    "system.administration.products.update",
+    "system.administration.products.delete"
+  ]);
+}
+
 export function canViewProductSprints(
   subject: Role | SessionAccess | null | undefined,
   productId: string

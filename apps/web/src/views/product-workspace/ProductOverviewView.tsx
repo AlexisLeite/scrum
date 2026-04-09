@@ -1,13 +1,16 @@
 import React from "react";
 import ReactECharts from "echarts-for-react";
 import { observer } from "mobx-react-lite";
+import { FiPrinter } from "react-icons/fi";
 import { Link, useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
 import { useRootStore } from "../../stores/root-store";
 import { buildAxisTheme, buildTooltipTheme, useEChartsTheme } from "../../ui/charts/echarts-theme";
 import { buildBurndownOption } from "../../ui/charts/burndown-chart";
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
+import { ProductPrintDrawer } from "../../ui/drawers/product-workspace/ProductPrintDrawer";
 import { productMetricsPath, productTaskDefinitionPath } from "../../routes/product-routes";
+import { canManageProductAdministration } from "../../lib/permissions";
 import { ProductItem, SprintItem, StoryItem, fmtDate, isTaskTerminalStatus, statusClass } from "./ProductWorkspaceViewShared";
 
 type OverviewStats = {
@@ -94,6 +97,7 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const { productId } = useParams<{ productId: string }>();
+  const user = store.session.user;
   const chartTheme = useEChartsTheme();
   const [productStats, setProductStats] = React.useState<OverviewStats>(null);
   const [productVelocity, setProductVelocity] = React.useState<ProductVelocityPoint[]>([]);
@@ -167,6 +171,8 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
   );
   if (!productId) return null;
 
+  const canPrintProduct = Boolean(user && canManageProductAdministration(user, productId));
+
   const openTasks = taskItems.filter((task) => !isTaskTerminalStatus(task.status));
   const closedTasks = taskItems.filter((task) => isTaskTerminalStatus(task.status));
   const recentCompletedTasks = [...closedTasks]
@@ -178,6 +184,11 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
   const velocitySeries = [...productVelocity].reverse();
   const totalVelocityPoints = velocitySeries.reduce((acc, point) => acc + point.completedPoints, 0);
   const averageVelocityPoints = velocitySeries.length > 0 ? Math.round(totalVelocityPoints / velocitySeries.length) : 0;
+  const printableStories = stories.map((story) => ({
+    id: story.id,
+    title: story.title,
+    description: story.description
+  }));
 
   return (
     <div className="stack-lg product-overview-page">
@@ -204,6 +215,23 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
         </div>
 
         <div className="product-overview-hero-side">
+          {canPrintProduct && product ? (
+            <div className="row-actions compact product-overview-hero-actions">
+              <button
+                type="button"
+                className="btn btn-secondary product-overview-print-action"
+                onClick={() => {
+                  store.drawers.add(new ProductPrintDrawer({
+                    product,
+                    stories: printableStories
+                  }));
+                }}
+              >
+                <FiPrinter aria-hidden="true" />
+                Imprimir
+              </button>
+            </div>
+          ) : null}
           <article className="product-overview-spotlight">
             <span className="metric-kpi-label">Sprint de referencia</span>
             <strong>{focusSprint?.name ?? "Sin sprint disponible"}</strong>

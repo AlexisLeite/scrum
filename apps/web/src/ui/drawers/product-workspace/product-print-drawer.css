@@ -1,0 +1,227 @@
+.product-print-drawer {
+  display: grid;
+  gap: 1rem;
+}
+
+.product-print-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.15rem;
+  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-soft) 78%, transparent);
+}
+
+.product-print-card-head {
+  align-items: flex-start;
+}
+
+.product-print-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.product-print-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: var(--control-height);
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-soft));
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.product-print-toolbar {
+  justify-content: flex-start;
+}
+
+.product-print-add-panel {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent-a) 16%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-soft));
+}
+
+.product-print-add-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.product-print-add-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.product-print-add-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+}
+
+.product-print-add-copy {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.product-print-add-copy p {
+  margin: 0;
+}
+
+.product-print-add-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.product-print-grid-shell {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.product-print-grid-head,
+.product-print-grid-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1.8fr) 128px 88px;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.product-print-grid-head {
+  padding: 0 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.product-print-grid-body {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.product-print-grid-row {
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  box-shadow: var(--shadow-soft);
+}
+
+.product-print-grid-row.is-dragging {
+  border-color: color-mix(in srgb, var(--accent-a) 38%, var(--border));
+  box-shadow: var(--shadow-md);
+}
+
+.product-print-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.8rem;
+  min-width: 2.8rem;
+  min-height: 2.8rem;
+  border: 1px dashed color-mix(in srgb, var(--accent-a) 28%, var(--border));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
+  color: var(--text-primary);
+  cursor: grab;
+}
+
+.product-print-drag-handle:active {
+  cursor: grabbing;
+}
+
+.product-print-title-cell {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.product-print-kind-pill {
+  justify-self: flex-start;
+}
+
+.product-print-title-static {
+  min-height: var(--control-height);
+  display: flex;
+  align-items: center;
+  padding: 0.62rem 0.72rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-soft) 72%, transparent);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.product-print-level-field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.product-print-level-field span {
+  font-size: 0.76rem;
+}
+
+.product-print-row-actions {
+  justify-content: flex-end;
+}
+
+.product-print-remove-btn {
+  min-width: 2.75rem;
+}
+
+.product-print-empty {
+  margin: 0;
+  padding: 1rem;
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--radius-lg);
+}
+
+.product-print-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 920px) {
+  .product-print-grid-head {
+    display: none;
+  }
+
+  .product-print-grid-row {
+    grid-template-columns: 1fr;
+  }
+
+  .product-print-row-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .product-print-options,
+  .product-print-actions {
+    flex-direction: column;
+  }
+
+  .product-print-add-item {
+    grid-template-columns: 1fr;
+  }
+
+  .product-print-actions .btn,
+  .product-print-add-item .btn,
+  .product-print-toolbar .btn {
+    width: 100%;
+  }
+}
