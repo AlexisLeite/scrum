@@ -344,6 +344,7 @@ export const FocusedView = observer(function FocusedView() {
         columns: nextBoard.columns ?? []
       });
       setError("");
+      setChartRefreshToken((current) => current + 1);
     } catch (loadError) {
       setError(getErrorMessage(loadError));
     } finally {
