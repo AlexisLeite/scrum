@@ -1314,10 +1314,16 @@ a.btn-secondary,
 .sprint-task-table-shell {
   margin-top: 0.8rem;
   overflow-x: auto;
+  height: 70vh;
+  border-color: color-mix(in srgb, var(--border-soft) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-soft) 92%, transparent);
+  border-radius: 8px;
+  overflow: auto;
 }
 
 .sprint-task-table {
   min-width: 100%;
+  border: none;
 }
 
 .sprint-task-table th,
@@ -1444,7 +1450,6 @@ a.btn-secondary,
   border-spacing: 0;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
-  overflow: hidden;
 }
 
 .table th,

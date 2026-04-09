@@ -1004,33 +1004,6 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
           <span className="pill">{availableItems.length} disponibles</span>
         </div>
 
-        <div className="product-print-options product-print-options-inline" role="group" aria-label="Opciones del documento">
-          <label className={`product-print-option ${printOptions.title ? "is-active" : ""}`.trim()}>
-            <input
-              type="checkbox"
-              checked={printOptions.title}
-              onChange={() => handleToggleOption("title")}
-            />
-            <span>Titulo</span>
-          </label>
-          <label className={`product-print-option ${printOptions.description ? "is-active" : ""}`.trim()}>
-            <input
-              type="checkbox"
-              checked={printOptions.description}
-              onChange={() => handleToggleOption("description")}
-            />
-            <span>Descripcion</span>
-          </label>
-          <label className={`product-print-option ${printOptions.stories ? "is-active" : ""}`.trim()}>
-            <input
-              type="checkbox"
-              checked={printOptions.stories}
-              onChange={() => handleToggleOption("stories")}
-            />
-            <span>Historias</span>
-          </label>
-        </div>
-
         <div className="product-print-add-toolbar">
           <input
             value={query}
@@ -1064,6 +1037,7 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
             })}
           </div>
         </div>
+
       </section>
 
       <section className="product-print-document" aria-label="Documento a imprimir">
@@ -1075,6 +1049,25 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
           <div className="product-print-toolbar">
             <span className="pill">{items.length} secciones</span>
           </div>
+        </div>
+
+        <div className="product-print-options product-print-options-inline" role="group" aria-label="Opciones del documento">
+          <label className={`product-print-option ${printOptions.title ? "is-active" : ""}`.trim()}>
+            <input
+              type="checkbox"
+              checked={printOptions.title}
+              onChange={() => handleToggleOption("title")}
+            />
+            <span>Titulo</span>
+          </label>
+          <label className={`product-print-option ${printOptions.description ? "is-active" : ""}`.trim()}>
+            <input
+              type="checkbox"
+              checked={printOptions.description}
+              onChange={() => handleToggleOption("description")}
+            />
+            <span>Descripcion</span>
+          </label>
         </div>
 
         {items.length === 0 ? (

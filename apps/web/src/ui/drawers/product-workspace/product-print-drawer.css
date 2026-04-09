@@ -173,7 +173,7 @@
 }
 
 .product-print-add-scroller {
-  max-height: 70vh;
+  max-height: 90vh;
   overflow: auto;
   padding-right: 0.15rem;
   scrollbar-gutter: stable;
@@ -391,11 +391,18 @@
 }
 
 .product-print-table-shell {
+  margin-top: 0.8rem;
   overflow-x: auto;
+  height: 90vh;
+  border-color: color-mix(in srgb, var(--border-soft) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-soft) 92%, transparent);
+  border-radius: 8px;
+  overflow: auto;
 }
 
-.product-print-table {
+.table.product-print-table {
   width: 100%;
+  border: none;
 }
 
 .product-print-table th,
@@ -537,6 +544,7 @@
 }
 
 @media (max-width: 760px) {
+
   .product-print-options,
   .product-print-status-cluster,
   .product-print-actions {
