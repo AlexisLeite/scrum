@@ -239,6 +239,22 @@ export class ProductController {
     this.store.products.upsert(product);
   }
 
+  async updateProductPrintLayout(productId: string, printLayoutJson: unknown) {
+    const product = await apiClient.patch<any>(`/products/${productId}/print-layout`, {
+      printLayoutJson
+    });
+    this.store.products.upsert(product);
+    return product;
+  }
+
+  async updateProductPrintDescription(productId: string, description: string) {
+    const product = await apiClient.patch<any>(`/products/${productId}/print-description`, {
+      description
+    });
+    this.store.products.upsert(product);
+    return product;
+  }
+
   async addProductMember(productId: string, payload: { userId: string; role: Role }) {
     return apiClient.post<any>(`/products/${productId}/members`, payload);
   }

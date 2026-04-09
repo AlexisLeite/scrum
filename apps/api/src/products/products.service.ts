@@ -1,11 +1,13 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { Role } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { AuthUser } from "../common/current-user.decorator";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   CreateProductDto,
   UpdateProductDto,
+  UpdateProductPrintDescriptionDto,
+  UpdateProductPrintLayoutDto,
   UpsertWorkflowColumnDto
 } from "./products.dto";
 
@@ -76,6 +78,33 @@ export class ProductsService {
     return this.prisma.product.update({ where: { id }, data: dto });
   }
 
+  async updatePrintLayout(productId: string, dto: UpdateProductPrintLayoutDto, user: AuthUser) {
+    await this.getProductOrThrow(productId);
+    this.assertCanManagePrintableDocument(productId, user);
+    const printLayoutJson = dto.printLayoutJson == null
+      ? Prisma.DbNull
+      : dto.printLayoutJson as Prisma.InputJsonValue;
+
+    return this.prisma.product.update({
+      where: { id: productId },
+      data: {
+        printLayoutJson
+      } as Prisma.ProductUpdateInput
+    });
+  }
+
+  async updatePrintDescription(productId: string, dto: UpdateProductPrintDescriptionDto, user: AuthUser) {
+    await this.getProductOrThrow(productId);
+    this.assertCanManagePrintableDocument(productId, user);
+
+    return this.prisma.product.update({
+      where: { id: productId },
+      data: {
+        description: dto.description
+      }
+    });
+  }
+
   async remove(id: string, user: AuthUser) {
     this.permissionsService.assertSystemPermission(
       user,
@@ -134,6 +163,19 @@ export class ProductsService {
     }
 
     throw new ForbiddenException("Insufficient user permission");
+  }
+
+  private assertCanManagePrintableDocument(productId: string, actor: AuthUser) {
+    if (this.permissionsService.hasSystemPermission(actor, "system.administration.products.update")) {
+      return;
+    }
+
+    this.permissionsService.assertProductPermission(
+      actor,
+      productId,
+      "product.admin.workflow.update",
+      "Insufficient product permission"
+    );
   }
 
   async listTeams(productId: string, user?: AuthUser) {

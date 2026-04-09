@@ -535,11 +535,32 @@ export interface TeamDto {
   updatedAt: string;
 }
 
+export type ProductPrintLayoutItemKind = "product_title" | "product_description" | "story";
+
+export interface ProductPrintLayoutItemDto {
+  id: string;
+  kind: ProductPrintLayoutItemKind;
+  sourceId?: string;
+  title: string;
+  level: number;
+}
+
+export interface ProductPrintLayoutDto {
+  version: 1;
+  options: {
+    title: boolean;
+    description: boolean;
+    stories: boolean;
+  };
+  sections: ProductPrintLayoutItemDto[];
+}
+
 export interface ProductDto {
   id: string;
   name: string;
   key: string;
   description: string | null;
+  printLayoutJson?: ProductPrintLayoutDto | null;
   ownerId: string;
   isSystem?: boolean;
   createdAt: string;

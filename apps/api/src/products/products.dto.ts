@@ -26,6 +26,16 @@ export class UpdateProductDto {
   description?: string;
 }
 
+export class UpdateProductPrintLayoutDto {
+  @IsOptional()
+  printLayoutJson?: unknown;
+}
+
+export class UpdateProductPrintDescriptionDto {
+  @IsString()
+  description!: string;
+}
+
 export class AddProductMemberDto {
   @IsString()
   userId!: string;

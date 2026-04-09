@@ -11,7 +11,7 @@ const API_BASE = (() => {
   throw new Error("Missing VITE_API_BASE in production");
 })();
 
-type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 type RequestPayload =
   | {
       json?: unknown;
@@ -130,6 +130,7 @@ async function requestForm<T>(method: HttpMethod, path: string, formData: FormDa
 export const apiClient = {
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
+  put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   postForm: <T>(path: string, formData: FormData) => requestForm<T>("POST", path, formData),
   del: <T>(path: string) => request<T>("DELETE", path),

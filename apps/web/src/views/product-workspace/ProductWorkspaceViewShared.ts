@@ -1,4 +1,4 @@
-import { ProductAssignableUserDto } from "@scrum/contracts";
+import { ProductAssignableUserDto, ProductPrintLayoutDto } from "@scrum/contracts";
 
 export type StoryStatus = "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
 export type SprintStatus = "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
@@ -8,6 +8,7 @@ export type ProductItem = {
   name: string;
   key: string;
   description: string | null;
+  printLayoutJson?: ProductPrintLayoutDto | null;
 };
 
 export type StoryTaskSummary = {

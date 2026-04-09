@@ -1,10 +1,11 @@
 ﻿import React from "react";
 import ReactECharts from "echarts-for-react";
-import { DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { FiInfo, FiMenu, FiTrash2 } from "react-icons/fi";
 import { observer } from "mobx-react-lite";
+import { createPortal } from "react-dom";
 import { NavLink, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { apiClient } from "../../api/client";
 import { ProductController } from "../../controllers";
@@ -205,11 +206,15 @@ function TaskInfoPopover(props: { task: { title: string; description: string | n
   const [placement, setPlacement] = React.useState<{
     vertical: "top" | "bottom";
     horizontal: "start" | "end";
+    top: number;
+    left: number;
     maxHeight: number;
     maxWidth: number;
   }>({
     vertical: "bottom",
     horizontal: "end",
+    top: 0,
+    left: 0,
     maxHeight: 320,
     maxWidth: 420
   });
@@ -264,18 +269,32 @@ function TaskInfoPopover(props: { task: { title: string; description: string | n
     const horizontal =
       spaceRight >= Math.min(panelRect.width, 280) || spaceRight >= spaceLeft ? "start" : "end";
     const maxWidth = Math.max(220, Math.floor(horizontal === "start" ? spaceRight : spaceLeft));
+    const visiblePanelHeight = Math.min(panelRect.height || maxHeight, maxHeight);
+    const visiblePanelWidth = Math.min(panelRect.width || maxWidth, maxWidth);
+    const top = vertical === "bottom"
+      ? Math.max(viewportMargin, Math.min(triggerRect.bottom + gap, window.innerHeight - viewportMargin - visiblePanelHeight))
+      : Math.max(viewportMargin, triggerRect.top - gap - visiblePanelHeight);
+    const alignedLeft = horizontal === "start"
+      ? triggerRect.left
+      : triggerRect.right - visiblePanelWidth;
+    const left = Math.max(
+      viewportMargin,
+      Math.min(alignedLeft, window.innerWidth - viewportMargin - visiblePanelWidth)
+    );
 
     setPlacement((current) => {
       if (
         current.vertical === vertical &&
         current.horizontal === horizontal &&
+        current.top === top &&
+        current.left === left &&
         current.maxHeight === maxHeight &&
         current.maxWidth === maxWidth
       ) {
         return current;
       }
 
-      return { vertical, horizontal, maxHeight, maxWidth };
+      return { vertical, horizontal, top, left, maxHeight, maxWidth };
     });
   }, []);
 
@@ -321,7 +340,7 @@ function TaskInfoPopover(props: { task: { title: string; description: string | n
 
   return (
     <div
-      className="story-info-popover"
+      className={`story-info-popover ${open ? "is-open" : ""}`.trim()}
       onMouseEnter={openPopover}
       onMouseLeave={scheduleClosePopover}
       onFocusCapture={openPopover}
@@ -342,27 +361,35 @@ function TaskInfoPopover(props: { task: { title: string; description: string | n
       >
         <FiInfo aria-hidden="true" focusable="false" />
       </button>
-      {open ? (
-        <div
-          id={panelId}
-          ref={panelRef}
-          className="story-info-popover-panel"
-          role="tooltip"
-          onMouseEnter={openPopover}
-          onMouseLeave={scheduleClosePopover}
-          data-side={placement.vertical}
-          data-align={placement.horizontal}
-          style={{ maxHeight: `${placement.maxHeight}px`, maxWidth: `${placement.maxWidth}px` }}
-        >
-          <MarkdownPreview
-            markdown={task.description}
-            compact
-            previewSize={400}
-            className="markdown-preview-card"
-            emptyLabel="Sin informacion adicional"
-          />
-        </div>
-      ) : null}
+      {open && typeof document !== "undefined"
+        ? createPortal(
+          <div
+            id={panelId}
+            ref={panelRef}
+            className="story-info-popover-panel"
+            role="tooltip"
+            onMouseEnter={openPopover}
+            onMouseLeave={scheduleClosePopover}
+            data-side={placement.vertical}
+            data-align={placement.horizontal}
+            style={{
+              top: `${placement.top}px`,
+              left: `${placement.left}px`,
+              maxHeight: `${placement.maxHeight}px`,
+              maxWidth: `${placement.maxWidth}px`
+            }}
+          >
+            <MarkdownPreview
+              markdown={task.description}
+              compact
+              previewSize={400}
+              className="markdown-preview-card"
+              emptyLabel="Sin informacion adicional"
+            />
+          </div>,
+          document.body
+        )
+        : null}
     </div>
   );
 }
@@ -505,6 +532,22 @@ export const StoryDefinitionView = observer(function StoryDefinitionView() {
   );
 });
 
+const SPRINT_TASK_EFFORT_VALUES = [1, 2, 3, 5, 8, 13, 21] as const;
+
+function normalizeSprintMemberIds(userIds: string[]): string[] {
+  return Array.from(
+    new Set(userIds.filter((value): value is string => Boolean(value && value.trim().length > 0)))
+  ).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+}
+
+function sprintMemberIdListsEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
 export const SprintDefinitionView = observer(function SprintDefinitionView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
@@ -512,9 +555,15 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
   const { productId, sprintId } = useParams<{ productId: string; sprintId: string }>();
   const navigate = useNavigate();
   const user = store.session.user;
-  const { assignableUsers } = useProductAssignableUsers(controller, productId ? [productId] : []);
+  const {
+    assignableUsers,
+    loading: assignableUsersLoading,
+    error: assignableUsersError
+  } = useProductAssignableUsers(controller, productId ? [productId] : []);
   const [members, setMembers] = React.useState<SprintMember[]>([]);
+  const [selectedMemberIds, setSelectedMemberIds] = React.useState<string[]>([]);
   const [membersLoading, setMembersLoading] = React.useState(false);
+  const [membersSaving, setMembersSaving] = React.useState(false);
   const [membersError, setMembersError] = React.useState("");
   const [pendingTasks, setPendingTasks] = React.useState<PendingTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(false);
@@ -547,7 +596,9 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
     setMembersError("");
     try {
       const data = await controller.loadSprintMembers(sprintId);
-      setMembers(data as SprintMember[]);
+      const nextMembers = data as SprintMember[];
+      setMembers(nextMembers);
+      setSelectedMemberIds(normalizeSprintMemberIds(nextMembers.map((member) => member.id)));
     } catch (error) {
       setMembersError(getErrorMessage(error));
     } finally {
@@ -581,6 +632,88 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
     void reloadTaskPools();
   }, [reloadMembers, reloadTaskPools, sprintId]);
 
+  const availableMembers = React.useMemo(() => {
+    const byId = new Map<string, SprintMember>();
+
+    for (const member of assignableUsers) {
+      byId.set(member.id, {
+        id: member.id,
+        name: member.name,
+        email: member.email ?? "",
+        avatarUrl: member.avatarUrl ?? null
+      });
+    }
+
+    for (const member of members) {
+      const current = byId.get(member.id);
+      byId.set(member.id, {
+        id: member.id,
+        name: member.name,
+        email: member.email || current?.email || "",
+        avatarUrl: member.avatarUrl ?? current?.avatarUrl ?? null
+      });
+    }
+
+    return Array.from(byId.values()).sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
+  }, [assignableUsers, members]);
+
+  const loadedMemberIds = React.useMemo(
+    () => normalizeSprintMemberIds(members.map((member) => member.id)),
+    [members]
+  );
+  const normalizedSelectedMemberIds = React.useMemo(
+    () => normalizeSprintMemberIds(selectedMemberIds),
+    [selectedMemberIds]
+  );
+  const selectedMemberIdSet = React.useMemo(
+    () => new Set(normalizedSelectedMemberIds),
+    [normalizedSelectedMemberIds]
+  );
+  const selectedMembers = React.useMemo(
+    () => availableMembers.filter((member) => selectedMemberIdSet.has(member.id)),
+    [availableMembers, selectedMemberIdSet]
+  );
+  const membersDirty = React.useMemo(
+    () => !sprintMemberIdListsEqual(loadedMemberIds, normalizedSelectedMemberIds),
+    [loadedMemberIds, normalizedSelectedMemberIds]
+  );
+
+  const toggleMember = React.useCallback((memberId: string) => {
+    setMembersError("");
+    setSelectedMemberIds((current) => normalizeSprintMemberIds(
+      current.includes(memberId)
+        ? current.filter((value) => value !== memberId)
+        : [...current, memberId]
+    ));
+  }, []);
+
+  const selectAllMembers = React.useCallback(() => {
+    setMembersError("");
+    setSelectedMemberIds(normalizeSprintMemberIds(availableMembers.map((member) => member.id)));
+  }, [availableMembers]);
+
+  const clearMembers = React.useCallback(() => {
+    setMembersError("");
+    setSelectedMemberIds([]);
+  }, []);
+
+  const saveMembers = React.useCallback(async () => {
+    if (!sprintId) return;
+    setMembersError("");
+    setMembersSaving(true);
+    try {
+      const data = await controller.setSprintMembers(sprintId, normalizedSelectedMemberIds);
+      const nextMembers = data as SprintMember[];
+      const nextIds = normalizeSprintMemberIds(nextMembers.map((member) => member.id));
+      setMembers(nextMembers);
+      setSelectedMemberIds(nextIds);
+    } catch (error) {
+      setMembersError(getErrorMessage(error));
+    } finally {
+      setMembersSaving(false);
+    }
+  }, [controller, normalizedSelectedMemberIds, sprintId]);
+
   const boardColumns = store.board?.columns ?? [];
   const flattenedTasks = React.useMemo(() => (
     boardColumns.flatMap((column) => {
@@ -602,6 +735,21 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
   const workflowStatuses = (store.board?.columns ?? []).map((column) => column.name);
   const statusOptions = workflowStatuses.length > 0 ? workflowStatuses : [...DEFAULT_TASK_STATUS_OPTIONS];
 
+  const resolveTaskAssigneeOptions = React.useCallback((task: Pick<SprintPlanningTask, "assigneeId" | "assignee">) => {
+    const options = new Map(selectedMembers.map((member) => [member.id, { id: member.id, name: member.name }]));
+    const currentAssigneeId = task.assignee?.id ?? task.assigneeId ?? null;
+
+    if (currentAssigneeId && !options.has(currentAssigneeId)) {
+      const currentMember = availableMembers.find((member) => member.id === currentAssigneeId);
+      options.set(currentAssigneeId, {
+        id: currentAssigneeId,
+        name: task.assignee?.name ?? currentMember?.name ?? currentAssigneeId
+      });
+    }
+
+    return Array.from(options.values()).sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
+  }, [availableMembers, selectedMembers]);
+
   const openTaskDrawer = React.useCallback((task: SprintPlanningTask) => {
     const readOnly = !canEditTaskFields(user?.role);
     store.drawers.add(
@@ -610,7 +758,7 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
         productId,
         stories: stories.map((story) => ({ id: story.id, title: story.title })),
         sprints,
-        assignees: assignableUsers,
+        assignees: resolveTaskAssigneeOptions(task),
         statusOptions,
         readOnly,
         definitionReadOnly: readOnly,
@@ -643,10 +791,10 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
       })
     );
   }, [
-    assignableUsers,
     controller,
     productId,
     reloadTaskPools,
+    resolveTaskAssigneeOptions,
     sprintId,
     sprints,
     statusOptions,
@@ -671,12 +819,11 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
     });
   }, [openTaskDrawer, sprintId]);
 
-  const addTaskToSprint = React.useCallback(async (taskId: string) => {
-    if (!sprintId) return;
+  const runTaskMutation = React.useCallback(async (taskId: string, operation: () => Promise<void>) => {
     setTasksError("");
     setPendingTaskIds((current) => ({ ...current, [taskId]: true }));
     try {
-      await controller.addTaskToSprint(sprintId, taskId);
+      await operation();
       await reloadTaskPools();
     } catch (error) {
       setTasksError(getErrorMessage(error));
@@ -687,53 +834,53 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
         return next;
       });
     }
-  }, [controller, reloadTaskPools, sprintId]);
+  }, [reloadTaskPools]);
+
+  const addTaskToSprint = React.useCallback(async (taskId: string) => {
+    if (!sprintId) return;
+    await runTaskMutation(taskId, async () => {
+      await controller.addTaskToSprint(sprintId, taskId);
+    });
+  }, [controller, runTaskMutation, sprintId]);
 
   const removeTaskFromSprint = React.useCallback(async (taskId: string) => {
     if (!sprintId) return;
-    setTasksError("");
-    setPendingTaskIds((current) => ({ ...current, [taskId]: true }));
-    try {
+    await runTaskMutation(taskId, async () => {
       await controller.removeTaskFromSprint(sprintId, taskId);
-      await reloadTaskPools();
-    } catch (error) {
-      setTasksError(getErrorMessage(error));
-    } finally {
-      setPendingTaskIds((current) => {
-        const next = { ...current };
-        delete next[taskId];
-        return next;
-      });
-    }
-  }, [controller, reloadTaskPools, sprintId]);
+    });
+  }, [controller, runTaskMutation, sprintId]);
 
   const moveTaskOrder = React.useCallback(async (taskId: string, status: string, position: number) => {
     if (!sprintId) return;
-    setTasksError("");
-    setPendingTaskIds((current) => ({ ...current, [taskId]: true }));
-    try {
+    await runTaskMutation(taskId, async () => {
       await controller.moveBoardTask(sprintId, taskId, { status, position });
-      await reloadTaskPools();
-    } catch (error) {
-      setTasksError(getErrorMessage(error));
-    } finally {
-      setPendingTaskIds((current) => {
-        const next = { ...current };
-        delete next[taskId];
-        return next;
-      });
-    }
-  }, [controller, reloadTaskPools, sprintId]);
+    });
+  }, [controller, runTaskMutation, sprintId]);
 
-  const handleDragEnd = React.useCallback((event: { active: { id: string }; over?: { id: string } | null }) => {
+  const updateTaskEffortPoints = React.useCallback(async (taskId: string, effortPoints: number) => {
+    await runTaskMutation(taskId, async () => {
+      await controller.updateTask(taskId, { effortPoints });
+    });
+  }, [controller, runTaskMutation]);
+
+  const updateTaskAssignee = React.useCallback(async (taskId: string, assigneeId: string | null) => {
+    await runTaskMutation(taskId, async () => {
+      await controller.assignTask(taskId, { assigneeId });
+    });
+  }, [controller, runTaskMutation]);
+
+  const handleDragEnd = React.useCallback((event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) {
+    const activeId = String(active.id);
+    const overId = over ? String(over.id) : null;
+
+    if (!overId || activeId === overId) {
       return;
     }
 
     setOrderedTasks((current) => {
-      const oldIndex = current.findIndex((task) => task.id === active.id);
-      const newIndex = current.findIndex((task) => task.id === over.id);
+      const oldIndex = current.findIndex((task) => task.id === activeId);
+      const newIndex = current.findIndex((task) => task.id === overId);
       if (oldIndex < 0 || newIndex < 0) {
         return current;
       }
@@ -747,7 +894,7 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
   }, [moveTaskOrder]);
 
   React.useEffect(() => {
-    if (!productId || members.length === 0) {
+    if (!productId || normalizedSelectedMemberIds.length === 0) {
       setTeamAverageVelocity(0);
       return;
     }
@@ -756,9 +903,9 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
     setVelocityError("");
 
     Promise.all(
-      members.map((member) =>
+      normalizedSelectedMemberIds.map((memberId) =>
         apiClient.get<any>(
-          `/indicators/products/${productId}/metrics?window=semester&userId=${member.id}`
+          `/indicators/products/${productId}/metrics?window=semester&userId=${memberId}`
         )
       )
     )
@@ -781,7 +928,7 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
     return () => {
       active = false;
     };
-  }, [members, productId]);
+  }, [normalizedSelectedMemberIds, productId]);
 
   if (!sprint && store.sprints.loading) {
     return (
@@ -824,7 +971,7 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
       <DefinitionHeader
         eyebrow="Definicion de sprint"
         title={sprint.name}
-        description="Planifica el sprint, ajusta objetivo y administra sus tareas en una vista completa."
+        description="Configura el sprint, define el equipo y deja lista la carga inicial de trabajo."
         context={<span className={taskStatusClass(sprint.status)}>{sprint.status}</span>}
       />
 
@@ -843,121 +990,74 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
         </section>
       ) : (
         <>
-          <section className="definition-grid sprint-definition-grid">
-            <div className="stack-lg">
-              <section className="card">
-                <div className="section-head">
-                  <div>
-                    <h3>Datos basicos</h3>
-                    <p className="muted">Nombre, objetivo y fechas definen el marco del sprint.</p>
-                  </div>
-                </div>
-                <SprintUpsertionForm
-                  options={{
-                    controller,
-                    productId,
-                    sprint,
-                    onDone: async () => {
-                      await controller.loadSprints(productId);
-                    }
-                  }}
-                  close={() => navigate(productSprintsPath(productId))}
-                  closeLabel=""
-                  closeOnSubmit={false}
-                  showCloseAction={false}
-                  showTaskManager={false}
-                  showActivity={false}
-                  requireGoal
-                />
-              </section>
-
-              <section className="card">
-                <div className="section-head">
-                  <div>
-                    <h3>Datos estadisticos</h3>
-                    <p className="muted">Relaciona esfuerzo, velocidad y probabilidad para decidir el alcance.</p>
-                  </div>
-                  <span className="pill">{velocityLoading ? "Calculando..." : `${probabilityPercent}%`}</span>
-                </div>
-                {velocityError ? <p className="error-text">{velocityError}</p> : null}
-                <div className="metrics-grid metrics-summary-grid sprint-planning-metrics">
-                  <article className="card metric-kpi">
-                    <span className="metric-kpi-label">Puntos totales</span>
-                    <strong>{totalEffortPoints}</strong>
-                    <small>{orderedTasks.length} tareas en sprint</small>
-                  </article>
-                  <article className="card metric-kpi">
-                    <span className="metric-kpi-label">Velocidad necesaria</span>
-                    <strong>{velocityNeeded.toFixed(1)} pts/sem</strong>
-                    <small>{sprintDays ? `${sprintDays} dias estimados` : "Sin rango de fechas"}</small>
-                  </article>
-                  <article className="card metric-kpi">
-                    <span className="metric-kpi-label">Velocidad del equipo</span>
-                    <strong>{teamAverageVelocity.toFixed(1)} pts/sem</strong>
-                    <small>{members.length} integrantes considerados</small>
-                  </article>
-                  <article className="card metric-kpi">
-                    <span className="metric-kpi-label">Horas por punto</span>
-                    <strong>{hoursPerPoint.toFixed(1)} h/pt</strong>
-                    <small>{totalEstimatedHours.toFixed(1)} h estimadas</small>
-                  </article>
-                </div>
-
-                <ReactECharts
-                  option={{
-                    animationDuration: 280,
-                    tooltip: { trigger: "axis", ...buildTooltipTheme(chartTheme) },
-                    legend: { show: false, ...buildLegendTheme(chartTheme) },
-                    grid: { left: 30, right: 20, bottom: 30, top: 24, containLabel: true },
-                    xAxis: {
-                      type: "category",
-                      data: [
-                        "Puntos totales",
-                        "Puntos posibles",
-                        "Horas/pto",
-                        "Probabilidad (%)"
-                      ],
-                      ...buildAxisTheme(chartTheme),
-                      axisLabel: { color: chartTheme.muted, interval: 0, rotate: 14 }
-                    },
-                    yAxis: { type: "value", ...buildAxisTheme(chartTheme) },
-                    series: [
-                      {
-                        type: "bar",
-                        data: [
-                          totalEffortPoints,
-                          Number(teamPossiblePoints.toFixed(2)),
-                          Number(hoursPerPoint.toFixed(2)),
-                          probabilityPercent
-                        ],
-                        barMaxWidth: 46,
-                        itemStyle: {
-                          color: "#1c7ed6",
-                          borderRadius: [10, 10, 4, 4]
-                        }
-                      }
-                    ]
-                  }}
-                  style={{ height: 300 }}
-                />
-              </section>
+          <section className="card sprint-planning-form-card">
+            <div className="section-head">
+              <div>
+                <h3>Datos basicos</h3>
+                <p className="muted">Nombre, objetivo y fechas acotan el sprint antes de asignar trabajo.</p>
+              </div>
             </div>
+            <SprintUpsertionForm
+              options={{
+                controller,
+                productId,
+                sprint,
+                onDone: async () => {
+                  await controller.loadSprints(productId);
+                }
+              }}
+              close={() => navigate(productSprintsPath(productId))}
+              closeLabel=""
+              closeOnSubmit={false}
+              showCloseAction={false}
+              showTaskManager={false}
+              showActivity={false}
+              requireGoal
+            />
+          </section>
 
-            <div className="stack-lg">
-              <section className="card">
-                <div className="section-head">
-                  <div>
-                    <h3>Usuarios asignados</h3>
-                    <p className="muted">Todos los miembros del producto participan del sprint.</p>
-                  </div>
-                  <span className="pill">{members.length}</span>
+          <section className="definition-grid sprint-planning-summary-grid">
+            <section className="card sprint-planning-users-card">
+              <div className="section-head">
+                <div>
+                  <h3>Usuarios</h3>
+                  <p className="muted">Selecciona exactamente quienes forman parte del sprint y habilita su asignacion inicial.</p>
                 </div>
-                {membersLoading ? <p className="muted">Cargando usuarios...</p> : null}
-                {membersError ? <p className="error-text">{membersError}</p> : null}
-                {!membersLoading && members.length === 0 ? <p className="muted">No hay usuarios disponibles.</p> : null}
-                <ul className="sprint-member-list">
-                  {members.map((member) => (
-                    <li key={member.id} className="sprint-member-item">
+                <span className="pill">{normalizedSelectedMemberIds.length}/{availableMembers.length}</span>
+              </div>
+
+              <div className="row-actions compact sprint-member-toolbar">
+                <button type="button" className="btn btn-secondary" onClick={selectAllMembers} disabled={availableMembers.length === 0 || membersSaving}>
+                  Seleccionar todos
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={clearMembers} disabled={normalizedSelectedMemberIds.length === 0 || membersSaving}>
+                  Limpiar
+                </button>
+                <button type="button" className="btn btn-primary" onClick={() => void saveMembers()} disabled={!membersDirty || membersSaving}>
+                  {membersSaving ? "Guardando equipo..." : "Guardar equipo"}
+                </button>
+              </div>
+
+              {assignableUsersLoading || membersLoading ? <p className="muted">Cargando usuarios del sprint...</p> : null}
+              {assignableUsersError ? <p className="error-text">{assignableUsersError}</p> : null}
+              {membersError ? <p className="error-text">{membersError}</p> : null}
+              {!assignableUsersLoading && !membersLoading && availableMembers.length === 0 ? <p className="muted">No hay usuarios disponibles para este producto.</p> : null}
+              {availableMembers.length > 0 && normalizedSelectedMemberIds.length === 0 ? (
+                <p className="muted">Este sprint no tiene integrantes seleccionados todavia.</p>
+              ) : null}
+              {membersDirty ? <p className="muted">Hay cambios pendientes de guardar en el equipo del sprint.</p> : null}
+
+              <div className="sprint-member-selector" aria-busy={membersSaving}>
+                {availableMembers.map((member) => {
+                  const checked = selectedMemberIdSet.has(member.id);
+                  return (
+                    <label key={member.id} className={`sprint-member-choice ${checked ? "is-selected" : ""}`.trim()}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleMember(member.id)}
+                        disabled={membersSaving}
+                      />
                       {member.avatarUrl ? (
                         <img src={member.avatarUrl} alt={member.name} className="sprint-member-avatar" />
                       ) : (
@@ -965,30 +1065,101 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
                           {member.name.slice(0, 1).toUpperCase()}
                         </span>
                       )}
-                      <div>
+                      <div className="sprint-member-copy">
                         <strong>{member.name}</strong>
-                        <span className="muted">{member.email}</span>
+                        <span className="muted">{member.email || "Sin email visible"}</span>
                       </div>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="card sprint-planning-statistics-card">
+              <div className="section-head">
+                <div>
+                  <h3>Estadisticas</h3>
+                  <p className="muted">Cruza carga, velocidad y equipo seleccionado para decidir un alcance viable.</p>
+                </div>
+                <span className="pill">{velocityLoading ? "Calculando..." : `${probabilityPercent}%`}</span>
+              </div>
+              {velocityError ? <p className="error-text">{velocityError}</p> : null}
+              <div className="metrics-grid metrics-summary-grid sprint-planning-metrics">
+                <article className="card metric-kpi">
+                  <span className="metric-kpi-label">Puntos</span>
+                  <strong>{totalEffortPoints}</strong>
+                  <small>{orderedTasks.length} tareas</small>
+                </article>
+                <article className="card metric-kpi">
+                  <span className="metric-kpi-label">Vel. necesaria</span>
+                  <strong>{velocityNeeded.toFixed(1)} pts/sem</strong>
+                  <small>{sprintDays ? `${sprintDays} dias` : "Sin fechas"}</small>
+                </article>
+                <article className="card metric-kpi">
+                  <span className="metric-kpi-label">Vel. equipo</span>
+                  <strong>{teamAverageVelocity.toFixed(1)} pts/sem</strong>
+                  <small>{normalizedSelectedMemberIds.length} pers.</small>
+                </article>
+                <article className="card metric-kpi">
+                  <span className="metric-kpi-label">Horas/pto</span>
+                  <strong>{hoursPerPoint.toFixed(1)} h/pt</strong>
+                  <small>{totalEstimatedHours.toFixed(1)} h</small>
+                </article>
+              </div>
+
+              <ReactECharts
+                option={{
+                  animationDuration: 280,
+                  tooltip: { trigger: "axis", ...buildTooltipTheme(chartTheme) },
+                  legend: { show: false, ...buildLegendTheme(chartTheme) },
+                  grid: { left: 30, right: 20, bottom: 30, top: 24, containLabel: true },
+                  xAxis: {
+                    type: "category",
+                    data: [
+                      "Puntos totales",
+                      "Puntos posibles",
+                      "Horas/pto",
+                      "Probabilidad (%)"
+                    ],
+                    ...buildAxisTheme(chartTheme),
+                    axisLabel: { color: chartTheme.muted, interval: 0, rotate: 14 }
+                  },
+                  yAxis: { type: "value", ...buildAxisTheme(chartTheme) },
+                  series: [
+                    {
+                      type: "bar",
+                      data: [
+                        totalEffortPoints,
+                        Number(teamPossiblePoints.toFixed(2)),
+                        Number(hoursPerPoint.toFixed(2)),
+                        probabilityPercent
+                      ],
+                      barMaxWidth: 46,
+                      itemStyle: {
+                        color: "#1c7ed6",
+                        borderRadius: [10, 10, 4, 4]
+                      }
+                    }
+                  ]
+                }}
+                style={{ height: 300 }}
+              />
+            </section>
           </section>
 
-          <section className="card">
+          <section className="card sprint-planning-tasks-card">
             <div className="section-head">
               <div>
                 <h3>Grilla de tareas del sprint</h3>
-                <p className="muted">Agrega, ordena y revisa detalles sin salir de la planificacion.</p>
+                <p className="muted">Agrega trabajo, ajusta puntos y deja la asignacion inicial lista antes de empezar.</p>
               </div>
               <span className="pill">{orderedTasks.length}</span>
             </div>
             <TaskSearchPicker
-              label="Agregar tarea al sprint"
+              label="Agregar tarea"
               tasks={pendingTasks}
               loading={tasksLoading}
-              placeholder="Busca por tarea, historia o responsable. Enter agrega la seleccionada"
+              placeholder="Busca por titulo, historia o responsable"
               onPick={addTaskToSprint}
               onOpenTask={(taskId) => {
                 const task = pendingTasks.find((entry) => entry.id === taskId);
@@ -1010,9 +1181,10 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
                       <thead>
                         <tr>
                           <th aria-label="Orden"></th>
-                          <th>Titulo</th>
+                          <th>Tarea</th>
                           <th>Info</th>
                           <th>Puntos</th>
+                          <th>Asignacion</th>
                           <th aria-label="Acciones"></th>
                         </tr>
                       </thead>
@@ -1021,9 +1193,12 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
                           <SortableSprintTaskRow
                             key={task.id}
                             task={task}
+                            assigneeOptions={resolveTaskAssigneeOptions(task)}
                             isPending={Boolean(pendingTaskIds[task.id])}
                             onOpen={() => openTaskDrawer(task)}
                             onRemove={() => void removeTaskFromSprint(task.id)}
+                            onUpdateEffortPoints={(effortPoints) => void updateTaskEffortPoints(task.id, effortPoints)}
+                            onUpdateAssignee={(assigneeId) => void updateTaskAssignee(task.id, assigneeId)}
                           />
                         ))}
                       </tbody>
@@ -1041,11 +1216,22 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
 
 function SortableSprintTaskRow(props: {
   task: SprintPlanningTask;
+  assigneeOptions: Array<{ id: string; name: string }>;
   isPending: boolean;
   onOpen: () => void;
   onRemove: () => void;
+  onUpdateEffortPoints: (effortPoints: number) => void;
+  onUpdateAssignee: (assigneeId: string | null) => void;
 }) {
-  const { task, isPending, onOpen, onRemove } = props;
+  const {
+    task,
+    assigneeOptions,
+    isPending,
+    onOpen,
+    onRemove,
+    onUpdateEffortPoints,
+    onUpdateAssignee
+  } = props;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id
   });
@@ -1053,10 +1239,22 @@ function SortableSprintTaskRow(props: {
     transform: CSS.Transform.toString(transform),
     transition
   };
+  const currentEffortValue = task.effortPoints != null ? String(task.effortPoints) : "";
+  const currentAssigneeValue = task.assignee?.id ?? task.assigneeId ?? "";
+  const [effortValue, setEffortValue] = React.useState(currentEffortValue);
+  const [assigneeValue, setAssigneeValue] = React.useState(currentAssigneeValue);
+
+  React.useEffect(() => {
+    setEffortValue(currentEffortValue);
+  }, [currentEffortValue, task.id]);
+
+  React.useEffect(() => {
+    setAssigneeValue(currentAssigneeValue);
+  }, [currentAssigneeValue, task.id]);
 
   return (
     <tr ref={setNodeRef} style={style} className={isDragging ? "is-dragging" : ""} aria-busy={isPending}>
-      <td>
+      <td className="sprint-task-order-cell">
         <button
           type="button"
           className="btn btn-secondary btn-icon story-list-icon-button sprint-task-drag-button"
@@ -1068,16 +1266,69 @@ function SortableSprintTaskRow(props: {
           <FiMenu aria-hidden="true" focusable="false" />
         </button>
       </td>
-      <td>
-        <button type="button" className="story-task-title-button" onClick={onOpen} disabled={isPending}>
-          <span className="story-task-title-text">{task.title}</span>
-        </button>
+      <td className="sprint-task-title-column">
+        <div className="sprint-task-title-cell">
+          <button type="button" className="story-task-title-button" onClick={onOpen} disabled={isPending}>
+            <span className="story-task-title-text">{task.title}</span>
+          </button>
+          <div className="sprint-task-meta">
+            <span className="muted">{task.story?.title ?? "Sin historia visible"}</span>
+            <span className={taskStatusClass(task.status)}>{task.status}</span>
+          </div>
+        </div>
       </td>
-      <td>
+      <td className="sprint-task-info-cell">
         <TaskInfoPopover task={{ title: task.title, description: task.description }} />
       </td>
-      <td>{task.effortPoints ?? "-"}</td>
-      <td>
+      <td className="sprint-task-points-cell">
+        <select
+          className="sprint-task-inline-select"
+          aria-label={`Puntos de esfuerzo de ${task.title}`}
+          value={effortValue}
+          disabled={isPending}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            setEffortValue(nextValue);
+            if (!nextValue || nextValue === currentEffortValue) {
+              return;
+            }
+            onUpdateEffortPoints(Number(nextValue));
+          }}
+        >
+          <option value="" disabled>
+            Sin definir
+          </option>
+          {SPRINT_TASK_EFFORT_VALUES.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="sprint-task-assignee-cell">
+        <select
+          className="sprint-task-inline-select"
+          aria-label={`Asignacion de ${task.title}`}
+          value={assigneeValue}
+          disabled={isPending}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            setAssigneeValue(nextValue);
+            if (nextValue === currentAssigneeValue) {
+              return;
+            }
+            onUpdateAssignee(nextValue || null);
+          }}
+        >
+          <option value="">Sin asignar</option>
+          {assigneeOptions.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.name}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="sprint-task-actions-cell">
         <button
           type="button"
           className="btn btn-secondary btn-icon story-list-icon-button"
@@ -1091,6 +1342,7 @@ function SortableSprintTaskRow(props: {
     </tr>
   );
 }
+
 
 function TaskMessageThread(props: {
   nodes: TaskMessageNode[];

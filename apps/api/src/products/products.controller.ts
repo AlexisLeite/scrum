@@ -15,6 +15,8 @@ import {
   CreateProductDto,
   SetProductTeamsDto,
   UpdateProductDto,
+  UpdateProductPrintDescriptionDto,
+  UpdateProductPrintLayoutDto,
   UpsertWorkflowColumnDto
 } from "./products.dto";
 import { ProductsService } from "./products.service";
@@ -37,6 +39,20 @@ export class ProductsController {
   @Patch(":id")
   update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: UpdateProductDto) {
     return this.productsService.update(id, dto, user);
+  }
+
+  @Patch(":id/print-layout")
+  updatePrintLayout(@CurrentUser() user: AuthUser, @Param("id") productId: string, @Body() dto: UpdateProductPrintLayoutDto) {
+    return this.productsService.updatePrintLayout(productId, dto, user);
+  }
+
+  @Patch(":id/print-description")
+  updatePrintDescription(
+    @CurrentUser() user: AuthUser,
+    @Param("id") productId: string,
+    @Body() dto: UpdateProductPrintDescriptionDto
+  ) {
+    return this.productsService.updatePrintDescription(productId, dto, user);
   }
 
   @Delete(":id")
