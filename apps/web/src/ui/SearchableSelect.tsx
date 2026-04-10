@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import "./searchable-select.css";
 
 export type SearchableSelectOption = {
@@ -44,12 +45,17 @@ export function SearchableSelect(props: SearchableSelectProps) {
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
+  const popoverRef = React.useRef<HTMLDivElement | null>(null);
   const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [activeIndex, setActiveIndex] = React.useState(-1);
-  const [alignRight, setAlignRight] = React.useState(false);
-  const [popoverWidth, setPopoverWidth] = React.useState<number | null>(null);
+  const [popoverPosition, setPopoverPosition] = React.useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxOptionsHeight: number;
+  } | null>(null);
   const listboxId = React.useId();
   const optionIdPrefix = React.useId();
 
@@ -115,19 +121,20 @@ export function SearchableSelect(props: SearchableSelectProps) {
     if (!open) {
       setQuery("");
       setActiveIndex(-1);
-      setAlignRight(false);
-      setPopoverWidth(null);
+      setPopoverPosition(null);
       return;
     }
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) {
         setOpen(false);
       }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (event.key === "Escape" && (rootRef.current?.contains(target) || popoverRef.current?.contains(target))) {
         setOpen(false);
         window.setTimeout(() => triggerRef.current?.focus(), 0);
       }
@@ -160,32 +167,77 @@ export function SearchableSelect(props: SearchableSelectProps) {
   }, [filteredOptions, firstEnabledIndex, open, selectedEnabledIndex]);
 
   React.useLayoutEffect(() => {
-    if (!open) {
+    if (!open || typeof window === "undefined") {
       return;
     }
 
+    let frameId = 0;
     const reposition = () => {
       const rootRect = rootRef.current?.getBoundingClientRect();
       if (!rootRect) {
-        setAlignRight(false);
-        setPopoverWidth(null);
+        setPopoverPosition(null);
         return;
       }
+
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
       const padding = 12;
-      const nextWidth = Math.min(Math.max(rootRect.width, 400), Math.max(viewportWidth - (padding * 2), 0));
-      const wouldOverflowRight = rootRect.left + nextWidth > viewportWidth - padding;
-      const canAlignRight = rootRect.right - nextWidth >= padding;
-      setPopoverWidth(nextWidth);
-      setAlignRight(wouldOverflowRight && canAlignRight);
+      const gap = 6;
+      const availableWidth = Math.max(viewportWidth - (padding * 2), 0);
+      const nextWidth = Math.min(
+        Math.max(rootRect.width, Math.min(400, availableWidth)),
+        availableWidth
+      );
+      const nextLeft = Math.min(
+        Math.max(rootRect.left, padding),
+        Math.max(padding, viewportWidth - padding - nextWidth)
+      );
+
+      const availableBelow = Math.max(viewportHeight - rootRect.bottom - gap - padding, 0);
+      const availableAbove = Math.max(rootRect.top - gap - padding, 0);
+      const popoverHeight = popoverRef.current?.offsetHeight ?? 0;
+      const estimatedHeight = popoverHeight || 320;
+      const shouldOpenAbove = availableBelow < Math.min(estimatedHeight, 280) && availableAbove > availableBelow;
+      const nextMaxHeight = Math.max(shouldOpenAbove ? availableAbove : availableBelow, 160);
+      const renderedHeight = Math.min(estimatedHeight, nextMaxHeight);
+      const nextTop = shouldOpenAbove
+        ? Math.max(padding, rootRect.top - gap - renderedHeight)
+        : Math.min(rootRect.bottom + gap, Math.max(padding, viewportHeight - padding - renderedHeight));
+      const nextMaxOptionsHeight = Math.max(Math.min(240, nextMaxHeight - 72), 72);
+
+      setPopoverPosition((current) => {
+        if (
+          current
+          && current.top === nextTop
+          && current.left === nextLeft
+          && current.width === nextWidth
+          && current.maxOptionsHeight === nextMaxOptionsHeight
+        ) {
+          return current;
+        }
+        return {
+          top: nextTop,
+          left: nextLeft,
+          width: nextWidth,
+          maxOptionsHeight: nextMaxOptionsHeight
+        };
+      });
     };
 
-    reposition();
-    window.addEventListener("resize", reposition);
-    return () => {
-      window.removeEventListener("resize", reposition);
+    const scheduleReposition = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(reposition);
     };
-  }, [open, options]);
+
+    scheduleReposition();
+    window.addEventListener("resize", scheduleReposition);
+    window.addEventListener("scroll", scheduleReposition, true);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", scheduleReposition);
+      window.removeEventListener("scroll", scheduleReposition, true);
+    };
+  }, [filteredOptions.length, open, query]);
 
   React.useEffect(() => {
     if (!open || activeIndex < 0) {
@@ -263,6 +315,15 @@ export function SearchableSelect(props: SearchableSelectProps) {
     }
   };
 
+  const popoverStyle = popoverPosition
+    ? ({
+        top: `${popoverPosition.top}px`,
+        left: `${popoverPosition.left}px`,
+        width: `${popoverPosition.width}px`,
+        ["--searchable-select-options-max-height" as "--searchable-select-options-max-height"]: `${popoverPosition.maxOptionsHeight}px`
+      } satisfies React.CSSProperties)
+    : ({ visibility: "hidden" } satisfies React.CSSProperties);
+
   return (
     <div
       ref={rootRef}
@@ -287,48 +348,52 @@ export function SearchableSelect(props: SearchableSelectProps) {
           v
         </span>
       </button>
-      {open ? (
-        <div
-          className={`searchable-select-popover${alignRight ? " is-align-right" : ""}`}
-          style={popoverWidth ? { width: `${popoverWidth}px` } : undefined}
-        >
-          <input
-            ref={searchInputRef}
-            className="searchable-select-search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            placeholder={searchPlaceholder}
-            aria-label={ariaLabel ? `Buscar en ${ariaLabel}` : searchPlaceholder}
-            aria-controls={listboxId}
-            aria-activedescendant={activeIndex >= 0 ? `${optionIdPrefix}-${activeIndex}` : undefined}
-            autoComplete="off"
-          />
-          <div id={listboxId} className="searchable-select-options" role="listbox">
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((option, index) => (
-                <button
-                  key={`${option.value}-${option.label}`}
-                  ref={(node) => {
-                    optionRefs.current[index] = node;
-                  }}
-                  id={`${optionIdPrefix}-${index}`}
-                  type="button"
-                  className={`searchable-select-option${option.value === value ? " is-selected" : ""}${activeIndex === index ? " is-active" : ""}`}
-                  onClick={() => handleSelect(option.value)}
-                  disabled={option.disabled}
-                  role="option"
-                  aria-selected={option.value === value}
-                >
-                  <span>{option.label}</span>
-                </button>
-              ))
-            ) : (
-              <div className="searchable-select-empty">{emptyMessage}</div>
-            )}
-          </div>
-        </div>
-      ) : null}
+      {open && typeof document !== "undefined"
+        ? createPortal(
+          <div
+            ref={popoverRef}
+            className="searchable-select-popover"
+            style={popoverStyle}
+          >
+            <input
+              ref={searchInputRef}
+              className="searchable-select-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder={searchPlaceholder}
+              aria-label={ariaLabel ? `Buscar en ${ariaLabel}` : searchPlaceholder}
+              aria-controls={listboxId}
+              aria-activedescendant={activeIndex >= 0 ? `${optionIdPrefix}-${activeIndex}` : undefined}
+              autoComplete="off"
+            />
+            <div id={listboxId} className="searchable-select-options" role="listbox">
+              {filteredOptions.length > 0 ? (
+                filteredOptions.map((option, index) => (
+                  <button
+                    key={`${option.value}-${option.label}`}
+                    ref={(node) => {
+                      optionRefs.current[index] = node;
+                    }}
+                    id={`${optionIdPrefix}-${index}`}
+                    type="button"
+                    className={`searchable-select-option${option.value === value ? " is-selected" : ""}${activeIndex === index ? " is-active" : ""}`}
+                    onClick={() => handleSelect(option.value)}
+                    disabled={option.disabled}
+                    role="option"
+                    aria-selected={option.value === value}
+                  >
+                    <span>{option.label}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="searchable-select-empty">{emptyMessage}</div>
+              )}
+            </div>
+          </div>,
+          document.body
+        )
+        : null}
     </div>
   );
 }
