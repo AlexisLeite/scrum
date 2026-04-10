@@ -13,6 +13,8 @@ type TaskCreationLineage = {
   sourceMessageId: string | null;
 };
 
+type TaskCreationPlacement = "start" | "end";
+
 type TaskCreationInput = {
   storyId: string;
   productId: string;
@@ -30,6 +32,7 @@ type TaskCreationInput = {
   actorUserId: string;
   action: string;
   metadataJson?: Record<string, unknown>;
+  boardPlacement?: TaskCreationPlacement;
 };
 
 type TaskHierarchyNode = {
@@ -760,7 +763,11 @@ export class TasksService {
     return sprint;
   }
 
-  async createForSprint(sprintId: string, dto: CreateTaskDto & { storyId: string }, user: AuthUser) {
+  async createForSprint(
+    sprintId: string,
+    dto: CreateTaskDto & { storyId: string; placement?: TaskCreationPlacement },
+    user: AuthUser
+  ) {
     const sprint = await this.prisma.sprint.findUnique({
       where: { id: sprintId },
       select: { id: true, productId: true, teamId: true, status: true }
@@ -800,30 +807,62 @@ export class TasksService {
       actualHours: dto.actualHours,
       parentTaskId: lineage.parentTaskId,
       sourceMessageId: lineage.sourceMessageId,
+      boardPlacement: dto.placement === "start" ? "start" : "end",
       actorUserId: user.sub,
       action: "TASK_CREATED_IN_SPRINT"
     });
   }
 
   private async createTaskRecord(input: TaskCreationInput) {
-    const task = await this.prisma.task.create({
-      data: {
-        storyId: input.storyId,
-        productId: input.productId,
-        sprintId: input.sprintId ?? null,
-        assigneeId: input.assigneeId ?? null,
-        parentTaskId: input.parentTaskId ?? null,
-        sourceMessageId: input.sourceMessageId ?? null,
-        title: input.title,
-        description: input.description ?? null,
-        status: input.status,
-        boardOrder: input.sprintId ? await this.getNextBoardOrder(input.sprintId, input.status) : 0,
-        effortPoints: input.effortPoints ?? null,
-        estimatedHours: input.estimatedHours ?? null,
-        remainingHours: null,
-        actualHours: input.actualHours ?? null
-      }
-    });
+    const sprintId = input.sprintId ?? null;
+    const taskData = {
+      storyId: input.storyId,
+      productId: input.productId,
+      sprintId,
+      assigneeId: input.assigneeId ?? null,
+      parentTaskId: input.parentTaskId ?? null,
+      sourceMessageId: input.sourceMessageId ?? null,
+      title: input.title,
+      description: input.description ?? null,
+      status: input.status,
+      effortPoints: input.effortPoints ?? null,
+      estimatedHours: input.estimatedHours ?? null,
+      remainingHours: null,
+      actualHours: input.actualHours ?? null
+    } satisfies Prisma.TaskUncheckedCreateInput;
+
+    const task = sprintId
+      ? await this.prisma.$transaction(async (tx) => {
+          const boardPlacement = input.boardPlacement ?? "end";
+          const existingTaskIds = boardPlacement === "start"
+            ? (await tx.task.findMany({
+                where: { sprintId, status: input.status },
+                orderBy: [{ boardOrder: "asc" }, { createdAt: "asc" }],
+                select: { id: true }
+              })).map((entry) => entry.id)
+            : [];
+          const createdTask = await tx.task.create({
+            data: {
+              ...taskData,
+              boardOrder: boardPlacement === "start"
+                ? 0
+                : await this.getNextBoardOrder(sprintId, input.status, tx)
+            }
+          });
+
+          if (boardPlacement === "start") {
+            await this.applyBoardOrder([createdTask.id, ...existingTaskIds], tx);
+            return tx.task.findUniqueOrThrow({ where: { id: createdTask.id } });
+          }
+
+          return createdTask;
+        })
+      : await this.prisma.task.create({
+          data: {
+            ...taskData,
+            boardOrder: 0
+          }
+        });
 
     await this.prisma.taskStatusHistory.create({
       data: {

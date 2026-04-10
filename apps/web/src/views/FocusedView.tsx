@@ -749,6 +749,7 @@ export const FocusedView = observer(function FocusedView() {
             defaultStatus,
             fixedSprintId: creationContext.sprintId,
             allowSprintChange: false,
+            showCreationPlacementSelector: true,
             onDone: async () => {
               await reloadBoard();
               await productController.loadStories(creationContext.productId, { syncStore: false });

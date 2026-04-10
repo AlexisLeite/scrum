@@ -43,6 +43,7 @@ const EFFORT_POINT_VALUES = [1, 2, 3, 5, 8, 13, 21] as const;
 const ESTIMATED_HOUR_PRESETS = [4, 8, 16, 24] as const;
 const DEFAULT_NEW_TASK_EFFORT_POINTS = "5";
 const CREATE_STORY_OPTION_VALUE = "__create_new_story__";
+type TaskCreationPlacement = "start" | "end";
 
 type TaskUpsertionDrawerOptions = {
   controller: ProductController;
@@ -60,6 +61,7 @@ type TaskUpsertionDrawerOptions = {
   defaultStoryId?: string;
   fixedSprintId?: string;
   allowSprintChange?: boolean;
+  showCreationPlacementSelector?: boolean;
   readOnly?: boolean;
   allowTaskCreation?: boolean;
   allowMessageCreation?: boolean;
@@ -198,6 +200,7 @@ export function TaskUpsertionForm(props: {
     defaultStoryId,
     fixedSprintId,
     allowSprintChange = true,
+    showCreationPlacementSelector = false,
     readOnly = false,
     allowTaskCreation = !readOnly,
     allowMessageCreation = true,
@@ -207,6 +210,7 @@ export function TaskUpsertionForm(props: {
 
   const initialEstimatedHours = React.useMemo(() => toInitialHoursState(task?.estimatedHours), [task?.estimatedHours]);
   const initialEffortPoints = React.useMemo(() => getInitialEffortPoints(task), [task]);
+  const [creationPlacement, setCreationPlacement] = React.useState<TaskCreationPlacement>("end");
   const customHoursInputRef = React.useRef<HTMLInputElement | null>(null);
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
@@ -222,7 +226,8 @@ export function TaskUpsertionForm(props: {
     effortPoints: initialEffortPoints,
     selectedEstimatedPreset: initialEstimatedHours.preset,
     customEstimatedHours: initialEstimatedHours.custom,
-    actualHours: task?.actualHours != null ? String(task.actualHours) : ""
+    actualHours: task?.actualHours != null ? String(task.actualHours) : "",
+    creationPlacement: "end"
   }));
   const draft = useDraftPersistence({
     userId: store.session.user?.id,
@@ -263,6 +268,7 @@ export function TaskUpsertionForm(props: {
   const shouldSelectStory = !defaultStoryId || Boolean(fixedSprintId) || Boolean(task);
   const storySelectionLocked = !task && Boolean(defaultStoryId);
   const canChangeSprint = allowSprintChange && !fixedSprintId;
+  const allowCreationPlacementSelection = Boolean(showCreationPlacementSelector && !task && fixedSprintId);
   const selectedStoryId = (task ? storyId || task.storyId || defaultStoryId || "" : defaultStoryId || storyId || "").trim();
   const estimatedHours =
     selectedEstimatedPreset !== null ? selectedEstimatedPreset : toOptionalNumber(customEstimatedHours);
@@ -274,6 +280,10 @@ export function TaskUpsertionForm(props: {
     setError("");
     setCompletionDialogOpen(false);
   }, [task, defaultStoryId, fixedSprintId, defaultStatus, statusOptions]);
+
+  React.useEffect(() => {
+    setCreationPlacement("end");
+  }, [fixedSprintId, showCreationPlacementSelector, task]);
 
   React.useEffect(() => {
     setStoryOptions(stories);
@@ -337,7 +347,8 @@ export function TaskUpsertionForm(props: {
       } else if (fixedSprintId) {
         await controller.createTaskInSprint(fixedSprintId, {
           ...payload,
-          storyId: selectedStoryId
+          storyId: selectedStoryId,
+          placement: allowCreationPlacementSelection ? creationPlacement : undefined
         });
       } else {
         await controller.createTask(selectedStoryId, payload);
@@ -354,7 +365,8 @@ export function TaskUpsertionForm(props: {
         effortPoints,
         selectedEstimatedPreset,
         customEstimatedHours,
-        actualHours: nextActualHours
+        actualHours: nextActualHours,
+        creationPlacement: allowCreationPlacementSelection ? creationPlacement : "end"
       }));
 
       if (payload.actualHours !== undefined) {
@@ -416,9 +428,23 @@ export function TaskUpsertionForm(props: {
       effortPoints,
       selectedEstimatedPreset,
       customEstimatedHours,
-      actualHours
+      actualHours,
+      creationPlacement: allowCreationPlacementSelection ? creationPlacement : "end"
     }),
-    [actualHours, assigneeId, customEstimatedHours, description, effortPoints, selectedEstimatedPreset, sprintId, status, storyId, title]
+    [
+      actualHours,
+      allowCreationPlacementSelection,
+      assigneeId,
+      creationPlacement,
+      customEstimatedHours,
+      description,
+      effortPoints,
+      selectedEstimatedPreset,
+      sprintId,
+      status,
+      storyId,
+      title
+    ]
   );
   const hasUnsavedChanges = !readOnly && !isHydratingRemote && currentCloseSnapshot !== closeBaseline;
 
@@ -538,6 +564,23 @@ export function TaskUpsertionForm(props: {
             />
           </div>
         </div>
+
+        {allowCreationPlacementSelection ? (
+          <div className="task-estimator-group">
+            <span className="task-estimator-label">Posicion al crear</span>
+            <CompactOptionGroup
+              ariaLabel="Posicion al crear"
+              values={["end", "start"]}
+              selectedValue={creationPlacement}
+              disabled={formDisabled}
+              onSelect={(value) => setCreationPlacement(value as TaskCreationPlacement)}
+              renderLabel={(value) => value === "start" ? "Al principio" : "Al final"}
+            />
+            <p className="muted task-creation-placement-note">
+              Se reinicia en &quot;Al final&quot; cada vez que abras este formulario.
+            </p>
+          </div>
+        ) : null}
 
         <div className="task-hour-shell">
           <div className="task-estimator-group">

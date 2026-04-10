@@ -97,6 +97,10 @@
   padding: 0.4rem 0;
 }
 
+.task-creation-placement-note {
+  margin: 0;
+}
+
 @media (max-width: 760px) {
   .task-hour-input-option {
     width: 100%;
