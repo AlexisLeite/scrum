@@ -34,6 +34,9 @@
   --accentSolidHover: var(--accent-c);
   --accentText: color-mix(in srgb, var(--accent-a) 90%, #ffffff);
   --accentTextContrast: #ffffff;
+  --code-block-bg: color-mix(in srgb, var(--bg-soft) 78%, transparent);
+  --code-block-selection-bg: color-mix(in srgb, var(--accent-a) 28%, var(--bg-soft));
+  --code-block-caret: color-mix(in srgb, #ffffff 92%, var(--accent-a) 8%);
 }
 
 .rich-description-editor:focus-within {
@@ -71,10 +74,15 @@
 }
 
 .rich-description-editor .cm-editor,
+.rich-description-editor .cm-editor:focus-within,
+.rich-description-editor .cm-editor.cm-focused,
+.rich-description-editor .cm-editor .cm-scroller,
+.rich-description-editor .cm-editor .cm-content,
 .rich-description-editor .cm-gutters,
 .rich-description-editor pre,
 .rich-description-editor code {
-  background: color-mix(in srgb, var(--bg-soft) 78%, transparent);
+  background: var(--code-block-bg) !important;
+  background-color: var(--code-block-bg) !important;
   color: var(--text-main);
 }
 
@@ -83,17 +91,30 @@
 .rich-description-editor .cm-editor .cm-line *::selection,
 .rich-description-editor .cm-editor .cm-gutterElement::selection {
   color: var(--text-main);
-  background: color-mix(in srgb, var(--accent-a) 28%, var(--bg-soft));
+  background: var(--code-block-selection-bg) !important;
+  background-color: var(--code-block-selection-bg) !important;
 }
 
 .rich-description-editor .cm-editor .cm-selectionBackground,
 .rich-description-editor .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
-  background: color-mix(in srgb, var(--accent-a) 28%, var(--bg-soft));
+  background: var(--code-block-selection-bg) !important;
+  background-color: var(--code-block-selection-bg) !important;
 }
 
 .rich-description-editor .cm-editor .cm-activeLine,
 .rich-description-editor .cm-editor .cm-activeLineGutter {
-  background: transparent;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.rich-description-editor .cm-editor .cm-content,
+.rich-description-editor .cm-editor .cm-line {
+  caret-color: var(--code-block-caret);
+}
+
+.rich-description-editor .cm-editor .cm-cursor,
+.rich-description-editor .cm-editor .cm-dropCursor {
+  border-left-color: var(--code-block-caret) !important;
 }
 
 .rich-description-editor a {
