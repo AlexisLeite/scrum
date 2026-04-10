@@ -334,11 +334,27 @@ export const FocusedView = observer(function FocusedView() {
     storiesByProductId: new Map(),
     sprintsByProductId: new Map()
   });
+  const pendingMutationCountRef = React.useRef(0);
+  const boardMutationVersionRef = React.useRef(0);
+  const latestReloadRequestIdRef = React.useRef(0);
+  const activeReloadCountRef = React.useRef(0);
 
-  const reloadBoard = React.useCallback(async () => {
+  const reloadBoard = React.useCallback(async (options?: { force?: boolean }) => {
+    if (!options?.force && pendingMutationCountRef.current > 0) {
+      return;
+    }
+
+    const requestId = latestReloadRequestIdRef.current + 1;
+    latestReloadRequestIdRef.current = requestId;
+    const mutationVersion = boardMutationVersionRef.current;
+
+    activeReloadCountRef.current += 1;
     setLoading(true);
     try {
       const nextBoard = await productController.loadFocusedBoard();
+      if (requestId !== latestReloadRequestIdRef.current || mutationVersion !== boardMutationVersionRef.current) {
+        return;
+      }
       setBoard({
         hasActiveSprint: Boolean(nextBoard.hasActiveSprint),
         columns: nextBoard.columns ?? []
@@ -346,9 +362,14 @@ export const FocusedView = observer(function FocusedView() {
       setError("");
       setChartRefreshToken((current) => current + 1);
     } catch (loadError) {
-      setError(getErrorMessage(loadError));
+      if (requestId === latestReloadRequestIdRef.current) {
+        setError(getErrorMessage(loadError));
+      }
     } finally {
-      setLoading(false);
+      activeReloadCountRef.current = Math.max(0, activeReloadCountRef.current - 1);
+      if (activeReloadCountRef.current === 0) {
+        setLoading(false);
+      }
     }
   }, [productController]);
 
@@ -577,6 +598,8 @@ export const FocusedView = observer(function FocusedView() {
   }, [selectedChartProductId, selectedChartSprintId]);
 
   const withPendingTask = React.useCallback(async (taskId: string, job: () => Promise<void>) => {
+    pendingMutationCountRef.current += 1;
+    boardMutationVersionRef.current += 1;
     setPendingTaskIds((previous) => ({ ...previous, [taskId]: true }));
     try {
       await job();
@@ -584,9 +607,10 @@ export const FocusedView = observer(function FocusedView() {
       refreshSelectedChart();
     } catch (mutationError) {
       setError(getErrorMessage(mutationError));
-      await reloadBoard();
+      await reloadBoard({ force: true });
       refreshSelectedChart();
     } finally {
+      pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
       setPendingTaskIds((previous) => {
         const next = { ...previous };
         delete next[taskId];
