@@ -2888,7 +2888,7 @@ html .drawer-content .card {
 }
 
 .markdown-preview {
-  color: var(--text-secondary);
+  color: color-mix(in srgb, var(--text-main) 88%, var(--text-muted));
   line-height: 1.6;
   min-width: 0;
   width: 920px;
