@@ -231,11 +231,26 @@ function parseCssPixels(value: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function getEventPointerClientY(activatorEvent: Event, deltaY: number) {
+  const pointerEvent = activatorEvent as PointerEvent;
+  if (typeof pointerEvent.clientY === "number") {
+    return pointerEvent.clientY + deltaY;
+  }
+
+  const touchEvent = activatorEvent as TouchEvent;
+  const touch = touchEvent.touches?.[0] ?? touchEvent.changedTouches?.[0];
+  if (touch) {
+    return touch.clientY + deltaY;
+  }
+
+  return null;
+}
+
 function resolveDragPreview(
   columns: KanbanColumn[],
   activeDrag: ActiveDragState,
   overId: string,
-  translatedCenter?: number | null,
+  pointerClientY?: number | null,
   overTop?: number | null,
   overHeight?: number | null
 ): DragPreviewState | null {
@@ -255,10 +270,10 @@ function resolveDragPreview(
     if (overIndex < 0) {
       targetIndex = visibleTargetTasks.length;
     } else {
-      const isBelowOverTask = translatedCenter != null
+      const isBelowOverTask = pointerClientY != null
         && overTop != null
         && overHeight != null
-        && translatedCenter > overTop + overHeight / 2;
+        && pointerClientY > overTop + overHeight / 2;
       targetIndex = overIndex + (isBelowOverTask ? 1 : 0);
     }
   }
@@ -1073,15 +1088,12 @@ export function KanbanBoard({
     if (!activeDrag || !event.over) {
       return;
     }
-    const translatedTop = event.active.rect.current.translated?.top ?? null;
-    const translatedCenter = translatedTop != null && activeDrag.overlayHeight != null
-      ? translatedTop + activeDrag.overlayHeight / 2
-      : translatedTop;
+    const pointerClientY = getEventPointerClientY(event.activatorEvent, event.delta.y);
     const nextPreview = resolveDragPreview(
       activeDrag.snapshot,
       activeDrag,
       String(event.over.id),
-      translatedCenter,
+      pointerClientY,
       event.over.rect.top,
       event.over.rect.height
     );
@@ -1116,9 +1128,7 @@ export function KanbanBoard({
       snapshot,
       activeDrag,
       overId,
-      event.active.rect.current.translated?.top != null && activeDrag.overlayHeight != null
-        ? event.active.rect.current.translated.top + activeDrag.overlayHeight / 2
-        : event.active.rect.current.translated?.top ?? null,
+      getEventPointerClientY(event.activatorEvent, event.delta.y),
       event.over?.rect.top ?? null,
       event.over?.rect.height ?? null
     );
