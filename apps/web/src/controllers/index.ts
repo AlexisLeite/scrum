@@ -16,7 +16,12 @@ import {
   UserProductRoleAssignmentDto
 } from "@scrum/contracts";
 import { ApiError, apiClient } from "../api/client";
-import { RootStore } from "../stores/root-store";
+import {
+  RootStore,
+  productCollectionScope,
+  sessionCollectionScope,
+  storyCollectionScope,
+} from "../stores/root-store";
 
 export type ActivityListResult<T> = { items: T[]; page: number; pageSize: number; total: number };
 export type TaskDrawerData = {
@@ -32,22 +37,22 @@ export class AuthController {
     const result = await this.store.wrap(this.store.session, () =>
       apiClient.post<{ user: any }>("/auth/signup", payload)
     );
-    this.store.session.setUser(result.user);
+    this.store.setSessionUser(result.user);
   }
 
   async login(payload: { email: string; password: string }) {
     const result = await this.store.wrap(this.store.session, () =>
       apiClient.post<{ user: any }>("/auth/login", payload)
     );
-    this.store.session.setUser(result.user);
+    this.store.setSessionUser(result.user);
   }
 
   async refreshMe() {
     try {
       const me = await apiClient.get<any>("/auth/me");
-      this.store.session.setUser(me);
+      this.store.setSessionUser(me);
     } catch {
-      this.store.session.setUser(null);
+      this.store.setSessionUser(null);
     }
   }
 
@@ -56,7 +61,7 @@ export class AuthController {
       await apiClient.refreshSession();
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
-        this.store.session.setUser(null);
+        this.store.setSessionUser(null);
       }
       throw error;
     }
@@ -64,14 +69,14 @@ export class AuthController {
 
   async logout() {
     await apiClient.post("/auth/logout");
-    this.store.session.setUser(null);
+    this.store.setSessionUser(null);
   }
 
   async updateProfile(payload: { name: string; avatarUrl?: string }) {
     const user = await this.store.wrap(this.store.session, () =>
       apiClient.patch<any>("/auth/me", payload)
     );
-    this.store.session.setUser(user);
+    this.store.setSessionUser(user);
   }
 
   async getGitLabRedirect() {
@@ -193,6 +198,10 @@ export class TeamController {
 export class ProductController {
   constructor(private readonly store: RootStore) {}
 
+  private getErrorMessage(error: unknown) {
+    return error instanceof Error && error.message.trim() ? error.message : "Unexpected error";
+  }
+
   private async tryGetWithFallback<T>(primaryPath: string, fallbackPath: string): Promise<T> {
     try {
       return await apiClient.get<T>(primaryPath);
@@ -224,10 +233,26 @@ export class ProductController {
     this.store.setBoard({ ...this.store.board, columns });
   }
 
-  async loadProducts() {
-    const products = await this.store.wrap(this.store.products, () => apiClient.get<any[]>("/products"));
-    this.store.products.setItems(products);
-    return products;
+  async loadProducts(options?: { syncStore?: boolean }) {
+    const syncStore = options?.syncStore ?? true;
+    const scopeKey = sessionCollectionScope(this.store.session.user?.id);
+
+    if (syncStore) {
+      this.store.products.beginScopedLoad(scopeKey);
+    }
+
+    try {
+      const products = await apiClient.get<any[]>("/products");
+      if (syncStore) {
+        this.store.products.finishScopedLoad(scopeKey, products);
+      }
+      return products;
+    } catch (error) {
+      if (syncStore) {
+        this.store.products.failScopedLoad(scopeKey, this.getErrorMessage(error));
+      }
+      throw error;
+    }
   }
 
   async loadAssignableUsers(productId: string) {
@@ -264,12 +289,26 @@ export class ProductController {
     this.store.products.remove(productId);
   }
 
-  async loadStories(productId: string) {
-    const stories = await this.store.wrap(this.store.stories, () =>
-      apiClient.get<any[]>(`/products/${productId}/stories`)
-    );
-    this.store.stories.setItems(stories);
-    return stories;
+  async loadStories(productId: string, options?: { syncStore?: boolean }) {
+    const syncStore = options?.syncStore ?? true;
+    const scopeKey = productCollectionScope(productId);
+
+    if (syncStore) {
+      this.store.stories.beginScopedLoad(scopeKey);
+    }
+
+    try {
+      const stories = await apiClient.get<any[]>(`/products/${productId}/stories`);
+      if (syncStore) {
+        this.store.stories.finishScopedLoad(scopeKey, stories);
+      }
+      return stories;
+    } catch (error) {
+      if (syncStore) {
+        this.store.stories.failScopedLoad(scopeKey, this.getErrorMessage(error));
+      }
+      throw error;
+    }
   }
 
   async createStory(productId: string, payload: { title: string; description?: string; storyPoints: number; status: string }) {
@@ -289,9 +328,26 @@ export class ProductController {
     this.store.stories.upsert(story);
   }
 
-  async loadTasks(storyId: string) {
-    const tasks = await this.store.wrap(this.store.tasks, () => apiClient.get<any[]>(`/stories/${storyId}/tasks`));
-    this.store.tasks.setItems(tasks);
+  async loadTasks(storyId: string, options?: { syncStore?: boolean }) {
+    const syncStore = options?.syncStore ?? true;
+    const scopeKey = storyCollectionScope(storyId);
+
+    if (syncStore) {
+      this.store.tasks.beginScopedLoad(scopeKey);
+    }
+
+    try {
+      const tasks = await apiClient.get<any[]>(`/stories/${storyId}/tasks`);
+      if (syncStore) {
+        this.store.tasks.finishScopedLoad(scopeKey, tasks);
+      }
+      return tasks;
+    } catch (error) {
+      if (syncStore) {
+        this.store.tasks.failScopedLoad(scopeKey, this.getErrorMessage(error));
+      }
+      throw error;
+    }
   }
 
   async createTask(storyId: string, payload: any) {
@@ -374,12 +430,26 @@ export class ProductController {
     return task;
   }
 
-  async loadSprints(productId: string) {
-    const sprints = await this.store.wrap(this.store.sprints, () =>
-      apiClient.get<any[]>(`/products/${productId}/sprints`)
-    );
-    this.store.sprints.setItems(sprints);
-    return sprints;
+  async loadSprints(productId: string, options?: { syncStore?: boolean }) {
+    const syncStore = options?.syncStore ?? true;
+    const scopeKey = productCollectionScope(productId);
+
+    if (syncStore) {
+      this.store.sprints.beginScopedLoad(scopeKey);
+    }
+
+    try {
+      const sprints = await apiClient.get<any[]>(`/products/${productId}/sprints`);
+      if (syncStore) {
+        this.store.sprints.finishScopedLoad(scopeKey, sprints);
+      }
+      return sprints;
+    } catch (error) {
+      if (syncStore) {
+        this.store.sprints.failScopedLoad(scopeKey, this.getErrorMessage(error));
+      }
+      throw error;
+    }
   }
 
   async createSprint(productId: string, payload: any) {

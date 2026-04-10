@@ -11,7 +11,7 @@ import {
 import {
   productOverviewPath,
 } from "../../routes/product-routes";
-import { useRootStore } from "../../stores/root-store";
+import { sessionCollectionScope, useRootStore } from "../../stores/root-store";
 import { ProductUpsertionDrawer } from "../../ui/drawers/backoffice/ProductUpsertionDrawer";
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
 
@@ -32,9 +32,11 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
   const canEditProducts = canUpdateProductsAdministration(session);
   const canDeleteProducts = canDeleteProductsAdministration(session);
   const [search, setSearch] = React.useState("");
+  const productsScopeKey = sessionCollectionScope(session?.id);
 
   React.useEffect(() => { void controller.loadProducts(); }, [controller]);
-  const products = store.products.items as ProductItem[];
+  const products = store.products.getItems(productsScopeKey) as ProductItem[];
+  const loadingProducts = store.products.isLoadingScope(productsScopeKey);
   const filteredProducts = React.useMemo(() => {
     const query = normalizeText(search.trim());
     if (!query) {
@@ -98,6 +100,11 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
             </tr>
           </thead>
           <tbody>
+            {loadingProducts && products.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="muted">Cargando catalogo de productos...</td>
+              </tr>
+            ) : null}
             {filteredProducts.map((product) => (
               <tr key={product.id}>
                 <td>{product.key}</td>
@@ -114,12 +121,12 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
                 </td>
               </tr>
             ))}
-            {products.length === 0 ? (
+            {!loadingProducts && products.length === 0 ? (
               <tr>
                 <td colSpan={4} className="muted">No hay productos creados.</td>
               </tr>
             ) : null}
-            {products.length > 0 && filteredProducts.length === 0 ? (
+            {!loadingProducts && products.length > 0 && filteredProducts.length === 0 ? (
               <tr>
                 <td colSpan={4} className="muted">No hay productos que coincidan con el filtro.</td>
               </tr>

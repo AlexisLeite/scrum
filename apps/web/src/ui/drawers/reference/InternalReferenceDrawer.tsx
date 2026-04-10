@@ -86,11 +86,16 @@ function InternalReferencePanel(props: { reference: InternalReference; close: ()
     void (async () => {
       setLoading(true);
       setError("");
+      setProduct(null);
+      setStory(null);
+      setTask(null);
+      setUser(null);
+      setUserActivity([]);
       try {
         if (reference.entityType === "PRODUCT") {
-          await productController.loadProducts();
+          const products = await productController.loadProducts({ syncStore: false });
           if (!active) return;
-          const matchedProduct = (store.products.items as ProductItem[]).find((entry) => entry.id === reference.entityId) ?? null;
+          const matchedProduct = (products as ProductItem[]).find((entry) => entry.id === reference.entityId) ?? null;
           setProduct(matchedProduct);
           return;
         }
@@ -99,9 +104,9 @@ function InternalReferencePanel(props: { reference: InternalReference; close: ()
           if (!reference.productId) {
             throw new Error("La referencia de historia no incluye producto.");
           }
-          await productController.loadStories(reference.productId);
+          const stories = await productController.loadStories(reference.productId, { syncStore: false });
           if (!active) return;
-          const matchedStory = (store.stories.items as StoryItem[]).find((entry) => entry.id === reference.entityId) ?? null;
+          const matchedStory = (stories as StoryItem[]).find((entry) => entry.id === reference.entityId) ?? null;
           setStory(matchedStory);
           return;
         }
@@ -152,8 +157,6 @@ function InternalReferencePanel(props: { reference: InternalReference; close: ()
     reference.entityType,
     reference.label,
     reference.productId,
-    store.products.items,
-    store.stories.items,
     store.teams.items,
     store.users.items,
     teamController

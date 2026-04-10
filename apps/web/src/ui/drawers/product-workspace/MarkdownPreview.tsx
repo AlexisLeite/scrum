@@ -123,8 +123,8 @@ async function openInternalReference(
 ) {
   try {
     if (reference.entityType === "PRODUCT") {
-      await productController.loadProducts();
-      const product = (store.products.items as Array<{ id: string; name: string; key: string; description: string | null }>)
+      const products = await productController.loadProducts({ syncStore: false });
+      const product = (products as Array<{ id: string; name: string; key: string; description: string | null }>)
         .find((entry) => entry.id === reference.entityId);
 
       if (product) {
@@ -134,8 +134,8 @@ async function openInternalReference(
     }
 
     if (reference.entityType === "STORY" && reference.productId) {
-      await productController.loadStories(reference.productId);
-      const story = (store.stories.items as Array<{
+      const stories = await productController.loadStories(reference.productId, { syncStore: false });
+      const story = (stories as Array<{
         id: string;
         title: string;
         description: string | null;
@@ -158,23 +158,23 @@ async function openInternalReference(
       const detailProductId = reference.productId || (detail as { productId?: string | null }).productId || "";
 
       if (detailProductId) {
-        await Promise.all([
-          productController.loadStories(detailProductId),
-          productController.loadSprints(detailProductId)
+        const [stories, sprints] = await Promise.all([
+          productController.loadStories(detailProductId, { syncStore: false }),
+          productController.loadSprints(detailProductId, { syncStore: false })
         ]);
 
         const assignees = (await productController.loadAssignableUsers(detailProductId))
           .map((entry) => ({ id: entry.id, name: entry.name }));
 
         const statusOptions = buildStatusOptions(detail.status);
-        const stories = (store.stories.items as Array<{ id: string; title: string }>).map((entry) => ({ id: entry.id, title: entry.title }));
-        const sprints = (store.sprints.items as Array<{ id: string; name: string }>).map((entry) => ({ id: entry.id, name: entry.name }));
+        const storyOptions = (stories as Array<{ id: string; title: string }>).map((entry) => ({ id: entry.id, title: entry.title }));
+        const sprintOptions = (sprints as Array<{ id: string; name: string }>).map((entry) => ({ id: entry.id, name: entry.name }));
 
         store.drawers.add(new TaskUpsertionDrawer({
           controller: productController,
           productId: detailProductId,
-          stories,
-          sprints,
+          stories: storyOptions,
+          sprints: sprintOptions,
           assignees,
           statusOptions,
           task: {

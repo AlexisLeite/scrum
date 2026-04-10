@@ -4,7 +4,7 @@ import { observer } from "mobx-react-lite";
 import { FiPrinter } from "react-icons/fi";
 import { Link, useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
-import { useRootStore } from "../../stores/root-store";
+import { productCollectionScope, sessionCollectionScope, useRootStore } from "../../stores/root-store";
 import { buildAxisTheme, buildTooltipTheme, useEChartsTheme } from "../../ui/charts/echarts-theme";
 import { buildBurndownOption } from "../../ui/charts/burndown-chart";
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
@@ -102,6 +102,9 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
   const [productStats, setProductStats] = React.useState<OverviewStats>(null);
   const [productVelocity, setProductVelocity] = React.useState<ProductVelocityPoint[]>([]);
   const [metricsError, setMetricsError] = React.useState("");
+  const [metricsLoading, setMetricsLoading] = React.useState(false);
+  const productsScopeKey = sessionCollectionScope(user?.id);
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
 
   React.useEffect(() => {
     if (!productId) return;
@@ -110,9 +113,12 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
     void controller.loadSprints(productId);
   }, [controller, productId]);
 
-  const product = (store.products.items as ProductItem[]).find((entry) => entry.id === productId);
-  const stories = store.stories.items as StoryItem[];
-  const sprints = store.sprints.items as SprintItem[];
+  const product = (store.products.getItems(productsScopeKey) as ProductItem[]).find((entry) => entry.id === productId);
+  const productsLoading = store.products.isLoadingScope(productsScopeKey);
+  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
+  const storiesLoading = store.stories.isLoadingScope(productScopeKey);
+  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
+  const sprintsLoading = store.sprints.isLoadingScope(productScopeKey);
   const focusSprint = resolveFocusSprint(sprints);
 
   React.useEffect(() => {
@@ -123,7 +129,11 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
         return;
       }
 
+      setMetricsLoading(true);
       setMetricsError("");
+      setProductStats(null);
+      setProductVelocity([]);
+      store.clearAnalytics();
       try {
         const [stats, velocity] = await Promise.all([
           controller.loadProductMetrics(productId, {
@@ -148,6 +158,10 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
         setProductStats(null);
         setProductVelocity([]);
         setMetricsError(error instanceof Error && error.message.trim() ? error.message : "No se pudo cargar el resumen del producto.");
+      } finally {
+        if (active) {
+          setMetricsLoading(false);
+        }
       }
     };
 
@@ -170,6 +184,15 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
     [stories]
   );
   if (!productId) return null;
+
+  if ((productsLoading && !product) || (product && (storiesLoading || sprintsLoading) && stories.length === 0 && sprints.length === 0)) {
+    return (
+      <section className="card page-state">
+        <h2>Cargando resumen del producto</h2>
+        <p>Preparando datos del producto, backlog y sprints sin reutilizar informacion previa.</p>
+      </section>
+    );
+  }
 
   const canPrintProduct = Boolean(user && canManageProductAdministration(user, productId));
 
@@ -249,6 +272,12 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
           </article>
         </div>
       </section>
+      {metricsLoading ? (
+        <section className="card page-state">
+          <h3>Actualizando metricas</h3>
+          <p>Recalculando indicadores y series del producto seleccionado.</p>
+        </section>
+      ) : null}
 
       <section className="metrics-grid metrics-summary-grid product-overview-kpis">
         <article className="card metric-kpi">

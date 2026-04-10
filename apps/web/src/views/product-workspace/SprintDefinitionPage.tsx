@@ -3,7 +3,7 @@ import { observer } from "mobx-react-lite";
 import { NavLink, Navigate, useNavigate, useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
 import { productSprintsPath } from "../../routes/product-routes";
-import { useRootStore } from "../../stores/root-store";
+import { productCollectionScope, useRootStore } from "../../stores/root-store";
 import { SprintUpsertionForm } from "../../ui/drawers/product-workspace/SprintUpsertionDrawer";
 
 type SprintItem = {
@@ -23,6 +23,7 @@ export const SprintDefinitionPage = observer(function SprintDefinitionPage() {
   const { productId, sprintId } = useParams<{ productId: string; sprintId: string }>();
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
 
   React.useEffect(() => {
     let active = true;
@@ -55,7 +56,7 @@ export const SprintDefinitionPage = observer(function SprintDefinitionPage() {
     return <Navigate to="/products" replace />;
   }
 
-  const sprint = (store.sprints.items as SprintItem[]).find((entry) => entry.id === sprintId);
+  const sprint = (store.sprints.getItems(productScopeKey) as SprintItem[]).find((entry) => entry.id === sprintId);
 
   if (loading) {
     return (

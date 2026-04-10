@@ -4,7 +4,7 @@ import { ProductController } from "../../../controllers";
 import { useProductAssignableUsers } from "../../../hooks/useProductAssignableUsers";
 import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productStoryDefinitionPath } from "../../../routes/product-routes";
-import { useRootStore } from "../../../stores/root-store";
+import { productCollectionScope, storyCollectionScope, useRootStore } from "../../../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
@@ -154,8 +154,10 @@ export function StoryUpsertionForm(props: {
     when: hasUnsavedChanges
   });
 
-  const tasks = store.tasks.items as StoryTask[];
-  const sprints = store.sprints.items as SprintOption[];
+  const storyScopeKey = story?.id ? storyCollectionScope(story.id) : null;
+  const productScopeKey = productCollectionScope(productId);
+  const tasks = store.tasks.getItems(storyScopeKey) as StoryTask[];
+  const sprints = store.sprints.getItems(productScopeKey) as SprintOption[];
   const assignees = React.useMemo(
     () => assignableUsers.map((entry) => ({ id: entry.id, name: entry.name })),
     [assignableUsers]

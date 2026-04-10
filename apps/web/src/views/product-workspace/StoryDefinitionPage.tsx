@@ -3,7 +3,7 @@ import { observer } from "mobx-react-lite";
 import { NavLink, Navigate, useNavigate, useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
 import { productBacklogPath } from "../../routes/product-routes";
-import { useRootStore } from "../../stores/root-store";
+import { productCollectionScope, useRootStore } from "../../stores/root-store";
 import { StoryUpsertionForm } from "../../ui/drawers/product-workspace/StoryUpsertionDrawer";
 
 type StoryItem = {
@@ -21,6 +21,7 @@ export const StoryDefinitionPage = observer(function StoryDefinitionPage() {
   const { productId, storyId } = useParams<{ productId: string; storyId: string }>();
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
 
   React.useEffect(() => {
     let active = true;
@@ -53,7 +54,7 @@ export const StoryDefinitionPage = observer(function StoryDefinitionPage() {
     return <Navigate to="/products" replace />;
   }
 
-  const story = (store.stories.items as StoryItem[]).find((entry) => entry.id === storyId);
+  const story = (store.stories.getItems(productScopeKey) as StoryItem[]).find((entry) => entry.id === storyId);
 
   if (loading) {
     return (

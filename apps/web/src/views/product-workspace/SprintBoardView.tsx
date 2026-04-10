@@ -4,7 +4,7 @@ import ReactECharts from "echarts-for-react";
 import { useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
-import { useRootStore } from "../../stores/root-store";
+import { productCollectionScope, useRootStore } from "../../stores/root-store";
 import { TaskUpsertionDrawer } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { KanbanBoard } from "../../ui/kanban";
 import { buildAxisTheme, buildLegendTheme, buildTooltipTheme, useEChartsTheme } from "../../ui/charts/echarts-theme";
@@ -32,15 +32,24 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const user = store.session.user;
   const canManageSprintBoard = canManageSprints(user?.role);
   const [boardError, setBoardError] = React.useState("");
+  const [boardLoading, setBoardLoading] = React.useState(false);
   const [pendingTaskIds, setPendingTaskIds] = React.useState<Record<string, boolean>>({});
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
 
   const reloadBoardData = React.useCallback(async () => {
     if (!productId || !sprintId) return;
-    await Promise.all([controller.loadBoard(sprintId), controller.loadBurnup(productId, sprintId)]);
+    setBoardLoading(true);
+    try {
+      await Promise.all([controller.loadBoard(sprintId), controller.loadBurnup(productId, sprintId)]);
+    } finally {
+      setBoardLoading(false);
+    }
   }, [controller, productId, sprintId]);
 
   React.useEffect(() => {
     if (!productId || !sprintId) return;
+    store.setBoard(null);
+    store.setBurnup([]);
     void reloadBoardData();
     void controller.loadStories(productId);
     void controller.loadSprints(productId);
@@ -52,8 +61,8 @@ export const SprintBoardView = observer(function SprintBoardView() {
 
   if (!productId || !sprintId) return null;
 
-  const stories = store.stories.items as StoryItem[];
-  const sprints = store.sprints.items as SprintItem[];
+  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
+  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
   const { assignableUsers } = useProductAssignableUsers(controller, [productId]);
   const currentSprint = sprints.find((sprint) => sprint.id === sprintId);
   const isClosedSprint = currentSprint?.status === "COMPLETED" || currentSprint?.status === "CANCELLED";
@@ -61,6 +70,15 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const boardAssignees = assignableUsers;
   const workflowStatuses = (store.board?.columns ?? []).map((column) => column.name);
   const statusOptions = workflowStatuses.length > 0 ? workflowStatuses : [...DEFAULT_TASK_STATUS_OPTIONS];
+
+  if (boardLoading && !store.board) {
+    return (
+      <section className="card page-state">
+        <h2>Cargando tablero</h2>
+        <p>Preparando columnas, tareas y burnup del sprint seleccionado.</p>
+      </section>
+    );
+  }
 
   const openBoardTaskDrawer = (options: { task?: BoardTask; defaultStatus?: string }) => {
     const { task, defaultStatus } = options;

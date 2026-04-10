@@ -17,7 +17,11 @@ import {
   productOverviewPath,
   productSprintsPath
 } from "../../routes/product-routes";
-import { useRootStore } from "../../stores/root-store";
+import {
+  productCollectionScope,
+  sessionCollectionScope,
+  useRootStore,
+} from "../../stores/root-store";
 import { buildAxisTheme, buildLegendTheme, buildTooltipTheme, useEChartsTheme } from "../../ui/charts/echarts-theme";
 import { ProductUpsertionForm } from "../../ui/drawers/backoffice/ProductUpsertionDrawer";
 import { StoryUpsertionForm } from "../../ui/drawers/product-workspace/StoryUpsertionDrawer";
@@ -409,10 +413,11 @@ export const ProductDefinitionView = observer(function ProductDefinitionView() {
     return <Navigate to="/products" replace />;
   }
 
-  const products = store.products.items as ProductItem[];
+  const productsScopeKey = sessionCollectionScope(store.session.user?.id);
+  const products = store.products.getItems(productsScopeKey) as ProductItem[];
   const product = products.find((entry) => entry.id === productId);
 
-  if (!product && store.products.loading) {
+  if (!product && store.products.isLoadingScope(productsScopeKey)) {
     return (
       <section className="card page-state">
         <h2>Cargando producto</h2>
@@ -474,10 +479,11 @@ export const StoryDefinitionView = observer(function StoryDefinitionView() {
     return <Navigate to="/products" replace />;
   }
 
-  const stories = store.stories.items as StoryItem[];
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
+  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
   const story = stories.find((entry) => entry.id === storyId);
 
-  if (!story && store.stories.loading) {
+  if (!story && store.stories.isLoadingScope(productScopeKey)) {
     return (
       <section className="card page-state">
         <h2>Cargando historia</h2>
@@ -587,7 +593,8 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
     return <Navigate to="/products" replace />;
   }
 
-  const sprints = store.sprints.items as SprintItem[];
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
+  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
   const sprint = sprints.find((entry) => entry.id === sprintId);
 
   const reloadMembers = React.useCallback(async () => {
@@ -628,9 +635,10 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
 
   React.useEffect(() => {
     if (!sprintId) return;
+    store.setBoard(null);
     void reloadMembers();
     void reloadTaskPools();
-  }, [reloadMembers, reloadTaskPools, sprintId]);
+  }, [reloadMembers, reloadTaskPools, sprintId, store]);
 
   const availableMembers = React.useMemo(() => {
     const byId = new Map<string, SprintMember>();
@@ -731,7 +739,7 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
     setOrderedTasks(flattenedTasks);
   }, [flattenedTasks, sprintId]);
 
-  const stories = store.stories.items as StoryItem[];
+  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
   const workflowStatuses = (store.board?.columns ?? []).map((column) => column.name);
   const statusOptions = workflowStatuses.length > 0 ? workflowStatuses : [...DEFAULT_TASK_STATUS_OPTIONS];
 
@@ -930,7 +938,7 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
     };
   }, [normalizedSelectedMemberIds, productId]);
 
-  if (!sprint && store.sprints.loading) {
+  if (!sprint && store.sprints.isLoadingScope(productScopeKey)) {
     return (
       <section className="card page-state">
         <h2>Cargando sprint</h2>
@@ -1497,6 +1505,8 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
     if (!productId || !taskId) return;
     setLoading(true);
     setError("");
+    setTaskDetail(null);
+    store.setBoard(null);
     try {
       const detail = await controller.loadTaskDetail(taskId);
       setTaskDetail(detail as DetailTask);
@@ -1506,7 +1516,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
     } finally {
       setLoading(false);
     }
-  }, [controller, productId, taskId]);
+  }, [controller, productId, store, taskId]);
 
   React.useEffect(() => {
     void loadTaskDetail();
@@ -1514,11 +1524,13 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
 
   React.useEffect(() => {
     if (!taskDetail?.sprint?.id) return;
+    store.setBoard(null);
     void controller.loadBoard(taskDetail.sprint.id);
-  }, [controller, taskDetail?.sprint?.id]);
+  }, [controller, store, taskDetail?.sprint?.id]);
 
-  const stories = store.stories.items as StoryItem[];
-  const sprints = store.sprints.items as SprintItem[];
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
+  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
+  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
   const assignees = React.useMemo(
     () => assignableUsers.map((entry) => ({ id: entry.id, name: entry.name })),
     [assignableUsers]

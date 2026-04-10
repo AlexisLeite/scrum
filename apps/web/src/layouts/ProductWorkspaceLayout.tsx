@@ -9,7 +9,7 @@ import {
   productOverviewPath,
   productSprintsPath
 } from "../routes/product-routes";
-import { useRootStore } from "../stores/root-store";
+import { sessionCollectionScope, useRootStore } from "../stores/root-store";
 import { AdministrationLinks } from "../views/AdministrationView";
 import {
   canAccessAdministration,
@@ -56,14 +56,16 @@ export const ProductWorkspaceLayout = observer(function ProductWorkspaceLayout()
   const { productId, storyId, sprintId, taskId } = useParams<{ productId: string; storyId?: string; sprintId?: string; taskId?: string }>();
   const location = useLocation();
   const user = store.session.user;
+  const productsScopeKey = sessionCollectionScope(user?.id);
+  const products = store.products.getItems(productsScopeKey) as Array<{ id: string }>;
 
   React.useEffect(() => {
     if (!productId) return;
-    if ((store.products.items as Array<{ id: string }>).some((product) => product.id === productId)) {
+    if (products.some((product) => product.id === productId)) {
       return;
     }
     void controller.loadProducts();
-  }, [controller, productId, store.products.items]);
+  }, [controller, productId, products]);
 
   if (!productId) return <Navigate to="/products" replace />;
   if (!user) {

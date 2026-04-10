@@ -3,7 +3,7 @@ import { observer } from "mobx-react-lite";
 import { useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
-import { useRootStore } from "../../stores/root-store";
+import { productCollectionScope, useRootStore } from "../../stores/root-store";
 import { SearchableSelect } from "../../ui/SearchableSelect";
 import { ProductMetricsPanel } from "./ProductMetricsPanel";
 import { getErrorMessage, SprintItem } from "./ProductWorkspaceViewShared";
@@ -16,6 +16,7 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
   const [userId, setUserId] = React.useState("");
   const [sprintId, setSprintId] = React.useState("");
   const [statsError, setStatsError] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
   const [productStats, setProductStats] = React.useState<{
     window: string;
     from: string;
@@ -23,19 +24,34 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
     tasks: { worked: number; completed: number; completionRate: number };
     velocity: { completedPoints: number; completedSprints: number; averagePointsPerSprint: number };
   } | null>(null);
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
 
   React.useEffect(() => {
     if (productId) void controller.loadSprints(productId);
   }, [controller, productId]);
 
+  React.useEffect(() => {
+    setSprintId("");
+    setUserId("");
+  }, [productId]);
+
   const { assignableUsers } = useProductAssignableUsers(controller, productId ? [productId] : []);
-  const sprints = store.sprints.items as SprintItem[];
+  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
+  const loadingSprints = store.sprints.isLoadingScope(productScopeKey);
   const selectedSprint = sprints.find((sprint) => sprint.id === sprintId);
   const visibleUsers = assignableUsers;
   const selectedUser = visibleUsers.find((entry) => entry.id === userId);
 
   React.useEffect(() => {
-    if (sprints.length === 0 || sprintId) return;
+    if (sprints.length === 0) {
+      if (sprintId) {
+        setSprintId("");
+      }
+      return;
+    }
+    if (sprintId && sprints.some((sprint) => sprint.id === sprintId)) {
+      return;
+    }
     setSprintId(sprints.find((sprint) => sprint.status === "ACTIVE")?.id ?? sprints[0].id);
   }, [sprintId, sprints]);
 
@@ -47,7 +63,10 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
         return;
       }
 
+      setLoading(true);
       setStatsError("");
+      setProductStats(null);
+      store.clearAnalytics();
       try {
         const stats = await controller.loadProductMetrics(productId, {
           window: windowSize,
@@ -60,6 +79,10 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
       } catch (error) {
         if (active) {
           setStatsError(getErrorMessage(error));
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
         }
       }
     };
@@ -77,6 +100,7 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
     <div className="stack-lg">
       <section className="card">
         <h2>Indicadores de desempeno</h2>
+        {loadingSprints && sprints.length === 0 ? <p className="muted">Cargando sprints del producto...</p> : null}
         <div className="form-grid three-columns">
           <label>
             Ventana
@@ -119,6 +143,7 @@ export const ProductMetricsView = observer(function ProductMetricsView() {
         </div>
         <p className="muted">Las metricas se actualizan automaticamente cuando cambias la ventana, sprint o usuario.</p>
         <p className="muted">Los filtros son acumulativos: producto + sprint + usuario.</p>
+        {loading ? <p className="muted">Actualizando indicadores...</p> : null}
         {statsError ? <p className="error-text">{statsError}</p> : null}
       </section>
       <ProductMetricsPanel

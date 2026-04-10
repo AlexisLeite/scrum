@@ -3,7 +3,7 @@ import { observer } from "mobx-react-lite";
 import { useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
-import { useRootStore } from "../../stores/root-store";
+import { productCollectionScope, useRootStore } from "../../stores/root-store";
 import { SearchableSelect } from "../../ui/SearchableSelect";
 import { StoryUpsertionDrawer } from "../../ui/drawers/product-workspace/StoryUpsertionDrawer";
 import { TaskUpsertionDrawer } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
@@ -138,6 +138,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const [taskStatusFilter, setTaskStatusFilter] = React.useState("");
   const [taskCreatedFrom, setTaskCreatedFrom] = React.useState("");
   const [taskCreatedTo, setTaskCreatedTo] = React.useState("");
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
 
   React.useEffect(() => {
     if (!productId) return;
@@ -164,7 +165,8 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
 
   if (!productId) return null;
 
-  const stories = store.stories.items as StoryItem[];
+  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
+  const loadingStories = store.stories.isLoadingScope(productScopeKey);
   const normalizedSearch = React.useMemo(() => normalizeSearchValue(search.trim()), [search]);
   const taskFilterOptions = React.useMemo(() => {
     const assignees = new Map<string, BacklogTaskFilterOption>();
@@ -272,6 +274,15 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
     [visibleStories]
   );
 
+  if (loadingStories && stories.length === 0) {
+    return (
+      <section className="card page-state">
+        <h2>Cargando backlog</h2>
+        <p>Resolviendo historias y tareas del producto actual.</p>
+      </section>
+    );
+  }
+
   const reloadBacklog = async () => {
     await controller.loadStories(productId);
   };
@@ -294,7 +305,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
     ]);
 
     return {
-      stories: store.stories.items as StoryItem[],
+      stories: store.stories.getItems(productScopeKey) as StoryItem[],
       sprints: sprints as SprintItem[],
       assignees: nextAssignableUsers.map((entry) => ({ id: entry.id, name: entry.name }))
     };

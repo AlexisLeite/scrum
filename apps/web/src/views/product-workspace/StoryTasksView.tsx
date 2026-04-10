@@ -3,7 +3,7 @@ import { observer } from "mobx-react-lite";
 import { useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
-import { useRootStore } from "../../stores/root-store";
+import { productCollectionScope, storyCollectionScope, useRootStore } from "../../stores/root-store";
 import { SearchableSelect, buildSearchableSelectOptions } from "../../ui/SearchableSelect";
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
 import { TaskCompletionDialog } from "../../ui/drawers/product-workspace/TaskCompletionDialog";
@@ -35,6 +35,8 @@ export const StoryTasksView = observer(function StoryTasksView() {
   const [search, setSearch] = React.useState("");
   const [updatingTaskId, setUpdatingTaskId] = React.useState("");
   const [completionRequest, setCompletionRequest] = React.useState<{ taskId: string; title: string } | null>(null);
+  const storyScopeKey = storyId ? storyCollectionScope(storyId) : null;
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
 
   React.useEffect(() => {
     if (!storyId || !productId) return;
@@ -45,10 +47,13 @@ export const StoryTasksView = observer(function StoryTasksView() {
 
   if (!storyId || !productId) return null;
 
-  const tasks = store.tasks.items as TaskItem[];
-  const stories = store.stories.items as StoryItem[];
+  const tasks = store.tasks.getItems(storyScopeKey) as TaskItem[];
+  const tasksLoading = store.tasks.isLoadingScope(storyScopeKey);
+  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
+  const storiesLoading = store.stories.isLoadingScope(productScopeKey);
   const currentStory = stories.find((story) => story.id === storyId);
-  const sprints = store.sprints.items as SprintItem[];
+  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
+  const sprintsLoading = store.sprints.isLoadingScope(productScopeKey);
   const sprintNameById = new Map(sprints.map((sprint) => [sprint.id, sprint.name]));
   const assigneeNameById = new Map(assignableUsers.map((entry) => [entry.id, entry.name]));
   const statusOptions = buildStatusOptions(...tasks.map((task) => task.status));
@@ -73,6 +78,15 @@ export const StoryTasksView = observer(function StoryTasksView() {
       ].some((value) => normalizeSearchValue(value).includes(normalizedSearch));
     });
   }, [assigneeNameById, normalizedSearch, sprintNameById, tasks]);
+
+  if ((tasksLoading && tasks.length === 0) || (storiesLoading && !currentStory) || (sprintsLoading && sprints.length === 0 && tasks.length === 0)) {
+    return (
+      <section className="card page-state">
+        <h2>Cargando tareas de la historia</h2>
+        <p>Preparando historia, tareas y sprints disponibles.</p>
+      </section>
+    );
+  }
 
   const reloadStoryTasks = async () => {
     await Promise.all([controller.loadTasks(storyId), controller.loadStories(productId)]);

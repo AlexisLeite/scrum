@@ -3,7 +3,7 @@ import { observer } from "mobx-react-lite";
 import { NavLink, useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
 import { productBoardPath, productSprintDefinitionPath } from "../../routes/product-routes";
-import { useRootStore } from "../../stores/root-store";
+import { productCollectionScope, useRootStore } from "../../stores/root-store";
 import { SprintUpsertionDrawer } from "../../ui/drawers/product-workspace/SprintUpsertionDrawer";
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
 import { canManageSprints } from "../../lib/permissions";
@@ -14,6 +14,7 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
   const productController = React.useMemo(() => new ProductController(store), [store]);
   const { productId } = useParams<{ productId: string }>();
   const canManageSprintPlanning = canManageSprints(store.session.user?.role);
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
 
   React.useEffect(() => {
     if (productId) void productController.loadSprints(productId);
@@ -21,7 +22,8 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
 
   if (!productId) return null;
 
-  const sprints = store.sprints.items as SprintItem[];
+  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
+  const loadingSprints = store.sprints.isLoadingScope(productScopeKey);
 
   const openSprintDrawer = (sprint?: SprintItem) => {
     store.drawers.add(
@@ -47,6 +49,12 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
             </button>
           ) : null}
         </div>
+        {loadingSprints && sprints.length === 0 ? (
+          <section className="page-state">
+            <h4>Cargando sprints</h4>
+            <p>Trayendo la planificacion del producto sin reutilizar el sprint anterior.</p>
+          </section>
+        ) : null}
         <div className="sprint-grid sprint-planning-grid">
           {sprints.map((sprint) => (
             <article key={sprint.id} className="sprint-tile sprint-planning-tile">
@@ -119,7 +127,7 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
               </div>
             </article>
           ))}
-          {sprints.length === 0 ? <p className="muted">No hay sprints para este producto.</p> : null}
+          {!loadingSprints && sprints.length === 0 ? <p className="muted">No hay sprints para este producto.</p> : null}
         </div>
       </section>
     </div>

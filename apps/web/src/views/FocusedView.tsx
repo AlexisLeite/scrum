@@ -374,11 +374,11 @@ export const FocusedView = observer(function FocusedView() {
     void (async () => {
       try {
         const [products, sprintCollections] = await Promise.all([
-          productController.loadProducts(),
+          productController.loadProducts({ syncStore: false }),
           Promise.all(
             focusedProductIds.map(async (productId) => ({
               productId,
-              sprints: await productController.loadSprints(productId)
+              sprints: await productController.loadSprints(productId, { syncStore: false })
             }))
           )
         ]);
@@ -501,7 +501,7 @@ export const FocusedView = observer(function FocusedView() {
       let sprints = cachedSprints;
 
       if (!stories) {
-        stories = (await productController.loadStories(productId) as StoryItem[]).map((story) => ({
+        stories = (await productController.loadStories(productId, { syncStore: false }) as StoryItem[]).map((story) => ({
           id: story.id,
           title: story.title
         }));
@@ -509,7 +509,7 @@ export const FocusedView = observer(function FocusedView() {
       }
 
       if (!sprints) {
-        sprints = (await productController.loadSprints(productId) as SprintItem[]).map((sprint) => ({
+        sprints = (await productController.loadSprints(productId, { syncStore: false }) as SprintItem[]).map((sprint) => ({
           id: sprint.id,
           name: sprint.name,
           teamId: sprint.teamId ?? null
@@ -697,7 +697,7 @@ export const FocusedView = observer(function FocusedView() {
             allowSprintChange: false,
             onDone: async () => {
               await reloadBoard();
-              await productController.loadStories(creationContext.productId);
+              await productController.loadStories(creationContext.productId, { syncStore: false });
             }
           })
         );
