@@ -242,6 +242,32 @@ function findTask(board: FocusedBoard, taskId: string): FocusedTask | undefined 
   return undefined;
 }
 
+function getFocusedTaskContext(task: Pick<FocusedTask, "productId" | "sprintId" | "product" | "sprint">) {
+  return {
+    productId: task.productId ?? task.product?.id ?? null,
+    sprintId: task.sprintId ?? task.sprint?.id ?? null
+  };
+}
+
+function isSameFocusedTaskContext(
+  task: Pick<FocusedTask, "productId" | "sprintId" | "product" | "sprint">,
+  context: ReturnType<typeof getFocusedTaskContext>
+) {
+  const taskContext = getFocusedTaskContext(task);
+  return taskContext.productId === context.productId && taskContext.sprintId === context.sprintId;
+}
+
+function sortTasksByBoardOrder(tasks: FocusedTask[]) {
+  return [...tasks].sort((left, right) => {
+    const leftOrder = typeof left.boardOrder === "number" ? left.boardOrder : Number.MAX_SAFE_INTEGER;
+    const rightOrder = typeof right.boardOrder === "number" ? right.boardOrder : Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+    return String(left.updatedAt ?? "").localeCompare(String(right.updatedAt ?? ""));
+  });
+}
+
 function patchTaskInBoard(board: FocusedBoard, updatedTask: FocusedTask): FocusedBoard {
   const nextColumns = board.columns.map((column) => ({
     ...column,
@@ -253,19 +279,13 @@ function patchTaskInBoard(board: FocusedBoard, updatedTask: FocusedTask): Focuse
     return board;
   }
 
-  targetColumn.tasks = [...targetColumn.tasks, updatedTask].sort((left, right) => {
-    const leftOrder = typeof left.boardOrder === "number" ? left.boardOrder : Number.MAX_SAFE_INTEGER;
-    const rightOrder = typeof right.boardOrder === "number" ? right.boardOrder : Number.MAX_SAFE_INTEGER;
-    if (leftOrder !== rightOrder) {
-      return leftOrder - rightOrder;
-    }
-    return String(left.updatedAt ?? "").localeCompare(String(right.updatedAt ?? ""));
-  });
+  targetColumn.tasks = sortTasksByBoardOrder([...targetColumn.tasks, updatedTask]);
 
   return { ...board, columns: nextColumns };
 }
 
 function placeTaskInBoard(board: FocusedBoard, updatedTask: FocusedTask, targetStatus: string, targetPosition: number): FocusedBoard {
+  const movedTaskContext = getFocusedTaskContext(updatedTask);
   const nextColumns = board.columns.map((column) => ({
     ...column,
     tasks: column.tasks.filter((task) => task.id !== updatedTask.id)
@@ -276,8 +296,9 @@ function placeTaskInBoard(board: FocusedBoard, updatedTask: FocusedTask, targetS
     return board;
   }
 
-  const boundedPosition = Math.max(0, Math.min(targetPosition, targetColumn.tasks.length));
-  targetColumn.tasks.splice(boundedPosition, 0, {
+  const targetContextTasks = targetColumn.tasks.filter((task) => isSameFocusedTaskContext(task, movedTaskContext));
+  const boundedPosition = Math.max(0, Math.min(targetPosition, targetContextTasks.length));
+  targetContextTasks.splice(boundedPosition, 0, {
     ...updatedTask,
     status: targetStatus
   });
@@ -286,11 +307,20 @@ function placeTaskInBoard(board: FocusedBoard, updatedTask: FocusedTask, targetS
     ...board,
     columns: nextColumns.map((column) => ({
       ...column,
-      tasks: column.tasks.map((task, index) => ({
-        ...task,
-        status: column.name,
-        boardOrder: index + 1
-      }))
+      tasks: sortTasksByBoardOrder(
+        column.tasks.map((task) => ({ ...task, status: column.name }))
+          .filter((task) => !isSameFocusedTaskContext(task, movedTaskContext))
+          .concat(
+            (column.name === targetStatus
+              ? targetContextTasks
+              : column.tasks.filter((task) => isSameFocusedTaskContext(task, movedTaskContext))
+            ).map((task, index) => ({
+              ...task,
+              status: column.name,
+              boardOrder: index + 1
+            }))
+          )
+      )
     }))
   };
 }
