@@ -140,14 +140,37 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     return nextMarkdown;
   }, []);
 
+  const releaseResolvedPreviewUrls = React.useCallback((markdown?: string) => {
+    const currentMarkdown = markdown ?? editorRef.current?.getMarkdown();
+    if (currentMarkdown === undefined) {
+      return;
+    }
+
+    const previewUrlsToRelease: string[] = [];
+    resolvedUploadsRef.current.forEach((_, previewUrl) => {
+      if (!currentMarkdown.includes(previewUrl)) {
+        previewUrlsToRelease.push(previewUrl);
+      }
+    });
+
+    // Keep blob previews alive while the editor still references them, otherwise mid-upload edits can
+    // leave the rendered image pointing at a revoked object URL.
+    previewUrlsToRelease.forEach((previewUrl) => {
+      URL.revokeObjectURL(previewUrl);
+      resolvedUploadsRef.current.delete(previewUrl);
+    });
+  }, []);
+
   const syncControlledValue = React.useCallback(() => {
     if (!editorRef.current) {
       return;
     }
-    const nextMarkdown = materializeUploadedImageMarkdown(editorRef.current.getMarkdown());
+    const currentMarkdown = editorRef.current.getMarkdown();
+    const nextMarkdown = materializeUploadedImageMarkdown(currentMarkdown);
     onChange(nextMarkdown);
     scheduleHeightSync();
-  }, [materializeUploadedImageMarkdown, onChange, scheduleHeightSync]);
+    releaseResolvedPreviewUrls(currentMarkdown);
+  }, [materializeUploadedImageMarkdown, onChange, releaseResolvedPreviewUrls, scheduleHeightSync]);
 
   const replaceRenderedImageSource = React.useCallback((previewUrl: string, persistedUrl: string) => {
     const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
@@ -174,7 +197,8 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     editorRef.current.setMarkdown(normalizeEditorImageUrl(nextMarkdown));
     onChange(nextMarkdown);
     scheduleHeightSync();
-  }, [onChange, scheduleHeightSync]);
+    releaseResolvedPreviewUrls(nextMarkdown);
+  }, [onChange, releaseResolvedPreviewUrls, scheduleHeightSync]);
 
   React.useEffect(() => {
     if (!editorRef.current) {
@@ -334,7 +358,9 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     } finally {
       pendingUploadsRef.current.delete(upload.id);
       setUploadingImages((current) => current.filter((entry) => entry.id !== upload.id));
-      URL.revokeObjectURL(upload.previewUrl);
+      if (!resolvedUploadsRef.current.has(upload.previewUrl)) {
+        URL.revokeObjectURL(upload.previewUrl);
+      }
     }
   }, [placeCaretAfterImage, replaceRenderedImageSource, syncControlledValue, updateEditorMarkdown]);
 
@@ -565,6 +591,9 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         URL.revokeObjectURL(upload.previewUrl);
       });
       pendingUploadsRef.current.clear();
+      resolvedUploadsRef.current.forEach((_, previewUrl) => {
+        URL.revokeObjectURL(previewUrl);
+      });
       resolvedUploadsRef.current.clear();
     };
   }, []);
@@ -579,6 +608,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         onChange={(nextValue) => {
           onChange(materializeUploadedImageMarkdown(nextValue));
           scheduleHeightSync();
+          releaseResolvedPreviewUrls(nextValue);
         }}
         className="rich-description-editor"
         contentEditableClassName="rich-description-content"
