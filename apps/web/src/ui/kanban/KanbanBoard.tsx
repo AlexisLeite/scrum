@@ -75,6 +75,7 @@ type KanbanBoardProps = {
   getTaskAssignees?: (task: KanbanTask, assignees: KanbanAssignee[]) => KanbanAssignee[];
   editActionLabel?: string | ((task: KanbanTask) => string);
   isTaskPending?: (taskId: string) => boolean;
+  isTaskOpening?: (taskId: string) => boolean;
   onCreateTask: (defaultStatus: string) => void;
   onEditTask: (task: KanbanTask) => void;
   onStatusChange: (taskId: string, status: string, actualHours?: number) => Promise<void>;
@@ -376,6 +377,7 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
   assignees: KanbanAssignee[];
   statusOptions: string[];
   pending: boolean;
+  opening: boolean;
   dragDisabled: boolean;
   allowAssigneeChange: boolean;
   allowEditTask: boolean;
@@ -393,6 +395,7 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
     assignees,
     statusOptions,
     pending,
+    opening,
     dragDisabled,
     allowAssigneeChange,
     allowEditTask,
@@ -422,7 +425,18 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
           >
             ::
           </button>
-          <h5 className="link" onClick={() => onEditTask(task)}>{task.title}</h5>
+          <button
+            type="button"
+            className="kb-task-title-button"
+            onClick={() => onEditTask(task)}
+            disabled={pending || opening || !allowEditTask}
+            aria-busy={opening}
+          >
+            <span className="kb-task-title-label">
+              <span className="kb-task-title-text">{task.title}</span>
+              {opening ? <span className="task-title-loading-indicator" aria-hidden="true" /> : null}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -485,6 +499,7 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
   assignees: KanbanAssignee[];
   statusOptions: string[];
   pending: boolean;
+  opening: boolean;
   dragDisabled: boolean;
   allowAssigneeChange: boolean;
   allowEditTask: boolean;
@@ -501,6 +516,7 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
     assignees,
     statusOptions,
     pending,
+    opening,
     dragDisabled,
     allowAssigneeChange,
     allowEditTask,
@@ -535,6 +551,7 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
         assignees={assignees}
         statusOptions={statusOptions}
         pending={pending}
+        opening={opening}
         dragDisabled={dragDisabled}
         allowAssigneeChange={allowAssigneeChange}
         allowEditTask={allowEditTask}
@@ -554,6 +571,7 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
   && assigneeOptionsEqual(prev.assignees, next.assignees)
   && prev.statusOptions === next.statusOptions
   && prev.pending === next.pending
+  && prev.opening === next.opening
   && prev.dragDisabled === next.dragDisabled
   && prev.allowAssigneeChange === next.allowAssigneeChange
   && prev.allowEditTask === next.allowEditTask
@@ -583,6 +601,7 @@ function GhostTaskCard(props: { ghostId: string; task: KanbanTask; height?: numb
         assignees={[]}
         statusOptions={[task.status]}
         pending={false}
+        opening={false}
         dragDisabled
         allowAssigneeChange={false}
         allowEditTask={false}
@@ -607,6 +626,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
   canMoveTask: (task: KanbanTask) => boolean;
   getEditActionLabel: (task: KanbanTask) => string;
   isTaskPending?: (taskId: string) => boolean;
+  isTaskOpening?: (taskId: string) => boolean;
   canCreateTask: (columnName: string) => boolean;
   canChangeAssignee: (task: KanbanTask) => boolean;
   canEditTask: (task: KanbanTask) => boolean;
@@ -632,6 +652,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
     canMoveTask,
     getEditActionLabel,
     isTaskPending,
+    isTaskOpening,
     canCreateTask,
     canChangeAssignee,
     canEditTask,
@@ -704,6 +725,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
             }
             const task = entry.task;
             const pending = isTaskPending ? isTaskPending(task.id) : false;
+            const opening = isTaskOpening ? isTaskOpening(task.id) : false;
             const taskAllowsStatus = canChangeStatus(task);
             return (
               <SortableTaskCard
@@ -712,7 +734,8 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
                 assignees={getTaskAssignees(task, assignees)}
                 statusOptions={statusOptions}
                 pending={pending}
-                dragDisabled={readOnly || pending || !canReorder || !canMoveTask(task)}
+                opening={opening}
+                dragDisabled={readOnly || pending || opening || !canReorder || !canMoveTask(task)}
                 allowAssigneeChange={canChangeAssignee(task)}
                 allowEditTask={canEditTask(task)}
                 allowStatusChange={taskAllowsStatus}
@@ -745,6 +768,7 @@ function KanbanDragOverlay(props: { task: KanbanTask | null; width?: number | nu
         assignees={[]}
         statusOptions={[task.status]}
         pending={false}
+        opening={false}
         dragDisabled
         allowAssigneeChange={false}
         allowEditTask={false}
@@ -790,6 +814,7 @@ export function KanbanBoard({
   allowAssigneeChange = true,
   allowStatusChange = true,
   isTaskPending,
+  isTaskOpening,
   canCreateTask = () => true,
   canEditTask = () => allowEditTask,
   canChangeAssignee = () => allowAssigneeChange,
@@ -1397,6 +1422,7 @@ export function KanbanBoard({
                   canMoveTask={canMoveTask}
                   getEditActionLabel={resolveEditActionLabel}
                   isTaskPending={isTaskPending}
+                  isTaskOpening={isTaskOpening}
                   canCreateTask={canCreateTask}
                   canChangeAssignee={canChangeAssignee}
                   canEditTask={canEditTask}

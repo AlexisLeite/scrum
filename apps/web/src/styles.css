@@ -1851,9 +1851,29 @@ a.btn-secondary,
   color: var(--text-muted);
 }
 
+.story-task-title-label {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .story-task-title-text {
   display: block;
+  min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.task-title-loading-indicator {
+  width: 0.8em;
+  height: 0.8em;
+  margin-top: 0.22em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  animation: submit-loading-spin 0.75s linear infinite;
+  flex: none;
 }
 
 .story-task-expand-button {

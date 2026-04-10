@@ -156,6 +156,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
   canMoveTask: (task: FocusedTask) => boolean;
   getTaskAssignees: (task: FocusedTask, assignees: DrawerOption[]) => DrawerOption[];
   isTaskPending: (taskId: string) => boolean;
+  isTaskOpening: (taskId: string) => boolean;
   onCreateTask: (defaultStatus: string) => void;
   onEditTask: (task: FocusedTask) => void;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
@@ -178,6 +179,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
     canMoveTask,
     getTaskAssignees,
     isTaskPending,
+    isTaskOpening,
     onCreateTask,
     onEditTask,
     onAssigneeChange,
@@ -212,6 +214,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
         canMoveTask={(task) => canMoveTask(task as FocusedTask)}
         getTaskAssignees={(task, nextAssignees) => getTaskAssignees(task as FocusedTask, nextAssignees as DrawerOption[])}
         isTaskPending={isTaskPending}
+        isTaskOpening={isTaskOpening}
         onCreateTask={onCreateTask}
         onEditTask={(task) => onEditTask(task as FocusedTask)}
         onAssigneeChange={onAssigneeChange}
@@ -353,6 +356,7 @@ export const FocusedView = observer(function FocusedView() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [pendingTaskIds, setPendingTaskIds] = React.useState<Record<string, boolean>>({});
+  const [openingTaskIds, setOpeningTaskIds] = React.useState<Record<string, boolean>>({});
   const [chartLoading, setChartLoading] = React.useState(false);
   const [selectedContextKey, setSelectedContextKey] = React.useState(() => readStoredFocusedContextKey());
   const [chartRefreshToken, setChartRefreshToken] = React.useState(0);
@@ -824,8 +828,16 @@ export const FocusedView = observer(function FocusedView() {
     [assignableUsersByProductId, user]
   );
   const isFocusedTaskPending = React.useCallback((taskId: string) => Boolean(pendingTaskIds[taskId]), [pendingTaskIds]);
+  const isFocusedTaskOpening = React.useCallback((taskId: string) => Boolean(openingTaskIds[taskId]), [openingTaskIds]);
   const handleFocusedTaskEdit = React.useCallback((task: FocusedTask) => {
-    void openTaskDrawer(task);
+    setOpeningTaskIds((previous) => ({ ...previous, [task.id]: true }));
+    void openTaskDrawer(task).finally(() => {
+      setOpeningTaskIds((previous) => {
+        const next = { ...previous };
+        delete next[task.id];
+        return next;
+      });
+    });
   }, [openTaskDrawer]);
   const handleFocusedAssigneeChange = React.useCallback(
     (taskId: string, assigneeId: string | null) =>
@@ -998,6 +1010,7 @@ export const FocusedView = observer(function FocusedView() {
           canMoveTask={canMoveFocusedBoardTask}
           getTaskAssignees={getFocusedTaskAssignees}
           isTaskPending={isFocusedTaskPending}
+          isTaskOpening={isFocusedTaskOpening}
           onCreateTask={handleCreateTask}
           onEditTask={handleFocusedTaskEdit}
           onAssigneeChange={handleFocusedAssigneeChange}

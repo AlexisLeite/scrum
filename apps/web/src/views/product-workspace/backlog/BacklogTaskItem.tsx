@@ -32,12 +32,22 @@ export function BacklogTaskItem(props: BacklogTaskItemProps) {
   const { task, expanded, isOpening, onOpen, onToggle } = props;
   const taskSummary = task as ExpandedTaskSummary;
   const statusClass = `status status-${task.status.toLowerCase().replace(/\s+/g, "-").replace(/_/g, "-")}`;
+  const title = task.title?.trim() || "Sin titulo";
 
   return (
     <article className="story-task-row" aria-busy={isOpening}>
       <div className="story-task-row-main">
-        <button type="button" className="story-task-title-button" onClick={() => onOpen(task.id)} disabled={isOpening}>
-          <span className="story-task-title-text">{task.title?.trim() || "Sin titulo"}</span>
+        <button
+          type="button"
+          className="story-task-title-button"
+          onClick={() => onOpen(task.id)}
+          disabled={isOpening}
+          aria-busy={isOpening}
+        >
+          <span className="story-task-title-label">
+            <span className="story-task-title-text">{title}</span>
+            {isOpening ? <span className="task-title-loading-indicator" aria-hidden="true" /> : null}
+          </span>
         </button>
         <span className={statusClass}>{task.status}</span>
         <button
@@ -66,7 +76,7 @@ export function BacklogTaskItem(props: BacklogTaskItemProps) {
             <div className="story-task-meta-grid">
               <div className="story-task-meta-item">
                 <span className="story-task-meta-label">Titulo</span>
-                <strong>{task.title?.trim() || "Sin titulo"}</strong>
+                <strong>{title}</strong>
               </div>
               <div className="story-task-meta-item">
                 <span className="story-task-meta-label">Asignado</span>
