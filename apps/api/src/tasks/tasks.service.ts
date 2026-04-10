@@ -464,7 +464,7 @@ export class TasksService {
     const nextBoardOrder =
       nextSprintId && movesBoardColumn ? await this.getNextBoardOrder(nextSprintId, nextStatus) : current.boardOrder;
 
-    if (hasSprintId && dto.sprintId) {
+    if (hasSprintId && dto.sprintId && dto.sprintId !== current.sprintId) {
       const sprint = await this.validateSprintForProduct(dto.sprintId, current.productId);
       this.assertSprintStatusAllowsChanges(sprint.status);
       targetTeamId = sprint.teamId;
