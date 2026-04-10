@@ -231,6 +231,29 @@ function parseCssPixels(value: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+const GHOST_ID_PREFIX = "kanban:ghost:";
+
+function buildGhostId(columnName: string, index: number) {
+  return `${GHOST_ID_PREFIX}${encodeURIComponent(columnName)}:${index}`;
+}
+
+function parseGhostId(id: string) {
+  if (!id.startsWith(GHOST_ID_PREFIX)) {
+    return null;
+  }
+  const payload = id.slice(GHOST_ID_PREFIX.length);
+  const separatorIndex = payload.lastIndexOf(":");
+  if (separatorIndex < 0) {
+    return null;
+  }
+  const columnName = decodeURIComponent(payload.slice(0, separatorIndex));
+  const index = Number.parseInt(payload.slice(separatorIndex + 1), 10);
+  if (!columnName || !Number.isFinite(index)) {
+    return null;
+  }
+  return { columnName, index };
+}
+
 function getEventPointerClientY(activatorEvent: Event, deltaY: number) {
   const pointerEvent = activatorEvent as PointerEvent;
   if (typeof pointerEvent.clientY === "number") {
@@ -254,6 +277,11 @@ function resolveDragPreview(
   overTop?: number | null,
   overHeight?: number | null
 ): DragPreviewState | null {
+  const ghostTarget = parseGhostId(overId);
+  if (ghostTarget) {
+    return ghostTarget;
+  }
+
   const targetColumnName = findContainer(columns, overId) ?? activeDrag.fromColumn;
   if (!targetColumnName) {
     return null;
@@ -479,12 +507,15 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
   && prev.onEditTask === next.onEditTask
 ));
 
-function GhostTaskCard(props: { task: KanbanTask; height?: number | null }) {
-  const { task, height } = props;
+function GhostTaskCard(props: { ghostId: string; task: KanbanTask; height?: number | null }) {
+  const { ghostId, task, height } = props;
+  const { setNodeRef } = useDroppable({ id: ghostId });
 
   return (
     <article
+      ref={setNodeRef}
       className="kb-card kb-card-ghost"
+      data-ghost-id={ghostId}
       style={height ? { minHeight: `${height}px` } : undefined}
       aria-hidden="true"
     >
@@ -602,9 +633,11 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
         <div className={`kb-task-list ${showGhost ? "is-previewing-drop" : ""}`}>
           {renderItems.map((entry, index) => {
             if (entry.kind === "ghost") {
+              const ghostId = buildGhostId(column.name, index);
               return (
                 <GhostTaskCard
-                  key={`ghost:${activeDrag?.taskId ?? index}`}
+                  key={ghostId}
+                  ghostId={ghostId}
                   task={entry.task}
                   height={activeDrag?.overlayHeight}
                 />
