@@ -94,12 +94,12 @@ export function SearchableSelect(props: SearchableSelectProps) {
       const fallbackIndex = direction === 1
         ? (selectedEnabledIndex >= 0 ? selectedEnabledIndex : firstEnabledIndex)
         : (() => {
-            if (selectedEnabledIndex >= 0) return selectedEnabledIndex;
-            for (let index = filteredOptions.length - 1; index >= 0; index -= 1) {
-              if (!filteredOptions[index]?.disabled) return index;
-            }
-            return -1;
-          })();
+          if (selectedEnabledIndex >= 0) return selectedEnabledIndex;
+          for (let index = filteredOptions.length - 1; index >= 0; index -= 1) {
+            if (!filteredOptions[index]?.disabled) return index;
+          }
+          return -1;
+        })();
 
       let nextIndex = current >= 0 ? current : fallbackIndex;
       if (nextIndex < 0) {
@@ -317,11 +317,11 @@ export function SearchableSelect(props: SearchableSelectProps) {
 
   const popoverStyle = popoverPosition
     ? ({
-        top: `${popoverPosition.top}px`,
-        left: `${popoverPosition.left}px`,
-        width: `${popoverPosition.width}px`,
-        ["--searchable-select-options-max-height" as "--searchable-select-options-max-height"]: `${popoverPosition.maxOptionsHeight}px`
-      } satisfies React.CSSProperties)
+      top: `${popoverPosition.top}px`,
+      left: `${popoverPosition.left}px`,
+      width: `${popoverPosition.width}px`,
+      ...({ ["--searchable-select-options-max-height"]: `${popoverPosition.maxOptionsHeight}px` }) as any
+    } satisfies React.CSSProperties)
     : ({ visibility: "hidden" } satisfies React.CSSProperties);
 
   return (
