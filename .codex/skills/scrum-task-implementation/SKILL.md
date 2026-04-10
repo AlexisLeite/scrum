@@ -1,6 +1,6 @@
 ---
 name: scrum-task-implementation
-description: Implementa tareas Scrum de punta a punta en el repo actual usando las herramientas del tablero Scrum. Usa este skill cuando haya que tomar una tarea pendiente, asignar la primera que no tenga responsable, pasarla a In Progress, implementar exactamente lo pedido en la descripcion, validar el resultado, probar tambien la UI o el flujo afectado con Playwright contra el entorno watch cuando corresponda, hacer commit de los cambios con el id de la tarea, cerrar la tarea en Done y publicar un comentario final exhaustivo en markdown con resumen, validaciones, pruebas y archivos tocados. Asume que es muy probable que haya otros agentes trabajando en paralelo y extrema el cuidado con el estado del repositorio antes, durante y despues de cada edicion.
+description: Implementa tareas Scrum de punta a punta en el repo actual usando las herramientas del tablero Scrum. Usa este skill cuando haya que tomar una tarea pendiente, asignar la tarea solicitada por el usuario que no tenga responsable, pasarla a In Progress, implementar exactamente lo pedido en la descripcion, validar el resultado, probar tambien la UI o el flujo afectado con Playwright contra el entorno watch cuando corresponda, hacer commit de los cambios con el id de la tarea, cerrar la tarea en Done y publicar un comentario final exhaustivo en markdown con resumen, validaciones, pruebas y archivos tocados. Asume que es muy probable que haya otros agentes trabajando en paralelo y extrema el cuidado con el estado del repositorio antes, durante y despues de cada edicion.
 ---
 
 # Scrum Task Implementation
@@ -10,7 +10,7 @@ description: Implementa tareas Scrum de punta a punta en el repo actual usando l
 Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea sea ambigua, contradictoria o requiera una decision de producto no deducible del contexto.
 
 1. Lista las tareas pendientes con el MCP de Scrum.
-2. Identifica la primera tarea sin responsable.
+2. Identifica la tarea indicada por el usuario. Si no indica ninguna, busca la primera tarea sin responsable.
 3. Toma esa tarea para el usuario autenticado.
 4. Cambia su estado a `In Progress`.
 5. Lee los detalles en profundidad de la tarea antes de editar codigo.
