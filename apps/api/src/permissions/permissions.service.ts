@@ -48,8 +48,8 @@ export type AuthUserSnapshot = {
 
 const PRIMARY_ROLE_PRIORITY: Role[] = [
   "platform_admin",
-  "product_owner",
   "scrum_master",
+  "product_owner",
   "qa_member",
   "team_member"
 ];

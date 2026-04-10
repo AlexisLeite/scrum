@@ -1,4 +1,4 @@
-import { Role } from "@scrum/contracts";
+import { Role, UserProfileDto } from "@scrum/contracts";
 import {
   canClaimTask,
   canManageUsers as canManageUsersByRole,
@@ -8,6 +8,8 @@ import {
   getUserInitials
 } from "./permissions";
 
+type FocusedAccessSubject = Role | UserProfileDto | null | undefined;
+
 export function canAccessAdmin(role: Role | null | undefined): boolean {
   return role === "platform_admin" || role === "product_owner" || role === "scrum_master";
 }
@@ -16,39 +18,52 @@ export function canManageUsers(role: Role | null | undefined): boolean {
   return canManageUsersByRole(role ?? undefined);
 }
 
-export function canChangeFocusedTaskStatus(role: Role | null | undefined): boolean {
-  return role === "platform_admin" || role === "scrum_master" || role === "team_member" || role === "qa_member";
+export function canChangeFocusedTaskStatus(
+  subject: FocusedAccessSubject,
+  task: { assigneeId?: string | null; sprintId?: string | null; productId?: string | null },
+  userId: string | undefined
+): boolean {
+  return canMoveVisibleTask(subject ?? undefined, task, userId, task.productId ?? undefined);
 }
 
-export function canAssignFocusedTask(role: Role | null | undefined): boolean {
-  return role === "platform_admin" || role === "scrum_master" || role === "team_member" || role === "qa_member";
+export function canAssignFocusedTask(
+  subject: FocusedAccessSubject,
+  task: { assigneeId?: string | null; sprintId?: string | null; productId?: string | null },
+  userId: string | undefined
+): boolean {
+  return canReassignTask(subject ?? undefined, task.productId ?? undefined)
+    || canReleaseTask(subject ?? undefined, task, userId, task.productId ?? undefined)
+    || canClaimTask(subject ?? undefined, task, task.productId ?? undefined);
 }
 
-export function canAssignFocusedTaskToOthers(role: Role | null | undefined): boolean {
-  return canReassignTask(role ?? undefined);
+export function canAssignFocusedTaskToOthers(
+  subject: FocusedAccessSubject,
+  productId?: string | null
+): boolean {
+  return canReassignTask(subject ?? undefined, productId ?? undefined);
 }
 
 export function canReleaseFocusedTask(
-  role: Role | null | undefined,
-  task: { assigneeId?: string | null; sprintId?: string | null },
+  subject: FocusedAccessSubject,
+  task: { assigneeId?: string | null; sprintId?: string | null; productId?: string | null },
   userId: string | undefined
 ): boolean {
-  return canReleaseTask(role ?? undefined, task, userId);
+  return canReleaseTask(subject ?? undefined, task, userId, task.productId ?? undefined);
 }
 
 export function canMoveFocusedTask(
-  role: Role | null | undefined,
-  task: { assigneeId?: string | null; sprintId?: string | null },
+  subject: FocusedAccessSubject,
+  task: { assigneeId?: string | null; sprintId?: string | null; productId?: string | null },
   userId: string | undefined
 ): boolean {
-  return canMoveVisibleTask(role ?? undefined, task, userId);
+  return canMoveVisibleTask(subject ?? undefined, task, userId, task.productId ?? undefined);
 }
 
 export function canClaimFocusedTask(
-  role: Role | null | undefined,
-  task: { assigneeId?: string | null; sprintId?: string | null }
+  subject: FocusedAccessSubject,
+  task: { assigneeId?: string | null; sprintId?: string | null; productId?: string | null }
 ): boolean {
-  return canClaimTask(role ?? undefined, task);
+  return canClaimTask(subject ?? undefined, task, task.productId ?? undefined);
 }
 
 export { getUserInitials };

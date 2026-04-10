@@ -759,7 +759,7 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
   }, [availableMembers, selectedMembers]);
 
   const openTaskDrawer = React.useCallback((task: SprintPlanningTask) => {
-    const readOnly = !canEditTaskFields(user?.role);
+    const readOnly = !canEditTaskFields(user, productId);
     store.drawers.add(
       new TaskUpsertionDrawer({
         controller,
@@ -770,14 +770,15 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
         statusOptions,
         readOnly,
         definitionReadOnly: readOnly,
-        allowTaskCreation: canCreateTaskFromMessage(user?.role),
+        allowTaskCreation: canCreateTaskFromMessage(user, productId),
         allowMessageCreation: canCommentOnVisibleTask(
-          user?.role,
+          user,
           {
             assigneeId: task.assigneeId ?? null,
             sprintId: sprintId ?? null
           },
-          user?.id
+          user?.id,
+          productId
         ),
         task: {
           id: task.id,
@@ -809,7 +810,8 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
     store.drawers,
     stories,
     user?.id,
-    user?.role
+    user,
+    productId
   ]);
 
   const openPendingTaskDrawer = React.useCallback((task: PendingTask) => {
@@ -1541,9 +1543,9 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
     [store.board?.columns, taskDetail?.status]
   );
   const forcedReadonly = searchParams.get("mode") === "readonly";
-  const canEditTask = !forcedReadonly && canEditTaskFields(user?.role);
-  const canCreateLinkedTask = !forcedReadonly && canCreateTaskFromMessage(user?.role);
-  const canWriteMessages = taskDetail ? canCommentOnVisibleTask(user?.role, taskDetail, user?.id) : false;
+  const canEditTask = !forcedReadonly && canEditTaskFields(user, productId);
+  const canCreateLinkedTask = !forcedReadonly && canCreateTaskFromMessage(user, productId);
+  const canWriteMessages = taskDetail ? canCommentOnVisibleTask(user, taskDetail, user?.id, productId) : false;
   const readOnlyTask = !canEditTask;
 
   if (!productId || !taskId) {
@@ -1574,7 +1576,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
           readOnly: readOnlyTask,
           definitionReadOnly: readOnlyTask,
           allowTaskCreation: canCreateLinkedTask,
-          allowMessageCreation: canCommentOnVisibleTask(user?.role, detail, user?.id),
+          allowMessageCreation: canCommentOnVisibleTask(user, detail, user?.id, productId),
           task: {
             id: detail.id,
             title: detail.title,
@@ -1604,7 +1606,8 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
       stories,
       store.drawers,
       user?.id,
-      user?.role
+      user,
+      productId
     ]
   );
 

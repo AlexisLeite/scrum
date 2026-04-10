@@ -303,7 +303,7 @@ export function SprintUpsertionForm(props: {
 
   const openTaskDetail = React.useCallback(
     (task: PendingTask) => {
-      const canEditTask = canEditTaskFields(user?.role);
+      const canEditTask = canEditTaskFields(user, productId);
       const relatedStory = task.story ? [{ id: task.story.id, title: task.story.title }] : [];
       const relatedSprint = sprint ? [{ id: sprint.id, name: sprint.name }] : [];
       const relatedAssignee = task.assignee ? [{ id: task.assignee.id, name: task.assignee.name }] : [];
@@ -318,14 +318,15 @@ export function SprintUpsertionForm(props: {
           statusOptions: [task.status],
           readOnly: !canEditTask,
           definitionReadOnly: !canEditTask,
-          allowTaskCreation: canCreateTaskFromMessage(user?.role),
+          allowTaskCreation: canCreateTaskFromMessage(user, productId),
           allowMessageCreation: canCommentOnVisibleTask(
-            user?.role,
+            user,
             {
               assigneeId: task.assignee?.id ?? null,
               sprintId: sprint?.id ?? null
             },
-            user?.id
+            user?.id,
+            productId
           ),
           task: {
             id: task.id,
@@ -340,7 +341,7 @@ export function SprintUpsertionForm(props: {
         })
       );
     },
-    [controller, productId, sprint, store.drawers, user?.id, user?.role]
+    [controller, productId, sprint, store.drawers, user]
   );
 
   return (

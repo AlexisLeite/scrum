@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import { DraftEntityType, Prisma } from "@prisma/client";
 import { AuthUser } from "../common/current-user.decorator";
+import { PermissionsService } from "../permissions/permissions.service";
 import { TeamScopeService } from "../common/team-scope.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -10,7 +11,8 @@ const DRAFT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 export class DraftsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly teamScopeService: TeamScopeService
+    private readonly teamScopeService: TeamScopeService,
+    private readonly permissionsService: PermissionsService
   ) {}
 
   async getDraft(user: AuthUser, entityTypeRaw: string, entityId: string, productId?: string) {
@@ -130,7 +132,10 @@ export class DraftsService {
     productId?: string
   ): Promise<string | undefined> {
     if (entityType === DraftEntityType.PRODUCT) {
-      if (!(this.teamScopeService.isPlatformAdmin(user.role) || this.teamScopeService.isProductOwner(user.role))) {
+      if (!this.permissionsService.hasSystemPermission(user, [
+        "system.administration.products.create",
+        "system.administration.products.update"
+      ])) {
         throw new ForbiddenException("Insufficient product scope");
       }
       return undefined;
@@ -148,22 +153,33 @@ export class DraftsService {
       return task.productId;
     }
 
-    if (!(this.teamScopeService.isPlatformAdmin(user.role) || this.teamScopeService.isScrumMaster(user.role))) {
-      throw new ForbiddenException("Insufficient product scope");
-    }
+    const resolvedProductId = entityId !== "-1"
+      ? await this.resolveProductIdFromEntity(entityType, entityId)
+      : productId;
 
-    if (entityId !== "-1") {
-      const resolvedProductId = await this.resolveProductIdFromEntity(entityType, entityId);
-      await this.teamScopeService.assertProductReadable(user, resolvedProductId);
-      return resolvedProductId;
-    }
-
-    if (!productId) {
+    if (!resolvedProductId) {
       throw new BadRequestException("productId is required for new draft entities");
     }
 
-    await this.teamScopeService.assertProductReadable(user, productId);
-    return productId;
+    await this.teamScopeService.assertProductReadable(user, resolvedProductId);
+
+    const requiredPermissions = entityType === DraftEntityType.STORY
+      ? ["product.admin.story.create", "product.admin.story.update"] as const
+      : [
+          "product.admin.story.task.create",
+          "product.admin.story.task.update",
+          "product.focused.create",
+          "product.focused.update"
+        ] as const;
+
+    this.permissionsService.assertAnyProductPermission(
+      user,
+      resolvedProductId,
+      [...requiredPermissions],
+      "Insufficient product scope"
+    );
+
+    return resolvedProductId;
   }
 
   private async resolveProductIdFromEntity(entityType: DraftEntityType, entityId: string): Promise<string> {

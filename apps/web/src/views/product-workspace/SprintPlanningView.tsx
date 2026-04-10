@@ -13,7 +13,7 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
   const store = useRootStore();
   const productController = React.useMemo(() => new ProductController(store), [store]);
   const { productId } = useParams<{ productId: string }>();
-  const canManageSprintPlanning = canManageSprints(store.session.user?.role);
+  const canManageSprintPlanning = canManageSprints(store.session.user, productId);
   const productScopeKey = productId ? productCollectionScope(productId) : null;
 
   React.useEffect(() => {

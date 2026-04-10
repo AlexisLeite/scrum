@@ -30,7 +30,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const chartTheme = useEChartsTheme();
   const { productId, sprintId } = useParams<{ productId: string; sprintId: string }>();
   const user = store.session.user;
-  const canManageSprintBoard = canManageSprints(user?.role);
+  const canManageSprintBoard = canManageSprints(user, productId);
   const [boardError, setBoardError] = React.useState("");
   const [boardLoading, setBoardLoading] = React.useState(false);
   const [pendingTaskIds, setPendingTaskIds] = React.useState<Record<string, boolean>>({});
@@ -82,7 +82,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
 
   const openBoardTaskDrawer = (options: { task?: BoardTask; defaultStatus?: string }) => {
     const { task, defaultStatus } = options;
-    const readOnly = !canEditTaskFields(user?.role);
+    const readOnly = !canEditTaskFields(user, productId);
     store.drawers.add(
       new TaskUpsertionDrawer({
         controller,
@@ -93,8 +93,8 @@ export const SprintBoardView = observer(function SprintBoardView() {
         statusOptions,
         readOnly,
         definitionReadOnly: readOnly,
-        allowTaskCreation: canCreateTaskFromMessage(user?.role),
-        allowMessageCreation: task ? canCommentOnVisibleTask(user?.role, task, user?.id) : true,
+        allowTaskCreation: canCreateTaskFromMessage(user, productId),
+        allowMessageCreation: task ? canCommentOnVisibleTask(user, task, user?.id, productId) : true,
         defaultStatus,
         task: task
           ? {
@@ -229,11 +229,11 @@ export const SprintBoardView = observer(function SprintBoardView() {
           statusOptions={statusOptions}
           readOnly={boardReadOnly}
           allowCreateTask={canManageSprintBoard}
-          editActionLabel={canEditTaskFields(user?.role) ? "Editar" : "Abrir"}
+          editActionLabel={canEditTaskFields(user, productId) ? "Editar" : "Abrir"}
           canCreateTask={() => canManageSprintBoard}
           canEditTask={() => true}
           canChangeAssignee={() => canManageSprintBoard}
-          canChangeStatus={(task) => canMoveVisibleTask(user?.role, task, user?.id)}
+          canChangeStatus={(task) => canMoveVisibleTask(user, task, user?.id, productId)}
           isTaskPending={(taskId) => Boolean(pendingTaskIds[taskId])}
           onCreateTask={(defaultStatus) => openBoardTaskDrawer({ defaultStatus })}
           onEditTask={(task) => openBoardTaskDrawer({ task: task as BoardTask })}

@@ -37,7 +37,7 @@ export class TeamsService {
 
   async create(dto: CreateTeamDto, actor: AuthUser) {
     const created = await this.prisma.team.create({ data: dto });
-    if (actor.role === "product_owner") {
+    if (actor.roleKeys.includes("product_owner")) {
       await this.prisma.teamMember.create({
         data: {
           teamId: created.id,

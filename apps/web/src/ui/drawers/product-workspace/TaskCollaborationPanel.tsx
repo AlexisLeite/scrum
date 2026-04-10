@@ -458,8 +458,8 @@ export function TaskCollaborationPanel(props: {
 
   const openTaskDrawerFromDetail = React.useCallback(
     (taskDetail: TaskCollaborationDetail) => {
-      const readOnlyForTarget = !canEditTaskFields(viewer?.role);
-      const allowMessagesForTarget = canCommentOnVisibleTask(viewer?.role, taskDetail, viewer?.id);
+      const readOnlyForTarget = !canEditTaskFields(viewer, productId);
+      const allowMessagesForTarget = canCommentOnVisibleTask(viewer, taskDetail, viewer?.id, productId);
       store.drawers.add(
         new TaskUpsertionDrawer({
           controller,
@@ -500,8 +500,7 @@ export function TaskCollaborationPanel(props: {
       statusOptions,
       stories,
       store.drawers,
-      viewer?.id,
-      viewer?.role
+      viewer
     ]
   );
 

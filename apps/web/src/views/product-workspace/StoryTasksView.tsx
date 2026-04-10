@@ -29,7 +29,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const { productId, storyId } = useParams<{ productId: string; storyId: string }>();
   const user = store.session.user;
-  const canManageTasks = canCreateTasks(user?.role);
+  const canManageTasks = canCreateTasks(user, productId);
   const { assignableUsers } = useProductAssignableUsers(controller, productId ? [productId] : []);
   const [formError, setFormError] = React.useState("");
   const [search, setSearch] = React.useState("");
@@ -113,7 +113,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
   };
 
   const openTaskDrawer = (task?: TaskItem) => {
-    const canEditTask = canEditTaskFields(user?.role);
+    const canEditTask = canEditTaskFields(user, productId);
     store.drawers.add(
       new TaskUpsertionDrawer({
         controller,
@@ -126,8 +126,8 @@ export const StoryTasksView = observer(function StoryTasksView() {
         statusOptions,
         readOnly: !canEditTask,
         definitionReadOnly: !canEditTask,
-        allowTaskCreation: canCreateTaskFromMessage(user?.role),
-        allowMessageCreation: task ? canCommentOnVisibleTask(user?.role, task, user?.id) : true,
+        allowTaskCreation: canCreateTaskFromMessage(user, productId),
+        allowMessageCreation: task ? canCommentOnVisibleTask(user, task, user?.id, productId) : true,
         task,
         defaultStoryId: task ? undefined : storyId,
         onDone: reloadStoryTasks

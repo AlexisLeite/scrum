@@ -1397,7 +1397,6 @@ export class TasksService {
 
         if (
           nextAssigneeId
-          && user.role !== "qa_member"
           && this.permissionsService.hasProductPermission(user, productId, "product.focused.reassign")
         ) {
           return;
@@ -1420,7 +1419,6 @@ export class TasksService {
 
         if (
           nextAssigneeId
-          && user.role !== "qa_member"
           && this.permissionsService.hasProductPermission(user, productId, "product.focused.reassign")
         ) {
           return;
@@ -1439,8 +1437,7 @@ export class TasksService {
         }
 
         if (
-          user.role !== "qa_member"
-          && this.permissionsService.hasProductPermission(user, productId, "product.focused.reassign")
+          this.permissionsService.hasProductPermission(user, productId, "product.focused.reassign")
         ) {
           return;
         }

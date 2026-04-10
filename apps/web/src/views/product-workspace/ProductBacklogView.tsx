@@ -122,8 +122,8 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const { productId } = useParams<{ productId: string }>();
   const user = store.session.user;
-  const canManageStories = canEditStories(user?.role);
-  const canManageTasks = canCreateTasks(user?.role);
+  const canManageStories = canEditStories(user, productId);
+  const canManageTasks = canCreateTasks(user, productId);
   const { assignableUsers } = useProductAssignableUsers(controller, productId ? [productId] : []);
   const [search, setSearch] = React.useState("");
   const [sortBy, setSortBy] = React.useState<StorySortOption>(() => loadBacklogSort(productId));
@@ -330,7 +330,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
           assignees,
           statusOptions: buildStatusOptions(),
           defaultStoryId: story.id,
-          allowTaskCreation: canCreateTaskFromMessage(user?.role),
+          allowTaskCreation: canCreateTaskFromMessage(user, productId),
           allowMessageCreation: true,
           onDone: reloadBacklog
         })
@@ -350,7 +350,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
         loadTaskDrawerContext()
       ]);
       const taskDetail = detail as TaskDetail;
-      const canEditTask = canEditTaskFields(user?.role);
+      const canEditTask = canEditTaskFields(user, productId);
 
       store.drawers.add(
         new TaskUpsertionDrawer({
@@ -362,8 +362,8 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
           statusOptions: buildStatusOptions(taskDetail.status),
           readOnly: !canEditTask,
           definitionReadOnly: !canEditTask,
-          allowTaskCreation: canCreateTaskFromMessage(user?.role),
-          allowMessageCreation: canCommentOnVisibleTask(user?.role, taskDetail, user?.id),
+          allowTaskCreation: canCreateTaskFromMessage(user, productId),
+          allowMessageCreation: canCommentOnVisibleTask(user, taskDetail, user?.id, productId),
           task: toEditableTask(taskDetail),
           onDone: reloadBacklog
         })

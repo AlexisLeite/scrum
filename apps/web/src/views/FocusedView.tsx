@@ -478,14 +478,6 @@ export const FocusedView = observer(function FocusedView() {
       : allAssignableUsers,
     [allAssignableUsers, user]
   );
-  const canAssignOthers = canAssignFocusedTaskToOthers(user?.role);
-  const canEditTasks = canEditTaskFields(user?.role);
-  const canCreateFocusedTasks = canCreateTasks(user?.role);
-  const canCreateInColumn = React.useCallback(
-    (columnName: string) => canCreateFocusedTasks && columnName === "Todo",
-    [canCreateFocusedTasks]
-  );
-  const editLabel = canEditTasks ? "Editar" : "Abrir";
 
   const statusOptions = React.useMemo(
     () => board.columns.length > 0
@@ -505,6 +497,13 @@ export const FocusedView = observer(function FocusedView() {
       ?? null,
     [selectedContextKey, visibleContexts]
   );
+  const canEditTasks = canEditTaskFields(user, selectedContext?.productId);
+  const canCreateFocusedTasks = canCreateTasks(user, selectedContext?.productId);
+  const canCreateInColumn = React.useCallback(
+    (columnName: string) => canCreateFocusedTasks && columnName === "Todo",
+    [canCreateFocusedTasks]
+  );
+  const editLabel = canEditTasks ? "Editar" : "Abrir";
   const selectedChartProductId = selectedContext?.productId ?? "";
   const selectedChartSprintId = selectedContext?.sprintId ?? "";
   const selectedBoard = React.useMemo<FocusedBoard>(() => {
@@ -537,7 +536,6 @@ export const FocusedView = observer(function FocusedView() {
     [selectedTasks]
   );
   const showNoPendingTasksState = !loading && visibleContexts.length === 0 && !board.hasActiveSprint;
-  const canCreateTaskFromFocusedMessage = canCreateTaskFromMessage(user?.role);
   const handleContextChange = React.useCallback((value: string) => {
     persistFocusedContextKey(value);
     setSelectedContextKey(value);
@@ -656,6 +654,9 @@ export const FocusedView = observer(function FocusedView() {
         setError("La tarea no incluye producto asociado para abrir el detalle.");
         return;
       }
+      const canAssignOthersInTask = canAssignFocusedTaskToOthers(user, productId);
+      const canEditFocusedTask = canEditTaskFields(user, productId);
+      const canCreateLinkedTask = canCreateTaskFromMessage(user, productId);
 
       const minimalStories: StoryItem[] = task.story?.id
         ? [{ id: task.story.id, title: task.story.title ?? "Historia actual" }]
@@ -668,11 +669,11 @@ export const FocusedView = observer(function FocusedView() {
           ? [{ id: task.sprintId, name: "Sprint actual", teamId: null }]
           : [];
       const minimalAssignees = buildTaskAssigneeSeed(task, user);
-      const shouldLoadCatalog = canEditTasks || canCreateTaskFromFocusedMessage;
+      const shouldLoadCatalog = canEditFocusedTask || canCreateLinkedTask;
 
       let stories: StoryItem[] = minimalStories;
       let sprints: SprintItem[] = minimalSprints;
-      let assignees: DrawerOption[] = canAssignOthers
+      let assignees: DrawerOption[] = canAssignOthersInTask
         ? (allAssignableUsers.length > 0 ? allAssignableUsers : minimalAssignees)
         : user
           ? [{ id: user.id, name: user.name }]
@@ -684,7 +685,7 @@ export const FocusedView = observer(function FocusedView() {
           const catalog = await ensureTaskDrawerCatalog(productId);
           stories = catalog.stories;
           sprints = catalog.sprints;
-          assignees = canAssignOthers
+          assignees = canAssignOthersInTask
             ? catalog.assignees
             : user
               ? [{ id: user.id, name: user.name }]
@@ -709,10 +710,10 @@ export const FocusedView = observer(function FocusedView() {
           sprints,
           assignees,
           statusOptions,
-          readOnly: !canEditTasks,
-          definitionReadOnly: !canEditTasks,
-          allowTaskCreation: canCreateTaskFromFocusedMessage,
-          allowMessageCreation: canCommentOnVisibleTask(user?.role, task, user?.id),
+          readOnly: !canEditFocusedTask,
+          definitionReadOnly: !canEditFocusedTask,
+          allowTaskCreation: canCreateLinkedTask,
+          allowMessageCreation: canCommentOnVisibleTask(user, task, user?.id, productId),
           prefetchedTaskDrawerData,
           task: {
             id: task.id,
@@ -731,7 +732,7 @@ export const FocusedView = observer(function FocusedView() {
         })
       );
     },
-    [allAssignableUsers, canAssignOthers, canCreateTaskFromFocusedMessage, canEditTasks, ensureTaskDrawerCatalog, productController, reloadBoard, statusOptions, store.drawers, user]
+    [allAssignableUsers, ensureTaskDrawerCatalog, productController, reloadBoard, statusOptions, store.drawers, user]
   );
 
   const openFocusedCreationDrawer = React.useCallback(
@@ -779,48 +780,48 @@ export const FocusedView = observer(function FocusedView() {
 
   const canChangeFocusedAssignee = React.useCallback(
     (task: FocusedTask) => {
-      if (!user || !canAssignFocusedTask(user.role)) {
+      if (!user || !canAssignFocusedTask(user, task, user.id)) {
         return false;
       }
-      if (canAssignOthers) {
+      if (canAssignFocusedTaskToOthers(user, task.productId ?? task.product?.id ?? undefined)) {
         return true;
       }
-      if (canReleaseFocusedTask(user.role, task, user.id)) {
+      if (canReleaseFocusedTask(user, task, user.id)) {
         return true;
       }
-      return canClaimFocusedTask(user.role, task) || task.assigneeId === user.id;
+      return canClaimFocusedTask(user, task) || task.assigneeId === user.id;
     },
-    [canAssignOthers, user]
+    [user]
   );
   const canChangeFocusedStatus = React.useCallback(
-    (task: FocusedTask) => Boolean(user && canChangeFocusedTaskStatus(user.role) && canMoveFocusedTask(user.role, task, user.id)),
+    (task: FocusedTask) => Boolean(user && canChangeFocusedTaskStatus(user, task, user.id) && canMoveFocusedTask(user, task, user.id)),
     [user]
   );
   const canMoveFocusedBoardTask = React.useCallback(
-    (task: FocusedTask) => Boolean(user && canMoveFocusedTask(user.role, task, user.id)),
+    (task: FocusedTask) => Boolean(user && canMoveFocusedTask(user, task, user.id)),
     [user]
   );
   const getFocusedTaskAssignees = React.useCallback(
     (task: FocusedTask, assignees: DrawerOption[]) => {
-      if (canAssignOthers) {
+      if (canAssignFocusedTaskToOthers(user, task.productId ?? task.product?.id ?? undefined)) {
         const productId = task.productId ?? task.product?.id ?? "";
         const productAssignees = productId
           ? (assignableUsersByProductId[productId] ?? []).map((entry) => ({ id: entry.id, name: entry.name }))
           : [];
         return productAssignees.length > 0 ? productAssignees : assignees;
       }
-      if (!canAssignFocusedTask(user?.role) || !user) {
+      if (!user || !canAssignFocusedTask(user, task, user.id)) {
         return [];
       }
-      if (canReleaseFocusedTask(user.role, task, user.id)) {
+      if (canReleaseFocusedTask(user, task, user.id)) {
         return buildCurrentTaskAssigneeOption(task);
       }
-      if (canClaimFocusedTask(user.role, task)) {
+      if (canClaimFocusedTask(user, task)) {
         return [{ id: user.id, name: user.name }];
       }
       return [{ id: user.id, name: user.name }];
     },
-    [assignableUsersByProductId, canAssignOthers, user]
+    [assignableUsersByProductId, user]
   );
   const isFocusedTaskPending = React.useCallback((taskId: string) => Boolean(pendingTaskIds[taskId]), [pendingTaskIds]);
   const handleFocusedTaskEdit = React.useCallback((task: FocusedTask) => {
@@ -833,7 +834,7 @@ export const FocusedView = observer(function FocusedView() {
         if (!task) {
           return;
         }
-        if (canAssignOthers) {
+        if (canAssignFocusedTaskToOthers(user, task.productId ?? task.product?.id ?? undefined)) {
           const updatedTask = await productController.assignTask(taskId, { assigneeId });
           setBoard((current) => patchTaskInBoard(current, updatedTask as FocusedTask));
           return;
@@ -842,26 +843,26 @@ export const FocusedView = observer(function FocusedView() {
           return;
         }
         if (assigneeId == null) {
-          if (!canReleaseFocusedTask(user.role, task, user.id)) {
+          if (!canReleaseFocusedTask(user, task, user.id)) {
             return;
           }
           const updatedTask = await productController.assignTask(taskId, { assigneeId: null });
           setBoard((current) => patchTaskInBoard(current, updatedTask as FocusedTask));
           return;
         }
-        if (assigneeId !== user.id || !canClaimFocusedTask(user.role, task)) {
+        if (assigneeId !== user.id || !canClaimFocusedTask(user, task)) {
           return;
         }
         const updatedTask = await productController.assignTask(taskId, { assigneeId: user.id });
         setBoard((current) => patchTaskInBoard(current, updatedTask as FocusedTask));
       }),
-    [board, canAssignOthers, productController, user, withPendingTask]
+    [board, productController, user, withPendingTask]
   );
   const handleFocusedStatusChange = React.useCallback(
     (taskId: string, status: string, actualHours?: number) =>
       withPendingTask(taskId, async () => {
         const task = findTask(board, taskId);
-        if (!user || !task || !canMoveFocusedTask(user.role, task, user.id)) {
+        if (!user || !task || !canMoveFocusedTask(user, task, user.id)) {
           return;
         }
         const updatedTask = await productController.updateTaskStatus(taskId, status, actualHours);
@@ -874,7 +875,7 @@ export const FocusedView = observer(function FocusedView() {
       withPendingTask(taskId, async () => {
         const task = findTask(board, taskId);
         const sprintId = task?.sprintId ?? task?.sprint?.id ?? null;
-        if (!user || !task || !canMoveFocusedTask(user.role, task, user.id) || !sprintId) {
+        if (!user || !task || !canMoveFocusedTask(user, task, user.id) || !sprintId) {
           const updatedTask = await productController.updateTaskStatus(taskId, status, actualHours);
           setBoard((current) => patchTaskInBoard(current, updatedTask as FocusedTask));
           return;
