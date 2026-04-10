@@ -82,6 +82,12 @@ const CODE_BLOCK_LANGUAGES: Record<string, string> = {
 };
 
 const ALLOWED_HEADING_LEVELS = [2, 3, 4, 5, 6] as const;
+const IMAGE_ORIGIN_FALLBACK = "contaboserver.net:5444";
+const IMAGE_ORIGIN_PUBLIC = "contaboserver.net:3000";
+
+function normalizeEditorImageUrl(value: string) {
+  return value.replaceAll(IMAGE_ORIGIN_FALLBACK, IMAGE_ORIGIN_PUBLIC);
+}
 
 export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle, RichDescriptionFieldProps>(function RichDescriptionField(props, ref) {
   const { label, value, onChange, rows = 6, disabled = false, productId, autoFocus = false } = props;
@@ -91,6 +97,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const resizeFrameRef = React.useRef<number | null>(null);
   const searchTimeoutRef = React.useRef<number | null>(null);
   const pendingUploadsRef = React.useRef<Map<string, UploadingImage>>(new Map());
+  const resolvedUploadsRef = React.useRef<Map<string, string>>(new Map());
   const [activeAnchor, setActiveAnchor] = React.useState<ActiveAnchor | null>(null);
   const [referenceResults, setReferenceResults] = React.useState<ReferenceSearchResult[]>([]);
   const [referenceLoading, setReferenceLoading] = React.useState(false);
@@ -98,8 +105,6 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const [uploadingImages, setUploadingImages] = React.useState<Array<{ id: string; alt: string }>>([]);
   const [uploadError, setUploadError] = React.useState("");
   const [lightboxImage, setLightboxImage] = React.useState<{ src: string; alt?: string } | null>(null);
-
-  const ensureImages = (c: string) => c.replaceAll('contaboserver.net:5444', 'contaboserver.net:3000')
 
   const syncEditorHeight = React.useCallback(() => {
     const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
@@ -127,20 +132,46 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     });
   }, [syncEditorHeight]);
 
+  const materializeUploadedImageMarkdown = React.useCallback((markdown: string) => {
+    let nextMarkdown = markdown;
+    resolvedUploadsRef.current.forEach((persistedUrl, previewUrl) => {
+      nextMarkdown = nextMarkdown.replaceAll(previewUrl, persistedUrl);
+    });
+    return nextMarkdown;
+  }, []);
+
   const syncControlledValue = React.useCallback(() => {
     if (!editorRef.current) {
       return;
     }
-    const nextMarkdown = editorRef.current.getMarkdown();
+    const nextMarkdown = materializeUploadedImageMarkdown(editorRef.current.getMarkdown());
     onChange(nextMarkdown);
     scheduleHeightSync();
-  }, [onChange, scheduleHeightSync]);
+  }, [materializeUploadedImageMarkdown, onChange, scheduleHeightSync]);
+
+  const replaceRenderedImageSource = React.useCallback((previewUrl: string, persistedUrl: string) => {
+    const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
+    if (!content) {
+      return;
+    }
+
+    const normalizedPreviewUrl = normalizeEditorImageUrl(previewUrl);
+    const normalizedPersistedUrl = normalizeEditorImageUrl(persistedUrl);
+    Array.from(content.querySelectorAll("img")).forEach((image) => {
+      const currentSrc = normalizeEditorImageUrl(image.currentSrc || image.src || "");
+      if (currentSrc === normalizedPreviewUrl) {
+        image.src = normalizedPersistedUrl;
+      }
+    });
+
+    scheduleHeightSync();
+  }, [scheduleHeightSync]);
 
   const updateEditorMarkdown = React.useCallback((nextMarkdown: string) => {
     if (!editorRef.current) {
       return;
     }
-    editorRef.current.setMarkdown(ensureImages(nextMarkdown));
+    editorRef.current.setMarkdown(normalizeEditorImageUrl(nextMarkdown));
     onChange(nextMarkdown);
     scheduleHeightSync();
   }, [onChange, scheduleHeightSync]);
@@ -149,12 +180,12 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     if (!editorRef.current) {
       return;
     }
-    const currentMarkdown = editorRef.current.getMarkdown();
-    const nextMarkdown = value || "";
+    const currentMarkdown = normalizeEditorImageUrl(materializeUploadedImageMarkdown(editorRef.current.getMarkdown()));
+    const nextMarkdown = normalizeEditorImageUrl(value || "");
     if (currentMarkdown !== nextMarkdown) {
-      editorRef.current.setMarkdown(ensureImages(nextMarkdown));
+      editorRef.current.setMarkdown(nextMarkdown);
     }
-  }, [value]);
+  }, [materializeUploadedImageMarkdown, value]);
 
   React.useEffect(() => {
     scheduleHeightSync();
@@ -166,6 +197,52 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       return;
     }
     editorContent.focus();
+    scheduleHeightSync();
+  }, [scheduleHeightSync]);
+
+  const placeCaretAfterImage = React.useCallback((imageUrl: string, remainingAttempts = 8) => {
+    const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
+    if (!content) {
+      return;
+    }
+
+    const normalizedImageUrl = normalizeEditorImageUrl(imageUrl);
+    const image = Array.from(content.querySelectorAll("img")).find((node) => {
+      const currentSrc = normalizeEditorImageUrl(node.currentSrc || "");
+      const src = normalizeEditorImageUrl(node.src || "");
+      return currentSrc === normalizedImageUrl || src === normalizedImageUrl;
+    });
+
+    if (!image) {
+      if (remainingAttempts > 0) {
+        window.requestAnimationFrame(() => {
+          placeCaretAfterImage(imageUrl, remainingAttempts - 1);
+        });
+      }
+      return;
+    }
+
+    const imageBlock = resolveDirectEditableChild(image, content) ?? image;
+    const nextBlock = imageBlock.nextElementSibling;
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+
+    const range = document.createRange();
+    if (nextBlock) {
+      collapseRangeToStart(range, nextBlock);
+    } else if (imageBlock.parentNode) {
+      range.setStartAfter(imageBlock);
+      range.collapse(true);
+    } else {
+      range.selectNodeContents(content);
+      range.collapse(false);
+    }
+
+    content.focus();
+    selection.removeAllRanges();
+    selection.addRange(range);
     scheduleHeightSync();
   }, [scheduleHeightSync]);
 
@@ -239,14 +316,16 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     const insertion = `${needsLeadingBreak ? "\n" : ""}${upload.placeholderMarkdown}\n\n`;
     editorRef.current.insertMarkdown(insertion);
     syncControlledValue();
+    placeCaretAfterImage(upload.previewUrl);
 
     try {
       const formData = new FormData();
       formData.append("file", file, file.name || `image-${upload.id}.png`);
       const response = await apiClient.postForm<{ url: string }>("/media/images", formData);
-      const currentMarkdown = editorRef.current.getMarkdown();
-      const nextMarkdown = replaceUploadingImageMarkdown(currentMarkdown, upload, buildPersistedImageMarkdown(upload.alt, response.url));
-      updateEditorMarkdown(nextMarkdown);
+      resolvedUploadsRef.current.set(upload.previewUrl, response.url);
+      replaceRenderedImageSource(upload.previewUrl, response.url);
+      syncControlledValue();
+      placeCaretAfterImage(response.url);
     } catch (error) {
       const currentMarkdown = editorRef.current.getMarkdown();
       const nextMarkdown = replaceUploadingImageMarkdown(currentMarkdown, upload, `> No se pudo subir la imagen \`${escapeInlineCode(upload.alt)}\`. Vuelve a pegarla para reintentar.`);
@@ -257,7 +336,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       setUploadingImages((current) => current.filter((entry) => entry.id !== upload.id));
       URL.revokeObjectURL(upload.previewUrl);
     }
-  }, [syncControlledValue, updateEditorMarkdown]);
+  }, [placeCaretAfterImage, replaceRenderedImageSource, syncControlledValue, updateEditorMarkdown]);
 
   React.useEffect(() => {
     const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
@@ -265,7 +344,36 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       return;
     }
 
+    const imageListeners = new Map<HTMLImageElement, () => void>();
+    const bindImageListeners = () => {
+      imageListeners.forEach((cleanup, image) => {
+        if (!content.contains(image)) {
+          cleanup();
+          imageListeners.delete(image);
+        }
+      });
+
+      Array.from(content.querySelectorAll("img")).forEach((image) => {
+        if (imageListeners.has(image)) {
+          return;
+        }
+
+        const handleImageState = () => scheduleHeightSync();
+        image.addEventListener("load", handleImageState);
+        image.addEventListener("error", handleImageState);
+        imageListeners.set(image, () => {
+          image.removeEventListener("load", handleImageState);
+          image.removeEventListener("error", handleImageState);
+        });
+
+        if (image.complete) {
+          scheduleHeightSync();
+        }
+      });
+    };
+
     const mutationObserver = new MutationObserver(() => {
+      bindImageListeners();
       scheduleHeightSync();
     });
 
@@ -372,6 +480,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     content.addEventListener("click", handleClick);
     document.addEventListener("selectionchange", handleSelectionChange);
 
+    bindImageListeners();
     scheduleHeightSync();
     syncAnchor();
 
@@ -387,6 +496,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       content.removeEventListener("paste", handlePaste);
       content.removeEventListener("click", handleClick);
       document.removeEventListener("selectionchange", handleSelectionChange);
+      imageListeners.forEach((cleanup) => cleanup());
       if (resizeFrameRef.current !== null) {
         window.cancelAnimationFrame(resizeFrameRef.current);
         resizeFrameRef.current = null;
@@ -455,6 +565,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         URL.revokeObjectURL(upload.previewUrl);
       });
       pendingUploadsRef.current.clear();
+      resolvedUploadsRef.current.clear();
     };
   }, []);
 
@@ -464,9 +575,9 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       <span className="rich-description-label">{label}</span>
       <MDXEditor
         ref={editorRef}
-        markdown={ensureImages(value || "")}
+        markdown={normalizeEditorImageUrl(value || "")}
         onChange={(nextValue) => {
-          onChange(nextValue);
+          onChange(materializeUploadedImageMarkdown(nextValue));
           scheduleHeightSync();
         }}
         className="rich-description-editor"
@@ -692,6 +803,26 @@ function firstTextNode(node: Node): Text | null {
   }
 
   return null;
+}
+
+function resolveDirectEditableChild(node: Node, root: HTMLElement): HTMLElement | null {
+  let current = node instanceof HTMLElement ? node : node.parentElement;
+  while (current && current.parentElement && current.parentElement !== root) {
+    current = current.parentElement;
+  }
+  return current;
+}
+
+function collapseRangeToStart(range: Range, node: Node) {
+  const textNode = firstTextNode(node);
+  if (textNode) {
+    range.setStart(textNode, 0);
+    range.collapse(true);
+    return;
+  }
+
+  range.setStart(node, 0);
+  range.collapse(true);
 }
 
 function findAnchorMatch(value: string, offset: number) {

@@ -21,6 +21,7 @@ type ActivityStats = {
 
 const statsWindows = ["week", "month", "semester", "year"] as const;
 type StatsWindow = typeof statsWindows[number];
+type ApiKeysSortOrder = "newest" | "oldest";
 
 export const SettingsView = observer(function SettingsView() {
   const store = useRootStore();
@@ -40,6 +41,7 @@ export const SettingsView = observer(function SettingsView() {
   const [newApiKeyCode, setNewApiKeyCode] = React.useState("");
   const [apiKeysBusy, setApiKeysBusy] = React.useState(false);
   const [availableProducts, setAvailableProducts] = React.useState<ProductDto[]>([]);
+  const [apiKeysSortOrder, setApiKeysSortOrder] = React.useState<ApiKeysSortOrder>("newest");
 
   React.useEffect(() => {
     setName(user?.name ?? "");
@@ -144,6 +146,14 @@ export const SettingsView = observer(function SettingsView() {
     label: `${product.name} (${product.key})`,
     searchText: `${product.name} ${product.key}`
   }));
+  const sortedApiKeys = [...apiKeys].sort((left, right) => {
+    const leftTime = new Date(left.createdAt).getTime();
+    const rightTime = new Date(right.createdAt).getTime();
+    return apiKeysSortOrder === "newest" ? rightTime - leftTime : leftTime - rightTime;
+  });
+  const apiKeysCountLabel = apiKeysLoading
+    ? "Sincronizando keys"
+    : `${apiKeys.length} ${apiKeys.length === 1 ? "key creada" : "keys creadas"}`;
 
   return (
     <div className="stack-lg">
@@ -203,110 +213,203 @@ export const SettingsView = observer(function SettingsView() {
       </section>
 
       <section className="card">
-        <div className="section-head">
-          <div>
+        <div className="section-head api-keys-section-head">
+          <div className="api-keys-section-copy">
             <h3>API keys</h3>
             <p className="muted">Cada key se asigna a un producto accesible y usa tu rol vigente sobre ese producto al autenticar el MCP por `x-api-key`.</p>
           </div>
         </div>
-        <div className="definition-grid">
-          <div className="form-grid">
-            <label>
-              Nombre
-              <input
-                value={newApiKeyName}
-                onChange={(event) => setNewApiKeyName(event.target.value)}
-                placeholder="Ej. Claude Desktop"
-              />
-            </label>
-            <label>
-              Producto
-              <SearchableSelect
-                value={newApiKeyProductId}
-                onChange={setNewApiKeyProductId}
-                options={apiKeyProductOptions}
-                placeholder={availableProducts.length > 0 ? "Seleccionar producto" : "Sin productos disponibles"}
-                searchPlaceholder="Buscar producto..."
-                emptyMessage="No hay productos coincidentes."
-                ariaLabel="Seleccionar producto para la API key"
-                disabled={apiKeysBusy || availableProducts.length === 0}
-              />
-            </label>
-            <div className="row-actions">
-              <button
-                className="btn btn-primary"
-                disabled={apiKeysBusy || newApiKeyName.trim().length < 2 || !newApiKeyProductId}
-                onClick={() => void (async () => {
-                  setApiKeysBusy(true);
-                  try {
-                    const created = await auth.createApiKey({
-                      name: newApiKeyName.trim(),
-                      productId: newApiKeyProductId
-                    });
-                    setApiKeys((current) => [created.apiKey, ...current]);
-                    setNewApiKeyCode(created.code);
-                    setNewApiKeyName("");
-                    setNewApiKeyProductId((current) => current || availableProducts[0]?.id || "");
-                    setApiKeysError("");
-                  } catch (error) {
-                    setApiKeysError(error instanceof Error ? error.message : "No se pudo crear la API key.");
-                  } finally {
-                    setApiKeysBusy(false);
-                  }
-                })()}
-              >
-                Crear key
-              </button>
-            </div>
-            {newApiKeyCode ? (
-              <div className="definition-note api-key-card">
-                <span className="muted">Codigo generado</span>
-                <strong style={{ wordBreak: "break-all" }}>{newApiKeyCode}</strong>
-                <span className="muted">Se muestra una sola vez. Usalo como header `x-api-key` al conectar el MCP.</span>
+        <div className="api-keys-layout">
+          <div className="api-keys-create-shell">
+            <div className="api-keys-create-head">
+              <div className="api-keys-create-copy">
+                <span className="workspace-context">Crear acceso MCP</span>
+                <h4>Nueva API key</h4>
+                <p className="muted">
+                  Define un nombre reconocible, elegi el producto correcto y genera una credencial lista para usar en tus integraciones MCP.
+                </p>
               </div>
-            ) : null}
+              <div className="api-keys-create-stats"><div style={{ border: 'none' }} />
+                <div>
+                  <span className="muted">Productos accesibles</span>
+                  <strong>{availableProducts.length} disponibles</strong>
+                </div>
+              </div>
+            </div>
+            <div className="form-grid api-keys-form-shell">
+              <div className="api-keys-form-grid">
+                <label>
+                  Nombre
+                  <input
+                    value={newApiKeyName}
+                    onChange={(event) => setNewApiKeyName(event.target.value)}
+                    placeholder="Ej. Claude Desktop"
+                  />
+                </label>
+                <label>
+                  Producto
+                  <SearchableSelect
+                    value={newApiKeyProductId}
+                    onChange={setNewApiKeyProductId}
+                    options={apiKeyProductOptions}
+                    placeholder={availableProducts.length > 0 ? "Seleccionar producto" : "Sin productos disponibles"}
+                    searchPlaceholder="Buscar producto..."
+                    emptyMessage="No hay productos coincidentes."
+                    ariaLabel="Seleccionar producto para la API key"
+                    disabled={apiKeysBusy || availableProducts.length === 0}
+                  />
+                </label>
+              </div>
+              <div className="api-keys-form-footer">
+                <p className="muted">La key se muestra una sola vez y despues queda listada abajo para administrarla.</p>
+                <button
+                  className="btn btn-primary"
+                  disabled={apiKeysBusy || newApiKeyName.trim().length < 2 || !newApiKeyProductId}
+                  onClick={() => void (async () => {
+                    setApiKeysBusy(true);
+                    try {
+                      const created = await auth.createApiKey({
+                        name: newApiKeyName.trim(),
+                        productId: newApiKeyProductId
+                      });
+                      setApiKeys((current) => [created.apiKey, ...current]);
+                      setNewApiKeyCode(created.code);
+                      setNewApiKeyName("");
+                      setNewApiKeyProductId((current) => current || availableProducts[0]?.id || "");
+                      setApiKeysError("");
+                    } catch (error) {
+                      setApiKeysError(error instanceof Error ? error.message : "No se pudo crear la API key.");
+                    } finally {
+                      setApiKeysBusy(false);
+                    }
+                  })()}
+                >
+                  Crear key
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="stack-lg api-keys-list">
-            {apiKeysLoading ? <p className="muted">Cargando API keys...</p> : null}
-            {!apiKeysLoading && availableProducts.length === 0 ? (
-              <p className="muted">No tenes productos accesibles para asociar nuevas API keys.</p>
-            ) : null}
-            {!apiKeysLoading && apiKeys.length === 0 ? (
-              <p className="muted">Todavia no creaste ninguna API key.</p>
-            ) : null}
-            {apiKeys.map((apiKey) => (
-              <div key={apiKey.id} className="definition-note api-key-card">
-                <span className="muted">{apiKey.name}</span>
-                <strong>{apiKey.maskedCode}</strong>
-                <span className="pill api-key-pill">
-                  {apiKey.productKey && apiKey.productName ? `${apiKey.productKey} · ${apiKey.productName}` : "Sin producto asignado"}
-                </span>
-                <span className="muted">
-                  Creada {new Date(apiKey.createdAt).toLocaleString()} · Ultimo uso {apiKey.lastUsedAt ? new Date(apiKey.lastUsedAt).toLocaleString() : "sin uso"}
-                </span>
-                <div className="row-actions">
+
+          {newApiKeyCode ? (
+            <div className="api-key-generated">
+              <div>
+                <span className="workspace-context">Codigo generado</span>
+                <h4>Guardalo ahora</h4>
+              </div>
+              <code className="api-key-generated-code">{newApiKeyCode}</code>
+              <p className="muted">Se muestra una sola vez. Usalo como header `x-api-key` al conectar el MCP.</p>
+            </div>
+          ) : null}
+
+          <div className="stack-lg api-keys-listing">
+            <div className="api-keys-list-head">
+              <div>
+                <h4>Keys creadas</h4>
+                <p className="muted">Revisa producto, mascara, actividad y elimina accesos que ya no necesites.</p>
+              </div>
+              <div className="api-keys-section-meta">
+                <span className="api-keys-count">{apiKeysCountLabel}</span>
+                <div className="api-keys-sort" role="group" aria-label="Ordenar API keys">
                   <button
                     type="button"
-                    className="btn btn-secondary"
-                    disabled={apiKeysBusy}
-                    onClick={() => void (async () => {
-                      setApiKeysBusy(true);
-                      try {
-                        await auth.deleteApiKey(apiKey.id);
-                        setApiKeys((current) => current.filter((entry) => entry.id !== apiKey.id));
-                        setApiKeysError("");
-                      } catch (error) {
-                        setApiKeysError(error instanceof Error ? error.message : "No se pudo eliminar la API key.");
-                      } finally {
-                        setApiKeysBusy(false);
-                      }
-                    })()}
+                    className={`btn btn-ghost ${apiKeysSortOrder === "newest" ? "is-active" : ""}`.trim()}
+                    onClick={() => setApiKeysSortOrder("newest")}
                   >
-                    Eliminar
+                    Mas recientes
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-ghost ${apiKeysSortOrder === "oldest" ? "is-active" : ""}`.trim()}
+                    onClick={() => setApiKeysSortOrder("oldest")}
+                  >
+                    Mas antiguas
                   </button>
                 </div>
               </div>
-            ))}
+            </div>
+            {apiKeysLoading ? <p className="muted">Cargando API keys...</p> : null}
+            {!apiKeysLoading && availableProducts.length === 0 ? (
+              <div className="definition-note api-keys-empty-state">
+                <strong>No tenes productos accesibles para asociar nuevas API keys.</strong>
+                <span className="muted">Cuando tengas acceso a un producto, vas a poder generar credenciales desde esta misma vista.</span>
+              </div>
+            ) : null}
+            {!apiKeysLoading && apiKeys.length === 0 ? (
+              <div className="definition-note api-keys-empty-state">
+                <strong>Todavia no creaste ninguna API key.</strong>
+                <span className="muted">Completa el formulario de arriba para generar tu primer acceso reutilizable.</span>
+              </div>
+            ) : null}
+            {sortedApiKeys.length > 0 ? (
+              <div className="api-key-table-shell">
+                <table className="table api-key-table">
+                  <thead>
+                    <tr>
+                      <th>Key</th>
+                      <th>Producto</th>
+                      <th>Creada</th>
+                      <th>Ultimo uso</th>
+                      <th>Estado</th>
+                      <th aria-label="Acciones"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedApiKeys.map((apiKey) => (
+                      <tr key={apiKey.id}>
+                        <td className="api-key-primary-cell">
+                          <div className="api-key-primary">
+                            <strong>{apiKey.name}</strong>
+                            <code>{apiKey.maskedCode}</code>
+                          </div>
+                        </td>
+                        <td className="api-key-product-cell">
+                          {apiKey.productKey && apiKey.productName ? (
+                            <div className="api-key-product">
+                              <span className="pill api-key-pill">{apiKey.productKey}</span>
+                              <span>{apiKey.productName}</span>
+                            </div>
+                          ) : (
+                            <span className="muted">Sin producto asignado</span>
+                          )}
+                        </td>
+                        <td className="api-key-date-cell">
+                          <strong>{new Date(apiKey.createdAt).toLocaleString()}</strong>
+                        </td>
+                        <td className="api-key-date-cell">
+                          <strong>{apiKey.lastUsedAt ? new Date(apiKey.lastUsedAt).toLocaleString() : "Sin uso"}</strong>
+                        </td>
+                        <td className="api-key-state-cell">
+                          <span className={`pill api-key-state-pill ${apiKey.lastUsedAt ? "is-used" : "is-idle"}`.trim()}>
+                            {apiKey.lastUsedAt ? "Con uso" : "Sin uso"}
+                          </span>
+                        </td>
+                        <td className="api-key-actions-cell">
+                          <button
+                            type="button"
+                            className="btn btn-secondary sm"
+                            disabled={apiKeysBusy}
+                            onClick={() => void (async () => {
+                              setApiKeysBusy(true);
+                              try {
+                                await auth.deleteApiKey(apiKey.id);
+                                setApiKeys((current) => current.filter((entry) => entry.id !== apiKey.id));
+                                setApiKeysError("");
+                              } catch (error) {
+                                setApiKeysError(error instanceof Error ? error.message : "No se pudo eliminar la API key.");
+                              } finally {
+                                setApiKeysBusy(false);
+                              }
+                            })()}
+                          >
+                            Eliminar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
             {apiKeysError ? <p className="error-text">{apiKeysError}</p> : null}
           </div>
         </div>

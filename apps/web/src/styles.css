@@ -2418,6 +2418,221 @@ html .drawer-content .card {
   align-content: start;
 }
 
+.api-keys-section-head {
+  align-items: flex-start;
+}
+
+.api-keys-section-copy {
+  display: grid;
+  gap: 0.3rem;
+  max-width: 56rem;
+}
+
+.api-keys-section-meta {
+  display: grid;
+  gap: 0.7rem;
+  justify-items: end;
+}
+
+.api-keys-count {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.api-keys-sort {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.api-keys-sort .btn.is-active {
+  border-color: color-mix(in srgb, var(--accent-a) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent-a) 14%, var(--bg-card));
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--accent-a) 12%, transparent);
+}
+
+.api-keys-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+.api-keys-create-shell {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent-a) 16%, var(--border-soft));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-card) 94%, var(--bg-soft));
+}
+
+.api-keys-create-head,
+.api-keys-form-shell {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.api-keys-create-head {
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+  align-items: start;
+}
+
+.api-keys-create-copy,
+.api-keys-form-shell {
+  align-content: start;
+}
+
+.api-keys-create-copy {
+  max-width: 46rem;
+}
+
+.api-keys-create-stats {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.api-keys-create-stats>div {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent-a) 12%, var(--border-soft));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+}
+
+.api-keys-form-grid {
+  display: grid;
+  gap: 0.78rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.api-keys-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.api-key-generated {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent-b) 20%, var(--border-soft));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-card) 96%, var(--bg-soft));
+}
+
+.api-key-generated-code {
+  display: block;
+  width: 100%;
+  padding: 0.82rem 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.api-keys-listing {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.api-keys-list-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.api-key-table-shell {
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--border-soft) 92%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-card) 97%, transparent);
+}
+
+.api-key-table {
+  min-width: 100%;
+  border: none;
+}
+
+.api-key-table th,
+.api-key-table td {
+  padding: 1rem;
+  vertical-align: middle;
+}
+
+.api-key-table th:last-child,
+.api-key-table td:last-child {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.api-key-table th:nth-child(2),
+.api-key-table td:nth-child(2) {
+  min-width: 14rem;
+}
+
+.api-key-table th:nth-child(3),
+.api-key-table td:nth-child(3),
+.api-key-table th:nth-child(4),
+.api-key-table td:nth-child(4) {
+  min-width: 11rem;
+}
+
+.api-key-primary-cell {
+  min-width: 20rem;
+}
+
+.api-key-primary {
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.api-key-primary code {
+  width: fit-content;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.api-key-product {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.api-key-date-cell strong {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.api-key-state-cell,
+.api-key-actions-cell {
+  text-align: center;
+}
+
+.api-key-state-pill.is-used {
+  border-color: color-mix(in srgb, var(--accent-b) 24%, var(--ok-border));
+  background: color-mix(in srgb, var(--ok-bg) 80%, var(--bg-card));
+  color: var(--ok-text);
+}
+
+.api-key-state-pill.is-idle {
+  border-color: color-mix(in srgb, var(--warn-border) 72%, var(--border));
+  background: color-mix(in srgb, var(--warn-bg) 72%, var(--bg-card));
+  color: var(--warn-text);
+}
+
+.api-keys-empty-state {
+  padding: 1rem;
+  border: 1px dashed color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-soft) 72%, transparent);
+}
+
 .api-key-card {
   padding: 0.9rem 1rem;
   border: 1px solid color-mix(in srgb, var(--accent-a) 18%, var(--border-soft));
@@ -2814,6 +3029,10 @@ html .drawer-content .card {
 
 @media (max-width: 1180px) {
   .definition-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .api-keys-create-head {
     grid-template-columns: 1fr;
   }
 }
@@ -3299,6 +3518,31 @@ th {
 
   .definition-grid,
   .kb-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .api-keys-section-head,
+  .api-keys-list-head,
+  .api-keys-form-footer {
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+  }
+
+  .api-keys-section-meta {
+    justify-items: stretch;
+  }
+
+  .api-keys-sort {
+    width: 100%;
+  }
+
+  .api-keys-sort .btn {
+    flex: 1 1 12rem;
+  }
+
+  .api-keys-create-stats,
+  .api-keys-form-grid {
     grid-template-columns: 1fr;
   }
 
