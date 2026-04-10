@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { FiInfo } from "react-icons/fi";
 import { MarkdownPreview } from "../../../ui/drawers/product-workspace/MarkdownPreview";
 import { StoryItem } from "../ProductWorkspaceViewShared";
@@ -10,6 +11,8 @@ type StoryInfoPopoverProps = {
 type PopoverPlacement = {
   vertical: "top" | "bottom";
   horizontal: "start" | "end";
+  top: number;
+  left: number;
   maxHeight: number;
   maxWidth: number;
 };
@@ -20,6 +23,8 @@ export function StoryInfoPopover(props: StoryInfoPopoverProps) {
   const [placement, setPlacement] = React.useState<PopoverPlacement>({
     vertical: "bottom",
     horizontal: "end",
+    top: 0,
+    left: 0,
     maxHeight: 320,
     maxWidth: 420
   });
@@ -74,18 +79,32 @@ export function StoryInfoPopover(props: StoryInfoPopoverProps) {
     const horizontal =
       spaceRight >= Math.min(panelRect.width, 280) || spaceRight >= spaceLeft ? "start" : "end";
     const maxWidth = Math.max(220, Math.floor(horizontal === "start" ? spaceRight : spaceLeft));
+    const visiblePanelHeight = Math.min(panelRect.height || maxHeight, maxHeight);
+    const visiblePanelWidth = Math.min(panelRect.width || maxWidth, maxWidth);
+    const top = vertical === "bottom"
+      ? Math.max(viewportMargin, Math.min(triggerRect.bottom + gap, window.innerHeight - viewportMargin - visiblePanelHeight))
+      : Math.max(viewportMargin, triggerRect.top - gap - visiblePanelHeight);
+    const alignedLeft = horizontal === "start"
+      ? triggerRect.left
+      : triggerRect.right - visiblePanelWidth;
+    const left = Math.max(
+      viewportMargin,
+      Math.min(alignedLeft, window.innerWidth - viewportMargin - visiblePanelWidth)
+    );
 
     setPlacement((current) => {
       if (
         current.vertical === vertical &&
         current.horizontal === horizontal &&
+        current.top === top &&
+        current.left === left &&
         current.maxHeight === maxHeight &&
         current.maxWidth === maxWidth
       ) {
         return current;
       }
 
-      return { vertical, horizontal, maxHeight, maxWidth };
+      return { vertical, horizontal, top, left, maxHeight, maxWidth };
     });
   }, []);
 
@@ -131,7 +150,7 @@ export function StoryInfoPopover(props: StoryInfoPopoverProps) {
 
   return (
     <div
-      className="story-info-popover"
+      className={`story-info-popover ${open ? "is-open" : ""}`.trim()}
       onMouseEnter={openPopover}
       onMouseLeave={scheduleClosePopover}
       onFocusCapture={openPopover}
@@ -152,27 +171,35 @@ export function StoryInfoPopover(props: StoryInfoPopoverProps) {
       >
         <FiInfo aria-hidden="true" focusable="false" />
       </button>
-      {open ? (
-        <div
-          id={panelId}
-          ref={panelRef}
-          className="story-info-popover-panel"
-          role="tooltip"
-          onMouseEnter={openPopover}
-          onMouseLeave={scheduleClosePopover}
-          data-side={placement.vertical}
-          data-align={placement.horizontal}
-          style={{ maxHeight: `${placement.maxHeight}px`, maxWidth: `${placement.maxWidth}px` }}
-        >
-          <MarkdownPreview
-            markdown={story.description}
-            compact
-            previewSize={400}
-            className="markdown-preview-card"
-            emptyLabel="Sin informacion adicional"
-          />
-        </div>
-      ) : null}
+      {open && typeof document !== "undefined"
+        ? createPortal(
+          <div
+            id={panelId}
+            ref={panelRef}
+            className="story-info-popover-panel"
+            role="tooltip"
+            onMouseEnter={openPopover}
+            onMouseLeave={scheduleClosePopover}
+            data-side={placement.vertical}
+            data-align={placement.horizontal}
+            style={{
+              top: `${placement.top}px`,
+              left: `${placement.left}px`,
+              maxHeight: `${placement.maxHeight}px`,
+              maxWidth: `${placement.maxWidth}px`
+            }}
+          >
+            <MarkdownPreview
+              markdown={story.description}
+              compact
+              previewSize={400}
+              className="markdown-preview-card"
+              emptyLabel="Sin informacion adicional"
+            />
+          </div>,
+          document.body
+        )
+        : null}
     </div>
   );
 }
