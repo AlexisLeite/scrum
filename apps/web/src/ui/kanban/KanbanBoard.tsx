@@ -269,6 +269,62 @@ function getEventPointerClientY(activatorEvent: Event, deltaY: number) {
   return null;
 }
 
+function getEventClientY(event: Event) {
+  const pointerEvent = event as PointerEvent;
+  if (typeof pointerEvent.clientY === "number") {
+    return pointerEvent.clientY;
+  }
+
+  const touchEvent = event as TouchEvent;
+  const touch = touchEvent.touches?.[0] ?? touchEvent.changedTouches?.[0];
+  if (touch) {
+    return touch.clientY;
+  }
+
+  return null;
+}
+
+function resolvePreviewIndexFromRenderedTasks(
+  columnName: string,
+  visibleTargetTasks: KanbanTask[],
+  pointerClientY?: number | null
+) {
+  if (pointerClientY == null || typeof document === "undefined") {
+    return null;
+  }
+
+  const columnElement = Array.from(document.querySelectorAll<HTMLElement>(".kb-column[data-column-name]"))
+    .find((element) => element.dataset.columnName === columnName);
+
+  if (!columnElement) {
+    return null;
+  }
+
+  const taskElements = Array.from(columnElement.querySelectorAll<HTMLElement>(".kb-task-list > .kb-card[data-task-id]"));
+
+  if (taskElements.length === 0) {
+    return 0;
+  }
+
+  let renderedIndex = 0;
+
+  for (const taskElement of taskElements) {
+    const taskId = taskElement.dataset.taskId;
+    if (!taskId || !visibleTargetTasks.some((task) => task.id === taskId)) {
+      continue;
+    }
+
+    const rect = taskElement.getBoundingClientRect();
+    if (pointerClientY < rect.top + rect.height / 2) {
+      return renderedIndex;
+    }
+
+    renderedIndex += 1;
+  }
+
+  return Math.min(renderedIndex, visibleTargetTasks.length);
+}
+
 function resolveDragPreview(
   columns: KanbanColumn[],
   activeDrag: ActiveDragState,
@@ -289,9 +345,12 @@ function resolveDragPreview(
 
   const targetTasks = columns.find((column) => column.name === targetColumnName)?.tasks ?? [];
   const visibleTargetTasks = targetTasks.filter((task) => task.id !== activeDrag.taskId);
+  const renderedIndex = resolvePreviewIndexFromRenderedTasks(targetColumnName, visibleTargetTasks, pointerClientY);
   let targetIndex: number;
 
-  if (overId === targetColumnName) {
+  if (renderedIndex != null) {
+    targetIndex = renderedIndex;
+  } else if (overId === targetColumnName) {
     targetIndex = visibleTargetTasks.length;
   } else {
     const overIndex = visibleTargetTasks.findIndex((task) => task.id === overId);
@@ -608,7 +667,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
   }, [column.name, setColumnElement, setNodeRef]);
 
   return (
-    <section ref={setRefs} className={`kb-column ${isOver || showGhost ? "is-drop-column" : ""}`}>
+    <section ref={setRefs} data-column-name={column.name} className={`kb-column ${isOver || showGhost ? "is-drop-column" : ""}`}>
       <header className="kb-column-head">
         <div className="kb-column-head-main">
           <h4>{column.name}</h4>
@@ -758,6 +817,7 @@ export function KanbanBoard({
   const columnsMenuRef = React.useRef<HTMLDivElement | null>(null);
   const columnElementRefs = React.useRef(new Map<string, HTMLElement>());
   const columnsContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const dragPointerClientYRef = React.useRef<number | null>(null);
   const resizeStateRef = React.useRef<{
     leftColumnName: string;
     rightColumnName: string;
@@ -843,6 +903,31 @@ export function KanbanBoard({
       setAssigneeFilter("all");
     }
   }, [assigneeFilter, assigneeFilterOptions]);
+
+  React.useEffect(() => {
+    if (!activeDrag || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const updatePointerClientY = (event: PointerEvent) => {
+      dragPointerClientYRef.current = event.clientY;
+    };
+    const updateTouchClientY = (event: TouchEvent) => {
+      const touch = event.touches?.[0] ?? event.changedTouches?.[0];
+      if (touch) {
+        dragPointerClientYRef.current = touch.clientY;
+      }
+    };
+
+    window.addEventListener("pointermove", updatePointerClientY, { passive: true });
+    window.addEventListener("touchmove", updateTouchClientY, { passive: true });
+
+    return () => {
+      window.removeEventListener("pointermove", updatePointerClientY);
+      window.removeEventListener("touchmove", updateTouchClientY);
+      dragPointerClientYRef.current = null;
+    };
+  }, [activeDrag]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1091,6 +1176,7 @@ export function KanbanBoard({
   const clearDrag = () => {
     setActiveDrag(null);
     setDragPreview(null);
+    dragPointerClientYRef.current = null;
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -1113,6 +1199,7 @@ export function KanbanBoard({
       overlayHeight: event.active.rect.current.initial?.height ?? null,
       sourceIndex
     } satisfies ActiveDragState;
+    dragPointerClientYRef.current = getEventClientY(event.activatorEvent);
     setActiveDrag(nextActiveDrag);
     setDragPreview({ columnName: fromColumn, index: sourceIndex });
   };
@@ -1121,7 +1208,7 @@ export function KanbanBoard({
     if (!activeDrag || !event.over) {
       return;
     }
-    const pointerClientY = getEventPointerClientY(event.activatorEvent, event.delta.y);
+    const pointerClientY = dragPointerClientYRef.current ?? getEventPointerClientY(event.activatorEvent, event.delta.y);
     const nextPreview = resolveDragPreview(
       activeDrag.snapshot,
       activeDrag,
@@ -1161,7 +1248,7 @@ export function KanbanBoard({
       snapshot,
       activeDrag,
       overId,
-      getEventPointerClientY(event.activatorEvent, event.delta.y),
+      dragPointerClientYRef.current ?? getEventPointerClientY(event.activatorEvent, event.delta.y),
       event.over?.rect.top ?? null,
       event.over?.rect.height ?? null
     );

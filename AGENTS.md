@@ -5,6 +5,14 @@
 - El server de desarrollo ya está levantado en `https://vmi3181573.contaboserver.net:5443`.
 - Está corriendo en modo watch, por lo que no es necesario levantarlo nuevamente.
 
+## Watch y TypeScript
+
+- El watch de desarrollo expone su consola por TCP en `127.0.0.1:7777`.
+- Siempre que estemos desarrollando y haya que validar errores de TypeScript, primero consulta ese stream remoto en lugar de ejecutar chequeos extra como `pnpm typecheck`, `turbo run typecheck` o `tsc`.
+- Usa `read()` para leer las ultimas 10 lineas y `read(n)` para pedir mas contexto cuando haga falta.
+- Ejemplo de consulta: `printf 'read(25)\n' | nc 127.0.0.1 7777`
+- Solo ejecuta chequeos adicionales de TypeScript si el usuario los pide explicitamente o si el watch remoto no esta disponible.
+
 ## Credenciales locales
 
 Las credenciales de prueba no deben quedar en archivos versionados.
