@@ -593,7 +593,7 @@ export class TasksService {
     });
   }
 
-  assign(id: string, assigneeId: string | null | undefined, sprintId: string | null | undefined, user: AuthUser) {
+  async assign(id: string, assigneeId: string | null | undefined, sprintId: string | null | undefined, user: AuthUser) {
     const payload: UpdateTaskDto = {};
     if (assigneeId !== undefined) {
       payload.assigneeId = assigneeId;
@@ -602,7 +602,21 @@ export class TasksService {
       payload.sprintId = sprintId;
     }
     if (assigneeId === user.sub && sprintId === undefined) {
-      return this.takeTask(id, assigneeId, sprintId, user);
+      const current = await this.prisma.task.findUnique({
+        where: { id },
+        select: {
+          assigneeId: true,
+          sprintId: true
+        }
+      });
+
+      if (!current) {
+        throw new BadRequestException("Task not found");
+      }
+
+      if (!current.assigneeId && current.sprintId) {
+        return this.takeTask(id, assigneeId, sprintId, user);
+      }
     }
     return this.update(id, payload, user, "TASK_ASSIGNED", {
       allowTeamMemberSelfKanbanOnly: true,
