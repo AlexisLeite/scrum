@@ -62,6 +62,7 @@ type KanbanBoardProps = {
   assignees: KanbanAssignee[];
   assigneeFilterOptions?: KanbanAssignee[];
   statusOptions: string[];
+  toolbarActions?: React.ReactNode;
   readOnly?: boolean;
   allowCreateTask?: boolean;
   allowEditTask?: boolean;
@@ -808,6 +809,7 @@ export function KanbanBoard({
   assignees,
   assigneeFilterOptions = assignees,
   statusOptions,
+  toolbarActions,
   readOnly = false,
   allowCreateTask = true,
   allowEditTask = true,
@@ -1350,45 +1352,48 @@ export function KanbanBoard({
               ariaLabel="Filtrar por usuario"
             />
           </label>
-          <div className="kb-column-menu" ref={columnsMenuRef}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => setColumnsMenuOpen((current) => !current)}
-              aria-expanded={columnsMenuOpen}
-              aria-label="Elegir columnas visibles"
-            >
-              Columnas
-            </button>
-            {columnsMenuOpen ? (
-              <div className="kb-column-menu-popover">
-                <div className="kb-column-menu-head">
-                  <strong>Columnas visibles</strong>
-                  <button type="button" className="btn btn-secondary" onClick={handleResetColumns}>
-                    Reset
-                  </button>
+          <div className="kb-toolbar-actions">
+            <div className="kb-column-menu" ref={columnsMenuRef}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setColumnsMenuOpen((current) => !current)}
+                aria-expanded={columnsMenuOpen}
+                aria-label="Elegir columnas visibles"
+              >
+                Columnas
+              </button>
+              {columnsMenuOpen ? (
+                <div className="kb-column-menu-popover">
+                  <div className="kb-column-menu-head">
+                    <strong>Columnas visibles</strong>
+                    <button type="button" className="btn btn-secondary" onClick={handleResetColumns}>
+                      Reset
+                    </button>
+                  </div>
+                  <div className="kb-column-menu-list">
+                    {columns.map((column) => {
+                      const checked = !hiddenColumns.includes(column.name);
+                      return (
+                        <label key={column.name} className="kb-column-option">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={checked && visibleColumnCount <= 1}
+                            onChange={() => handleToggleColumnVisibility(column.name)}
+                          />
+                          <span>{column.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="muted kb-column-menu-help">
+                    Arrastra el separador entre columnas para cambiar sus anchos.
+                  </p>
                 </div>
-                <div className="kb-column-menu-list">
-                  {columns.map((column) => {
-                    const checked = !hiddenColumns.includes(column.name);
-                    return (
-                      <label key={column.name} className="kb-column-option">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={checked && visibleColumnCount <= 1}
-                          onChange={() => handleToggleColumnVisibility(column.name)}
-                        />
-                        <span>{column.name}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-                <p className="muted kb-column-menu-help">
-                  Arrastra el separador entre columnas para cambiar sus anchos.
-                </p>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
+            {toolbarActions ? <div className="kb-toolbar-extra">{toolbarActions}</div> : null}
           </div>
         </div>
 

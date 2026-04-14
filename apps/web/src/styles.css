@@ -3286,6 +3286,24 @@ th {
   padding-inline: 0.1rem;
 }
 
+.focused-refresh-button {
+  width: var(--control-height);
+  min-width: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0;
+  flex: none;
+}
+
+.focused-refresh-button svg {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+}
+
+.focused-refresh-button.is-spinning svg {
+  animation: submit-loading-spin 0.75s linear infinite;
+}
+
 @media (max-width: 1120px) {
   .focused-overview {
     grid-template-columns: 1fr;

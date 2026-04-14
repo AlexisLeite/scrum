@@ -1,6 +1,7 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
 import ReactECharts from "echarts-for-react";
+import { FiRefreshCw } from "react-icons/fi";
 import { ProductController } from "../controllers";
 import {
   canAssignFocusedTask,
@@ -155,6 +156,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
   canChangeStatus: (task: FocusedTask) => boolean;
   canMoveTask: (task: FocusedTask) => boolean;
   getTaskAssignees: (task: FocusedTask, assignees: DrawerOption[]) => DrawerOption[];
+  toolbarActions?: React.ReactNode;
   isTaskPending: (taskId: string) => boolean;
   isTaskOpening: (taskId: string) => boolean;
   onCreateTask: (defaultStatus: string) => void;
@@ -178,6 +180,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
     canChangeStatus,
     canMoveTask,
     getTaskAssignees,
+    toolbarActions,
     isTaskPending,
     isTaskOpening,
     onCreateTask,
@@ -213,6 +216,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
         canChangeStatus={(task) => canChangeStatus(task as FocusedTask)}
         canMoveTask={(task) => canMoveTask(task as FocusedTask)}
         getTaskAssignees={(task, nextAssignees) => getTaskAssignees(task as FocusedTask, nextAssignees as DrawerOption[])}
+        toolbarActions={toolbarActions}
         isTaskPending={isTaskPending}
         isTaskOpening={isTaskOpening}
         onCreateTask={onCreateTask}
@@ -829,6 +833,31 @@ export const FocusedView = observer(function FocusedView() {
   );
   const isFocusedTaskPending = React.useCallback((taskId: string) => Boolean(pendingTaskIds[taskId]), [pendingTaskIds]);
   const isFocusedTaskOpening = React.useCallback((taskId: string) => Boolean(openingTaskIds[taskId]), [openingTaskIds]);
+  const hasPendingFocusedMutations = React.useMemo(
+    () => Object.keys(pendingTaskIds).length > 0,
+    [pendingTaskIds]
+  );
+  const handleFocusedRefresh = React.useCallback(() => {
+    if (loading || hasPendingFocusedMutations) {
+      return;
+    }
+    void reloadBoard({ force: true });
+  }, [hasPendingFocusedMutations, loading, reloadBoard]);
+  const focusedToolbarActions = React.useMemo(
+    () => (
+      <button
+        type="button"
+        className={`btn btn-secondary btn-icon focused-refresh-button${loading ? " is-spinning" : ""}`}
+        onClick={handleFocusedRefresh}
+        disabled={loading || hasPendingFocusedMutations}
+        aria-label="Refrescar tareas de Focused"
+        title="Refrescar tareas de Focused"
+      >
+        <FiRefreshCw aria-hidden="true" focusable="false" />
+      </button>
+    ),
+    [handleFocusedRefresh, hasPendingFocusedMutations, loading]
+  );
   const handleFocusedTaskEdit = React.useCallback((task: FocusedTask) => {
     setOpeningTaskIds((previous) => ({ ...previous, [task.id]: true }));
     void openTaskDrawer(task).finally(() => {
@@ -1009,6 +1038,7 @@ export const FocusedView = observer(function FocusedView() {
           canChangeStatus={canChangeFocusedStatus}
           canMoveTask={canMoveFocusedBoardTask}
           getTaskAssignees={getFocusedTaskAssignees}
+          toolbarActions={focusedToolbarActions}
           isTaskPending={isFocusedTaskPending}
           isTaskOpening={isFocusedTaskOpening}
           onCreateTask={handleCreateTask}
