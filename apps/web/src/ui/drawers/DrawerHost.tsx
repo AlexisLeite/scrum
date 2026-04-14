@@ -1,6 +1,6 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
-import { ModalsController } from "../modals/ModalsController";
+import { useOverlayEscape } from "../useOverlayEscape";
 import { DrawerController } from "./DrawerController";
 
 export const DrawerHost = observer(function DrawerHost(props: { controller: DrawerController }) {
@@ -17,23 +17,9 @@ export const DrawerHost = observer(function DrawerHost(props: { controller: Draw
     };
   }, [drawers.length]);
 
-  React.useEffect(() => {
-    if (drawers.length === 0) {
-      return undefined;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || ModalsController.hasOpenModals()) {
-        return;
-      }
-
-      event.preventDefault();
-      void controller.requestCloseTop();
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [controller, drawers.length]);
+  useOverlayEscape(() => {
+    void controller.requestCloseTop();
+  }, drawers.length > 0);
 
   if (drawers.length === 0) return null;
 

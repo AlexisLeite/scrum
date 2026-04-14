@@ -1,5 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
+import { useOverlayEscape } from "../../useOverlayEscape";
 import "./image-lightbox.css";
 
 type ImageLightboxProps = {
@@ -49,6 +50,8 @@ export function ImageLightbox(props: ImageLightboxProps) {
       body.style.overflow = previousOverflow;
     };
   }, [open]);
+
+  useOverlayEscape(onClose, open);
 
   React.useEffect(() => {
     if (!open) {
