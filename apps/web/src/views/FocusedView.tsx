@@ -2,6 +2,7 @@ import React from "react";
 import { observer } from "mobx-react-lite";
 import ReactECharts from "echarts-for-react";
 import { FiRefreshCw } from "react-icons/fi";
+import { ProductAssignableUserDto } from "@scrum/contracts";
 import { ProductController } from "../controllers";
 import {
   canAssignFocusedTask,
@@ -139,6 +140,39 @@ function buildCurrentTaskAssigneeOption(task: FocusedTask) {
     return [{ id: task.assigneeId, name: task.assigneeId }];
   }
   return [];
+}
+
+function buildVisibleFocusedFilterUsers(
+  users: ProductAssignableUserDto[],
+  selectedContext: FocusedCreationContext | null,
+  currentUser?: { id: string; name: string; role?: string | null } | null
+): DrawerOption[] {
+  if (!selectedContext) {
+    if (currentUser?.role === "team_member") {
+      return currentUser ? [{ id: currentUser.id, name: currentUser.name }] : [];
+    }
+    return [];
+  }
+
+  let scopedUsers = users;
+  const hasExplicitSprintMembers = scopedUsers.some((entry) => entry.sprintIds.includes(selectedContext.sprintId));
+
+  if (hasExplicitSprintMembers) {
+    scopedUsers = scopedUsers.filter((entry) => entry.sprintIds.includes(selectedContext.sprintId));
+  } else if (selectedContext.teamId) {
+    const teamScopedUsers = scopedUsers.filter((entry) => entry.teamIds.includes(selectedContext.teamId ?? ""));
+    if (teamScopedUsers.length > 0) {
+      scopedUsers = teamScopedUsers;
+    }
+  }
+
+  if (currentUser?.role === "team_member") {
+    return scopedUsers
+      .filter((entry) => entry.id === currentUser.id)
+      .map((entry) => ({ id: entry.id, name: entry.name }));
+  }
+
+  return scopedUsers.map((entry) => ({ id: entry.id, name: entry.name }));
 }
 
 const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
@@ -480,12 +514,6 @@ export const FocusedView = observer(function FocusedView() {
     () => assignableUsers.map((entry) => ({ id: entry.id, name: entry.name })),
     [assignableUsers]
   );
-  const visibleFilterUsers = React.useMemo(
-    () => user?.role === "team_member" && user
-      ? [{ id: user.id, name: user.name }]
-      : allAssignableUsers,
-    [allAssignableUsers, user]
-  );
 
   const statusOptions = React.useMemo(
     () => board.columns.length > 0
@@ -504,6 +532,14 @@ export const FocusedView = observer(function FocusedView() {
       ?? visibleContexts[0]
       ?? null,
     [selectedContextKey, visibleContexts]
+  );
+  const selectedContextAssignableUsers = React.useMemo(
+    () => selectedContext ? (assignableUsersByProductId[selectedContext.productId] ?? []) : [],
+    [assignableUsersByProductId, selectedContext]
+  );
+  const visibleFilterUsers = React.useMemo(
+    () => buildVisibleFocusedFilterUsers(selectedContextAssignableUsers, selectedContext, user),
+    [selectedContext, selectedContextAssignableUsers, user]
   );
   const canEditTasks = canEditTaskFields(user, selectedContext?.productId);
   const canCreateFocusedTasks = canCreateTasks(user, selectedContext?.productId);

@@ -212,7 +212,22 @@ export class ProductsService {
             id: true,
             name: true,
             email: true,
-            avatarUrl: true
+            avatarUrl: true,
+            teamMembers: {
+              select: {
+                teamId: true
+              }
+            },
+            sprintMembers: {
+              where: {
+                sprint: {
+                  productId
+                }
+              },
+              select: {
+                sprintId: true
+              }
+            }
           }
         }
       },
@@ -226,7 +241,9 @@ export class ProductsService {
       name: membership.user.name,
       email: membership.user.email,
       avatarUrl: membership.user.avatarUrl,
-      roleKeys: membership.roleKeys.length > 0 ? membership.roleKeys : [membership.role]
+      roleKeys: membership.roleKeys.length > 0 ? membership.roleKeys : [membership.role],
+      teamIds: Array.from(new Set(membership.user.teamMembers.map((entry) => entry.teamId))),
+      sprintIds: Array.from(new Set(membership.user.sprintMembers.map((entry) => entry.sprintId)))
     }));
   }
 

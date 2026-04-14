@@ -632,6 +632,8 @@ export interface ProductAssignableUserDto {
   email: string;
   avatarUrl: string | null;
   roleKeys: string[];
+  teamIds: string[];
+  sprintIds: string[];
 }
 
 export interface AdminUserDto {
