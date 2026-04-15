@@ -2855,6 +2855,60 @@ html .drawer-content .card {
   gap: 0.45rem;
 }
 
+.task-message-meta {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.task-message-history-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 0.16em;
+}
+
+.task-message-history {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-soft) 74%, transparent);
+}
+
+.task-message-history-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.task-message-history-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.task-message-history-entry {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+}
+
+.task-message-history-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .task-inline-reply {
   display: grid;
   gap: 0.85rem;

@@ -25,6 +25,8 @@ model User {
   productMember       ProductMember[]
   tasks               Task[]          @relation("TaskAssignee")
   taskMessages        TaskMessage[]   @relation("TaskMessageAuthor")
+  editedTaskMessages  TaskMessage[]   @relation("TaskMessageEditor")
+  taskMessageVersions TaskMessageRevision[] @relation("TaskMessageRevisionEditor")
   teamMembers         TeamMember[]
   drafts              UserDraft[]
   sprintMembers       SprintMember[]
@@ -271,19 +273,39 @@ model TaskMessage {
   id              String        @id @default(cuid())
   taskId          String
   authorUserId    String?
+  editedByUserId  String?
   parentMessageId String?
   body            String
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+  editedAt        DateTime?
   derivedTasks    Task[]        @relation("TaskSourceMessage")
   authorUser      User?         @relation("TaskMessageAuthor", fields: [authorUserId], references: [id])
+  editedByUser    User?         @relation("TaskMessageEditor", fields: [editedByUserId], references: [id])
   parentMessage   TaskMessage?  @relation("TaskMessageThread", fields: [parentMessageId], references: [id])
   replies         TaskMessage[] @relation("TaskMessageThread")
+  revisions       TaskMessageRevision[]
   task            Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId, createdAt])
   @@index([authorUserId, createdAt])
+  @@index([editedByUserId, editedAt])
   @@index([parentMessageId, createdAt])
+}
+
+model TaskMessageRevision {
+  id           String      @id @default(cuid())
+  messageId    String
+  version      Int
+  body         String
+  editedAt     DateTime    @default(now())
+  editorUserId String?
+  editorUser   User?       @relation("TaskMessageRevisionEditor", fields: [editorUserId], references: [id], onDelete: SetNull)
+  message      TaskMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, version])
+  @@index([messageId, editedAt])
+  @@index([editorUserId, editedAt])
 }
 
 model ActivityLog {

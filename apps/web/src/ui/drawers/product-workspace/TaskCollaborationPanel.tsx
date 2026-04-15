@@ -6,29 +6,14 @@ import { canCommentOnVisibleTask, canEditTaskFields } from "../../../lib/permiss
 import { useRootStore } from "../../../stores/root-store";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import { MarkdownPreview } from "./MarkdownPreview";
-import { RichDescriptionField, type RichDescriptionFieldHandle } from "./RichDescriptionField";
+import { RichDescriptionField } from "./RichDescriptionField";
+import { TaskMessageThread, type TaskMessageNode } from "./TaskMessageThread";
 import { isTaskTerminalStatus } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 
 type StoryOption = { id: string; title: string };
 type SprintOption = { id: string; name: string };
 type AssigneeOption = { id: string; name: string };
 type RootSortOrder = "desc" | "asc";
-
-type TaskMessageNode = {
-  id: string;
-  parentMessageId: string | null;
-  body: string;
-  createdAt: string;
-  updatedAt: string;
-  authorUser?: { id: string; name: string; email: string; role: string } | null;
-  derivedTasks: Array<{
-    id: string;
-    title: string;
-    status: string;
-    updatedAt: string;
-  }>;
-  replies: TaskMessageNode[];
-};
 
 export type TaskCollaborationDetail = {
   id: string;
@@ -112,15 +97,6 @@ function sortConversation(nodes: TaskMessageNode[], rootOrder: RootSortOrder): T
   return [...sortedRoots].reverse();
 }
 
-function messageTreeContains(nodes: TaskMessageNode[], messageId: string): boolean {
-  for (const node of nodes) {
-    if (node.id === messageId || messageTreeContains(node.replies, messageId)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function previewText(value: string | null | undefined): string {
   if (!value?.trim()) return "Sin descripcion";
   return value.replace(/\s+/g, " ").trim();
@@ -130,200 +106,6 @@ function taskStatusClass(status: string) {
   const normalized = status.toLowerCase().replace(/\s+/g, "-").replace(/_/g, "-");
   return `status status-${normalized}`;
 }
-
-type TaskMessageThreadProps = {
-  nodes: TaskMessageNode[];
-  onReply: (message: TaskMessageNode) => void;
-  onCreateTask: (message: TaskMessageNode) => void;
-  onOpenDerivedTask: (taskId: string) => void;
-  activeReplyId: string | null;
-  replyBody: string;
-  onReplyBodyChange: (value: string) => void;
-  onSubmitReply: () => void;
-  onCancelReply: () => void;
-  productId: string;
-  allowTaskCreation: boolean;
-  allowMessageCreation: boolean;
-  submittingReply: boolean;
-  depth?: number;
-};
-
-type TaskMessageItemProps = TaskMessageThreadProps & {
-  message: TaskMessageNode;
-  isActive: boolean;
-  hasActiveBranch: boolean;
-};
-
-const TaskMessageItem = React.memo(function TaskMessageItem(props: TaskMessageItemProps) {
-  const {
-    message,
-    onReply,
-    onCreateTask,
-    onOpenDerivedTask,
-    activeReplyId,
-    isActive,
-    hasActiveBranch,
-    replyBody,
-    onReplyBodyChange,
-    onSubmitReply,
-    onCancelReply,
-    productId,
-    allowTaskCreation,
-    allowMessageCreation,
-    submittingReply,
-    depth = 0
-  } = props;
-
-  return (
-    <article
-      className={`task-message-card ${isActive ? "is-reply-target" : ""}`.trim()}
-      style={{ marginLeft: `${depth * 20}px` }}
-    >
-      <div className="task-message-head">
-        <div>
-          <strong>{message.authorUser?.name ?? message.authorUser?.email ?? "Sistema"}</strong>
-          <span className="muted"> · {formatDateTime(message.createdAt)}</span>
-        </div>
-      </div>
-      <MarkdownPreview markdown={message.body} className="task-message-body markdown-preview-card" />
-      {message.derivedTasks.length > 0 ? (
-        <div className="task-message-derived">
-          <span className="muted">Tareas derivadas</span>
-          <div className="task-derived-list">
-            {message.derivedTasks.map((task) => (
-              <button
-                key={task.id}
-                type="button"
-                className="task-derived-pill"
-                onClick={() => onOpenDerivedTask(task.id)}
-              >
-                {task.title} · {task.status}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {allowMessageCreation && isActive ? (
-        <TaskInlineReplyEditor
-          replyBody={replyBody}
-          onReplyBodyChange={onReplyBodyChange}
-          onSubmitReply={onSubmitReply}
-          onCancelReply={onCancelReply}
-          productId={productId}
-          submittingReply={submittingReply}
-        />
-      ) : (
-        <div className="row-actions compact">
-          {allowTaskCreation ? (
-            <button type="button" className="btn btn-secondary" onClick={() => onCreateTask(message)}>
-              Crear tarea
-            </button>
-          ) : null}
-          {allowMessageCreation ? (
-            <button type="button" className="btn btn-secondary" onClick={() => onReply(message)}>
-              Responder
-            </button>
-          ) : null}
-        </div>
-      )}
-      {message.replies.length > 0 ? (
-        <TaskMessageThread
-          nodes={message.replies}
-          onReply={onReply}
-          onCreateTask={onCreateTask}
-          onOpenDerivedTask={onOpenDerivedTask}
-          activeReplyId={hasActiveBranch ? activeReplyId : null}
-          replyBody={replyBody}
-          onReplyBodyChange={onReplyBodyChange}
-          onSubmitReply={onSubmitReply}
-          onCancelReply={onCancelReply}
-          productId={productId}
-          allowTaskCreation={allowTaskCreation}
-          allowMessageCreation={allowMessageCreation}
-          submittingReply={submittingReply}
-          depth={depth + 1}
-        />
-      ) : null}
-    </article>
-  );
-}, (prevProps, nextProps) => {
-  if (prevProps.message !== nextProps.message) return false;
-  if (prevProps.isActive !== nextProps.isActive) return false;
-  if (prevProps.hasActiveBranch !== nextProps.hasActiveBranch) return false;
-  if ((prevProps.isActive || nextProps.isActive) && prevProps.replyBody !== nextProps.replyBody) return false;
-  if (prevProps.submittingReply !== nextProps.submittingReply) return false;
-  return true;
-});
-
-function TaskMessageThread(props: TaskMessageThreadProps) {
-  const { nodes, activeReplyId, ...rest } = props;
-
-  return (
-    <div className="task-thread">
-      {nodes.map((message) => {
-        const isActive = activeReplyId === message.id;
-        const hasActiveBranch = activeReplyId ? messageTreeContains(message.replies, activeReplyId) : false;
-
-        return (
-          <TaskMessageItem
-            key={message.id}
-            message={message}
-            nodes={nodes}
-            activeReplyId={activeReplyId}
-            isActive={isActive}
-            hasActiveBranch={hasActiveBranch}
-            {...rest}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-const TaskInlineReplyEditor = React.memo(function TaskInlineReplyEditor(props: {
-  replyBody: string;
-  onReplyBodyChange: (value: string) => void;
-  onSubmitReply: () => void;
-  onCancelReply: () => void;
-  productId: string;
-  submittingReply: boolean;
-}) {
-  const { replyBody, onReplyBodyChange, onSubmitReply, onCancelReply, productId, submittingReply } = props;
-  const editorRef = React.useRef<RichDescriptionFieldHandle | null>(null);
-
-  React.useEffect(() => {
-    editorRef.current?.focus();
-    editorRef.current?.refreshLayout();
-  }, []);
-
-  return (
-    <div className="task-inline-reply">
-      <RichDescriptionField
-        ref={editorRef}
-        label="Tu respuesta"
-        value={replyBody}
-        onChange={onReplyBodyChange}
-        rows={6}
-        disabled={submittingReply}
-        productId={productId}
-        autoFocus
-      />
-      <div className="row-actions compact">
-        <button type="button" className="btn btn-secondary" onClick={onCancelReply} disabled={submittingReply}>
-          Cancelar
-        </button>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => void onSubmitReply()}
-          disabled={submittingReply || !replyBody.trim()}
-        >
-          Responder
-        </button>
-      </div>
-    </div>
-  );
-});
 
 export function TaskCollaborationPanel(props: {
   controller: ProductController;
@@ -364,6 +146,10 @@ export function TaskCollaborationPanel(props: {
   const [error, setError] = React.useState("");
   const [submittingMessage, setSubmittingMessage] = React.useState(false);
   const [replyTarget, setReplyTarget] = React.useState<TaskMessageNode | null>(null);
+  const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
+  const [editingBody, setEditingBody] = React.useState("");
+  const [submittingEditMessageId, setSubmittingEditMessageId] = React.useState<string | null>(null);
+  const [expandedHistoryIds, setExpandedHistoryIds] = React.useState<string[]>([]);
   const [rootSortOrder, setRootSortOrder] = React.useState<RootSortOrder>(() => loadRootSortOrder());
   const draft = useDraftPersistence({
     userId: store.session.user?.id,
@@ -428,11 +214,21 @@ export function TaskCollaborationPanel(props: {
 
   React.useEffect(() => {
     const replyTargetId = typeof messageDraft.replyTargetId === "string" ? messageDraft.replyTargetId : "";
-    if (!detail || !replyTargetId) {
+    if (!detail || !replyTargetId || editingMessageId) {
       return;
     }
     setReplyTarget(findMessageById(detail.conversation, replyTargetId));
-  }, [detail, findMessageById, messageDraft.replyTargetId]);
+  }, [detail, editingMessageId, findMessageById, messageDraft.replyTargetId]);
+
+  React.useEffect(() => {
+    if (!detail || !editingMessageId) {
+      return;
+    }
+    if (!findMessageById(detail.conversation, editingMessageId)) {
+      setEditingMessageId(null);
+      setEditingBody("");
+    }
+  }, [detail, editingBody, editingMessageId, findMessageById]);
 
   React.useEffect(() => {
     setRootSortOrder(loadRootSortOrder());
@@ -617,6 +413,8 @@ export function TaskCollaborationPanel(props: {
   }, [allowMessageCreation, clearDraft, controller, messageBody, refresh, replyTarget?.id, setMessageDraft, taskId]);
 
   const handleReply = React.useCallback((message: TaskMessageNode) => {
+    setEditingMessageId(null);
+    setEditingBody("");
     setReplyTarget(message);
     setMessageDraft((current) => {
       if (current.replyTargetId === message.id) {
@@ -634,6 +432,46 @@ export function TaskCollaborationPanel(props: {
     setReplyTarget(null);
     setMessageDraft((current) => ({ ...current, body: "", replyTargetId: "" }));
   }, [setMessageDraft]);
+
+  const handleStartEdit = React.useCallback((message: TaskMessageNode) => {
+    setReplyTarget(null);
+    setMessageDraft((current) => ({ ...current, body: "", replyTargetId: "" }));
+    setEditingMessageId(message.id);
+    setEditingBody(message.body);
+  }, [setMessageDraft]);
+
+  const handleCancelEdit = React.useCallback(() => {
+    setEditingMessageId(null);
+    setEditingBody("");
+  }, []);
+
+  const submitMessageEdit = React.useCallback(async () => {
+    if (!editingMessageId || !editingBody.trim()) {
+      return;
+    }
+    setSubmittingEditMessageId(editingMessageId);
+    setError("");
+    try {
+      await controller.updateTaskMessage(taskId, editingMessageId, {
+        body: editingBody.trim()
+      });
+      setEditingMessageId(null);
+      setEditingBody("");
+      await refresh();
+    } catch (editError) {
+      setError(editError instanceof Error ? editError.message : "No se pudo editar el mensaje.");
+    } finally {
+      setSubmittingEditMessageId(null);
+    }
+  }, [controller, editingBody, editingMessageId, refresh, taskId]);
+
+  const toggleMessageHistory = React.useCallback((messageId: string) => {
+    setExpandedHistoryIds((current) =>
+      current.includes(messageId)
+        ? current.filter((entry) => entry !== messageId)
+        : [...current, messageId]
+    );
+  }, []);
 
   return (
     <section className="card task-definition-conversation">
@@ -765,7 +603,18 @@ export function TaskCollaborationPanel(props: {
           productId={productId}
           allowTaskCreation={allowTaskCreation}
           allowMessageCreation={allowMessageCreation}
+          allowMessageEditing={allowMessageCreation}
+          viewerUserId={viewer?.id}
+          editingMessageId={editingMessageId}
+          editingBody={editingBody}
+          onStartEdit={handleStartEdit}
+          onEditBodyChange={setEditingBody}
+          onSubmitEdit={submitMessageEdit}
+          onCancelEdit={handleCancelEdit}
           submittingReply={submittingMessage || isHydratingRemote}
+          submittingEditMessageId={submittingEditMessageId}
+          expandedHistoryIds={expandedHistoryIds}
+          onToggleHistory={toggleMessageHistory}
         />
       ) : null}
       {saveError ? <p className="error-text">{saveError}</p> : null}

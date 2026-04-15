@@ -6,6 +6,7 @@ import {
   CreateTaskFromMessageDto,
   CreateTaskMessageDto,
   CreateTaskDto,
+  UpdateTaskMessageDto,
   UpdateTaskDto,
   UpdateTaskStatusDto
 } from "./tasks.dto";
@@ -69,6 +70,16 @@ export class TasksController {
   @Post("tasks/:id/messages")
   addMessage(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: CreateTaskMessageDto) {
     return this.tasksService.addMessage(id, dto, user);
+  }
+
+  @Patch("tasks/:id/messages/:messageId")
+  updateMessage(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Param("messageId") messageId: string,
+    @Body() dto: UpdateTaskMessageDto
+  ) {
+    return this.tasksService.updateMessage(id, messageId, dto, user);
   }
 
   @Post("tasks/:id/messages/:messageId/tasks")

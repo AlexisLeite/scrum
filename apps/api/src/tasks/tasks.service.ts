@@ -6,7 +6,7 @@ import { AuthUser } from "../common/current-user.decorator";
 import { DraftsService } from "../drafts/drafts.service";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { CreateTaskDto, CreateTaskFromMessageDto, CreateTaskMessageDto, UpdateTaskDto } from "./tasks.dto";
+import { CreateTaskDto, CreateTaskFromMessageDto, CreateTaskMessageDto, UpdateTaskDto, UpdateTaskMessageDto } from "./tasks.dto";
 
 type TaskCreationLineage = {
   parentTaskId: string | null;
@@ -46,6 +46,37 @@ type TaskHierarchyNode = {
 
 const DEFAULT_TASK_STATUS_ORDER = ["Todo", "In Progress", "Blocked", "Done", "Closed"] as const;
 const TERMINAL_TASK_STATUSES = ["Done", "Closed"] as const;
+const TASK_MESSAGE_USER_SELECT = Prisma.validator<Prisma.UserSelect>()({
+  id: true,
+  name: true,
+  email: true,
+  role: true
+});
+const TASK_MESSAGE_CONVERSATION_INCLUDE = Prisma.validator<Prisma.TaskMessageInclude>()({
+  authorUser: {
+    select: TASK_MESSAGE_USER_SELECT
+  },
+  editedByUser: {
+    select: TASK_MESSAGE_USER_SELECT
+  },
+  derivedTasks: {
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      updatedAt: true
+    },
+    orderBy: { createdAt: "desc" }
+  },
+  revisions: {
+    orderBy: { version: "desc" },
+    include: {
+      editorUser: {
+        select: TASK_MESSAGE_USER_SELECT
+      }
+    }
+  }
+});
 
 @Injectable()
 export class TasksService {
@@ -628,6 +659,10 @@ export class TasksService {
     const task = await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
     await this.assertSprintIsMutable(task.sprintId, user);
     this.assertCanTeamMemberCollaborate(user, { ...task, productId: task.productId });
+    const body = dto.body.trim();
+    if (!body) {
+      throw new BadRequestException("Message body is required");
+    }
     if (dto.parentMessageId) {
       const parentMessage = await this.prisma.taskMessage.findUnique({
         where: { id: dto.parentMessageId },
@@ -638,23 +673,30 @@ export class TasksService {
       }
     }
 
-    const message = await this.prisma.taskMessage.create({
-      data: {
-        taskId,
-        authorUserId: user.sub,
-        parentMessageId: dto.parentMessageId ?? null,
-        body: dto.body
-      },
-      include: {
-        authorUser: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true
-          }
+    const message = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.taskMessage.create({
+        data: {
+          taskId,
+          authorUserId: user.sub,
+          parentMessageId: dto.parentMessageId ?? null,
+          body
         }
-      }
+      });
+
+      await tx.taskMessageRevision.create({
+        data: {
+          messageId: created.id,
+          version: 1,
+          body,
+          editedAt: created.createdAt,
+          editorUserId: user.sub
+        }
+      });
+
+      return tx.taskMessage.findUniqueOrThrow({
+        where: { id: created.id },
+        include: TASK_MESSAGE_CONVERSATION_INCLUDE
+      });
     });
 
     await this.activityService.record({
@@ -669,7 +711,7 @@ export class TasksService {
         taskTitle: task.title,
         messageId: message.id,
         parentMessageId: message.parentMessageId,
-        bodyPreview: dto.body.slice(0, 140)
+        bodyPreview: body.slice(0, 140)
       },
       afterJson: {
         id: message.id,
@@ -680,6 +722,118 @@ export class TasksService {
     });
 
     return message;
+  }
+
+  async updateMessage(taskId: string, messageId: string, dto: UpdateTaskMessageDto, user: AuthUser) {
+    const nextBody = dto.body.trim();
+    if (!nextBody) {
+      throw new BadRequestException("Message body is required");
+    }
+
+    const message = await this.prisma.taskMessage.findUnique({
+      where: { id: messageId },
+      include: {
+        task: {
+          select: {
+            id: true,
+            title: true,
+            assigneeId: true,
+            sprintId: true,
+            productId: true,
+            sprint: {
+              select: {
+                teamId: true
+              }
+            }
+          }
+        },
+        revisions: {
+          select: {
+            version: true
+          },
+          orderBy: {
+            version: "desc"
+          },
+          take: 1
+        }
+      }
+    });
+
+    if (!message || message.taskId !== taskId) {
+      throw new BadRequestException("Message not found");
+    }
+
+    await this.assertSprintIsMutable(message.task.sprintId, user);
+    this.assertCanTeamMemberCollaborate(user, { ...message.task, productId: message.task.productId });
+
+    if (!message.authorUserId || message.authorUserId !== user.sub) {
+      throw new ForbiddenException("Only the message author can edit it");
+    }
+
+    if (nextBody === message.body.trim()) {
+      return this.prisma.taskMessage.findUniqueOrThrow({
+        where: { id: messageId },
+        include: TASK_MESSAGE_CONVERSATION_INCLUDE
+      });
+    }
+
+    const nextVersion = (message.revisions[0]?.version ?? 0) + 1;
+    const editedAt = new Date();
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.taskMessage.update({
+        where: { id: messageId },
+        data: {
+          body: nextBody,
+          editedAt,
+          editedByUserId: user.sub
+        }
+      });
+
+      await tx.taskMessageRevision.create({
+        data: {
+          messageId,
+          version: nextVersion,
+          body: nextBody,
+          editedAt,
+          editorUserId: user.sub
+        }
+      });
+
+      return tx.taskMessage.findUniqueOrThrow({
+        where: { id: messageId },
+        include: TASK_MESSAGE_CONVERSATION_INCLUDE
+      });
+    });
+
+    await this.activityService.record({
+      actorUserId: user.sub,
+      productId: message.task.productId,
+      teamId: message.task.sprint?.teamId ?? undefined,
+      entityType: ActivityEntityType.TASK,
+      entityId: taskId,
+      action: "TASK_MESSAGE_UPDATED",
+      metadataJson: {
+        taskId,
+        taskTitle: message.task.title,
+        messageId,
+        parentMessageId: message.parentMessageId,
+        bodyPreview: nextBody.slice(0, 140)
+      },
+      beforeJson: {
+        id: message.id,
+        taskId,
+        parentMessageId: message.parentMessageId,
+        body: message.body
+      },
+      afterJson: {
+        id: updated.id,
+        taskId,
+        parentMessageId: updated.parentMessageId,
+        body: updated.body
+      }
+    });
+
+    return updated;
   }
 
   async createFromMessage(taskId: string, messageId: string, dto: CreateTaskFromMessageDto, user: AuthUser) {
@@ -1110,25 +1264,7 @@ export class TasksService {
   private async loadTaskConversation(taskId: string) {
     const messages = await this.prisma.taskMessage.findMany({
       where: { taskId },
-      include: {
-        authorUser: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true
-          }
-        },
-        derivedTasks: {
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            updatedAt: true
-          },
-          orderBy: { createdAt: "desc" }
-        }
-      },
+      include: TASK_MESSAGE_CONVERSATION_INCLUDE,
       orderBy: { createdAt: "asc" }
     });
 
@@ -1142,7 +1278,14 @@ export class TasksService {
       body: string;
       createdAt: Date;
       updatedAt: Date;
+      editedAt: Date | null;
       authorUser: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+      } | null;
+      editedByUser: {
         id: string;
         name: string;
         email: string;
@@ -1153,6 +1296,18 @@ export class TasksService {
         title: string;
         status: string;
         updatedAt: Date;
+      }>;
+      revisions: Array<{
+        id: string;
+        version: number;
+        body: string;
+        editedAt: Date;
+        editorUser: {
+          id: string;
+          name: string;
+          email: string;
+          role: string;
+        } | null;
       }>;
     }>
   ) {

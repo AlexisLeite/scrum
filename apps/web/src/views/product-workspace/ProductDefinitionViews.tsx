@@ -27,6 +27,7 @@ import { ProductUpsertionForm } from "../../ui/drawers/backoffice/ProductUpserti
 import { StoryUpsertionForm } from "../../ui/drawers/product-workspace/StoryUpsertionDrawer";
 import { SprintUpsertionForm } from "../../ui/drawers/product-workspace/SprintUpsertionDrawer";
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
+import { TaskMessageThread, type TaskMessageNode } from "../../ui/drawers/product-workspace/TaskMessageThread";
 import { TaskUpsertionDrawer, TaskUpsertionForm } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { RichDescriptionField } from "../../ui/drawers/product-workspace/RichDescriptionField";
 import { canCommentOnVisibleTask, canCreateTaskFromMessage, canEditTaskFields } from "../../lib/permissions";
@@ -125,22 +126,6 @@ type DetailTask = {
   }>;
   childSummary: { total: number; completed: number };
   conversation: TaskMessageNode[];
-};
-
-type TaskMessageNode = {
-  id: string;
-  parentMessageId: string | null;
-  body: string;
-  createdAt: string;
-  updatedAt: string;
-  authorUser?: { id: string; name: string; email: string; role: string } | null;
-  derivedTasks: Array<{
-    id: string;
-    title: string;
-    status: string;
-    updatedAt: string;
-  }>;
-  replies: TaskMessageNode[];
 };
 
 function formatDateTime(value: string | null | undefined): string {
@@ -1353,137 +1338,6 @@ function SortableSprintTaskRow(props: {
   );
 }
 
-
-function TaskMessageThread(props: {
-  nodes: TaskMessageNode[];
-  onReply: (message: TaskMessageNode) => void;
-  onCreateTask: (message: TaskMessageNode) => void;
-  onOpenDerivedTask: (taskId: string) => void;
-  activeReplyId: string | null;
-  replyBody: string;
-  onReplyBodyChange: (value: string) => void;
-  onSubmitReply: () => void;
-  onCancelReply: () => void;
-  productId: string;
-  allowTaskCreation: boolean;
-  allowMessageCreation: boolean;
-  submittingReply: boolean;
-  depth?: number;
-}) {
-  const {
-    nodes,
-    onReply,
-    onCreateTask,
-    onOpenDerivedTask,
-    activeReplyId,
-    replyBody,
-    onReplyBodyChange,
-    onSubmitReply,
-    onCancelReply,
-    productId,
-    allowTaskCreation,
-    allowMessageCreation,
-    submittingReply,
-    depth = 0
-  } = props;
-
-  return (
-    <div className="task-thread">
-      {nodes.map((message) => (
-        <article
-          key={message.id}
-          className={`task-message-card ${activeReplyId === message.id ? "is-reply-target" : ""}`.trim()}
-          style={{ marginLeft: `${depth * 20}px` }}
-        >
-          <div className="task-message-head">
-            <div>
-              <strong>{message.authorUser?.name ?? message.authorUser?.email ?? "Sistema"}</strong>
-              <span className="muted"> · {formatDateTime(message.createdAt)}</span>
-            </div>
-            <div className="row-actions compact">
-              {allowMessageCreation ? (
-                <button type="button" className="btn btn-secondary" onClick={() => onReply(message)}>
-                  Responder
-                </button>
-              ) : null}
-              {allowTaskCreation ? (
-                <button type="button" className="btn btn-secondary" onClick={() => onCreateTask(message)}>
-                  Crear tarea
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <MarkdownPreview markdown={message.body} className="task-message-body markdown-preview-card" />
-          {message.derivedTasks.length > 0 ? (
-            <div className="task-message-derived">
-              <span className="muted">Tareas derivadas</span>
-              <div className="task-derived-list">
-                {message.derivedTasks.map((task) => (
-                  <button
-                    key={task.id}
-                    type="button"
-                    className="task-derived-pill"
-                    onClick={() => onOpenDerivedTask(task.id)}
-                  >
-                    {task.title} · {task.status}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {allowMessageCreation && activeReplyId === message.id ? (
-            <div className="task-inline-reply">
-              <RichDescriptionField
-                label="Tu respuesta"
-                value={replyBody}
-                onChange={onReplyBodyChange}
-                rows={6}
-                productId={productId}
-              />
-              <div className="row-actions compact">
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => void onSubmitReply()}
-                  disabled={submittingReply || !replyBody.trim()}
-                >
-                  Confirmar respuesta
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={onCancelReply}
-                  disabled={submittingReply}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {message.replies.length > 0 ? (
-            <TaskMessageThread
-              nodes={message.replies}
-              onReply={onReply}
-              onCreateTask={onCreateTask}
-              onOpenDerivedTask={onOpenDerivedTask}
-              activeReplyId={activeReplyId}
-              replyBody={replyBody}
-              onReplyBodyChange={onReplyBodyChange}
-              onSubmitReply={onSubmitReply}
-              onCancelReply={onCancelReply}
-              productId={productId}
-              allowTaskCreation={allowTaskCreation}
-              allowMessageCreation={allowMessageCreation}
-              submittingReply={submittingReply}
-              depth={depth + 1}
-            />
-          ) : null}
-        </article>
-      ))}
-    </div>
-  );
-}
-
 export const TaskDefinitionView = observer(function TaskDefinitionView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
@@ -1498,6 +1352,10 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
   const [messageBody, setMessageBody] = React.useState("");
   const [submittingMessage, setSubmittingMessage] = React.useState(false);
   const [replyTarget, setReplyTarget] = React.useState<TaskMessageNode | null>(null);
+  const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
+  const [editingBody, setEditingBody] = React.useState("");
+  const [submittingEditMessageId, setSubmittingEditMessageId] = React.useState<string | null>(null);
+  const [expandedHistoryIds, setExpandedHistoryIds] = React.useState<string[]>([]);
   const orderedConversation = React.useMemo(
     () => sortMessageNodes(taskDetail?.conversation ?? []),
     [taskDetail?.conversation]
@@ -1695,6 +1553,46 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
       setSubmittingMessage(false);
     }
   };
+
+  const startEditingMessage = React.useCallback((message: TaskMessageNode) => {
+    setReplyTarget(null);
+    setMessageBody("");
+    setEditingMessageId(message.id);
+    setEditingBody(message.body);
+  }, []);
+
+  const cancelEditingMessage = React.useCallback(() => {
+    setEditingMessageId(null);
+    setEditingBody("");
+  }, []);
+
+  const submitEditedMessage = React.useCallback(async () => {
+    if (!taskDetail || !editingMessageId || !editingBody.trim()) {
+      return;
+    }
+    setSubmittingEditMessageId(editingMessageId);
+    setError("");
+    try {
+      await controller.updateTaskMessage(taskDetail.id, editingMessageId, {
+        body: editingBody.trim()
+      });
+      setEditingMessageId(null);
+      setEditingBody("");
+      await loadTaskDetail();
+    } catch (editError) {
+      setError(editError instanceof Error ? editError.message : "No se pudo editar el mensaje.");
+    } finally {
+      setSubmittingEditMessageId(null);
+    }
+  }, [controller, editingBody, editingMessageId, loadTaskDetail, taskDetail]);
+
+  const toggleMessageHistory = React.useCallback((messageId: string) => {
+    setExpandedHistoryIds((current) =>
+      current.includes(messageId)
+        ? current.filter((entry) => entry !== messageId)
+        : [...current, messageId]
+    );
+  }, []);
 
   if (loading && !taskDetail) {
     return (
@@ -1901,7 +1799,11 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
             ) : (
               <TaskMessageThread
                 nodes={orderedConversation}
-                onReply={(message) => setReplyTarget(message)}
+                onReply={(message) => {
+                  setEditingMessageId(null);
+                  setEditingBody("");
+                  setReplyTarget(message);
+                }}
                 onCreateTask={openDerivedTaskDrawer}
                 onOpenDerivedTask={(derivedTaskId) => void openRelatedTaskDrawer(derivedTaskId)}
                 activeReplyId={replyTarget?.id ?? null}
@@ -1915,7 +1817,18 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
                 productId={productId}
                 allowTaskCreation={canCreateLinkedTask}
                 allowMessageCreation={canWriteMessages}
+                allowMessageEditing={canWriteMessages}
+                viewerUserId={user?.id}
+                editingMessageId={editingMessageId}
+                editingBody={editingBody}
+                onStartEdit={startEditingMessage}
+                onEditBodyChange={setEditingBody}
+                onSubmitEdit={submitEditedMessage}
+                onCancelEdit={cancelEditingMessage}
                 submittingReply={submittingMessage}
+                submittingEditMessageId={submittingEditMessageId}
+                expandedHistoryIds={expandedHistoryIds}
+                onToggleHistory={toggleMessageHistory}
               />
             )}
           </section>

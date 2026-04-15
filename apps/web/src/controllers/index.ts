@@ -378,6 +378,10 @@ export class ProductController {
     return apiClient.post<any>(`/tasks/${taskId}/messages`, payload);
   }
 
+  async updateTaskMessage(taskId: string, messageId: string, payload: { body: string }) {
+    return apiClient.patch<any>(`/tasks/${taskId}/messages/${messageId}`, payload);
+  }
+
   async getDraft(entityType: string, entityId: string, productId?: string) {
     const params = new URLSearchParams();
     if (productId) {

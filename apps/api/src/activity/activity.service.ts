@@ -485,6 +485,10 @@ export class ActivityService {
       const preview = typeof metadata.bodyPreview === "string" ? metadata.bodyPreview : detail.message?.body?.slice(0, 140);
       return `Nuevo mensaje en "${detail.entityLabel}": ${preview ?? "sin detalle"}`;
     }
+    if (action === "TASK_MESSAGE_UPDATED") {
+      const preview = typeof metadata.bodyPreview === "string" ? metadata.bodyPreview : detail.message?.body?.slice(0, 140);
+      return `Se edito un mensaje en "${detail.entityLabel}": ${preview ?? "sin detalle"}`;
+    }
     if (action === "TASK_CREATED" || action === "TASK_CREATED_IN_SPRINT") {
       return `Se creo la tarea "${detail.entityLabel}".`;
     }

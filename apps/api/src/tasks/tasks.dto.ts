@@ -112,6 +112,12 @@ export class CreateTaskMessageDto {
   parentMessageId?: string;
 }
 
+export class UpdateTaskMessageDto {
+  @IsString()
+  @MinLength(1)
+  body!: string;
+}
+
 export class CreateTaskFromMessageDto {
   @IsString()
   @MinLength(3)
