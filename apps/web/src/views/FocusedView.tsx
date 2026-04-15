@@ -12,7 +12,7 @@ import {
   canReleaseFocusedTask,
   canMoveFocusedTask
 } from "../lib/access";
-import { type AssignableUserOption } from "../lib/assignable-users";
+import { filterAssignableUsersBySprintScope, type AssignableUserOption } from "../lib/assignable-users";
 import { canCommentOnVisibleTask, canCreateTaskFromMessage, canCreateTasks, canEditTaskFields } from "../lib/permissions";
 import { useProductAssignableUsers } from "../hooks/useProductAssignableUsers";
 import { useRootStore } from "../stores/root-store";
@@ -55,10 +55,14 @@ type FocusedBoard = {
 type StoryItem = { id: string; title: string };
 type SprintItem = { id: string; name: string; teamId?: string | null };
 type DrawerOption = { id: string; name: string };
+type TaskDrawerAssigneeOption = DrawerOption & {
+  teamIds?: string[];
+  sprintIds?: string[];
+};
 type TaskDrawerCatalog = {
   stories: StoryItem[];
   sprints: SprintItem[];
-  assignees: DrawerOption[];
+  assignees: TaskDrawerAssigneeOption[];
 };
 type FocusedCreationContext = {
   productId: string;
@@ -121,7 +125,8 @@ function persistFocusedContextKey(value: string) {
 }
 
 function mergeUniqueOptions(options: DrawerOption[]) {
-  return Array.from(new Map(options.map((entry) => [entry.id, entry])).values());
+  return Array.from(new Map(options.map((entry) => [entry.id, entry])).values())
+    .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
 }
 
 function buildTaskAssigneeSeed(task: FocusedTask, currentUser?: { id: string; name: string } | null) {
@@ -154,17 +159,10 @@ function buildVisibleFocusedFilterUsers(
     return [];
   }
 
-  let scopedUsers = users;
-  const hasExplicitSprintMembers = scopedUsers.some((entry) => entry.sprintIds.includes(selectedContext.sprintId));
-
-  if (hasExplicitSprintMembers) {
-    scopedUsers = scopedUsers.filter((entry) => entry.sprintIds.includes(selectedContext.sprintId));
-  } else if (selectedContext.teamId) {
-    const teamScopedUsers = scopedUsers.filter((entry) => entry.teamIds.includes(selectedContext.teamId ?? ""));
-    if (teamScopedUsers.length > 0) {
-      scopedUsers = teamScopedUsers;
-    }
-  }
+  const scopedUsers = filterAssignableUsersBySprintScope(users, {
+    sprintId: selectedContext.sprintId,
+    teamId: selectedContext.teamId
+  });
 
   if (currentUser?.role === "team_member") {
     return scopedUsers
@@ -611,7 +609,12 @@ export const FocusedView = observer(function FocusedView() {
       }
 
       const nextAssignees = (assignableUsersByProductId[productId] ?? await productController.loadAssignableUsers(productId))
-        .map((entry: AssignableUserOption) => ({ id: entry.id, name: entry.name }));
+        .map((entry: AssignableUserOption) => ({
+          id: entry.id,
+          name: entry.name,
+          teamIds: entry.teamIds ?? [],
+          sprintIds: entry.sprintIds ?? []
+        }));
 
       return {
         stories,
@@ -850,9 +853,14 @@ export const FocusedView = observer(function FocusedView() {
       if (canAssignFocusedTaskToOthers(user, task.productId ?? task.product?.id ?? undefined)) {
         const productId = task.productId ?? task.product?.id ?? "";
         const productAssignees = productId
-          ? (assignableUsersByProductId[productId] ?? []).map((entry) => ({ id: entry.id, name: entry.name }))
+          ? filterAssignableUsersBySprintScope(assignableUsersByProductId[productId] ?? [], {
+            sprintId: task.sprint?.id ?? task.sprintId ?? null,
+            teamId: task.sprint?.teamId ?? null
+          }).map((entry) => ({ id: entry.id, name: entry.name }))
           : [];
-        return productAssignees.length > 0 ? productAssignees : assignees;
+        return productAssignees.length > 0
+          ? mergeUniqueOptions([...productAssignees, ...buildCurrentTaskAssigneeOption(task)])
+          : mergeUniqueOptions([...buildCurrentTaskAssigneeOption(task), ...assignees]);
       }
       if (!user || !canAssignFocusedTask(user, task, user.id)) {
         return [];
@@ -1061,7 +1069,7 @@ export const FocusedView = observer(function FocusedView() {
           loading={loading}
           columns={selectedBoard.columns}
           taskCount={selectedTasks.length}
-          assignees={allAssignableUsers}
+          assignees={visibleFilterUsers}
           assigneeFilterOptions={visibleFilterUsers}
           statusOptions={statusOptions}
           canCreateTask={canCreateFocusedTasks}

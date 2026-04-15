@@ -1392,7 +1392,12 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
   const stories = store.stories.getItems(productScopeKey) as StoryItem[];
   const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
   const assignees = React.useMemo(
-    () => assignableUsers.map((entry) => ({ id: entry.id, name: entry.name })),
+    () => assignableUsers.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      teamIds: entry.teamIds ?? [],
+      sprintIds: entry.sprintIds ?? []
+    })),
     [assignableUsers]
   );
 

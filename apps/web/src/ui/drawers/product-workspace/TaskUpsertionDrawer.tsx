@@ -5,6 +5,7 @@ import { ProductController } from "../../../controllers";
 import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productTaskDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
+import { filterAssignableUsersBySprintScope } from "../../../lib/assignable-users";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
@@ -31,8 +32,8 @@ type EditableTask = {
 };
 
 type TaskStoryOption = { id: string; title: string };
-type TaskSprintOption = { id: string; name: string };
-type TaskAssigneeOption = { id: string; name: string };
+type TaskSprintOption = { id: string; name: string; teamId?: string | null };
+type TaskAssigneeOption = { id: string; name: string; teamIds?: string[]; sprintIds?: string[] };
 type TaskCloseSnapshot = {
   title: string;
   description: string;
@@ -323,6 +324,27 @@ export function TaskUpsertionForm(props: {
   const storySelectionLocked = !task && Boolean(defaultStoryId);
   const canChangeSprint = allowSprintChange && !fixedSprintId;
   const allowCreationPlacementSelection = Boolean(showCreationPlacementSelector && !task && fixedSprintId);
+  const activeSprintId = canChangeSprint ? sprintId : fixedSprintId ?? sprintId;
+  const activeSprintTeamId = React.useMemo(
+    () => sprints.find((sprint) => sprint.id === activeSprintId)?.teamId ?? null,
+    [activeSprintId, sprints]
+  );
+  const visibleAssignees = React.useMemo(() => {
+    const scopedAssignees = filterAssignableUsersBySprintScope(assignees, {
+      sprintId: activeSprintId,
+      teamId: activeSprintTeamId
+    });
+    const optionsById = new Map(scopedAssignees.map((assignee) => [assignee.id, assignee]));
+
+    if (assigneeId && !optionsById.has(assigneeId)) {
+      const currentAssignee = assignees.find((assignee) => assignee.id === assigneeId);
+      optionsById.set(assigneeId, currentAssignee ?? { id: assigneeId, name: assigneeId });
+    }
+
+    return Array.from(optionsById.values()).sort((left, right) =>
+      left.name.localeCompare(right.name, undefined, { sensitivity: "base" })
+    );
+  }, [activeSprintId, activeSprintTeamId, assigneeId, assignees]);
   const selectedStoryId = (task ? storyId || task.storyId || defaultStoryId || "" : defaultStoryId || storyId || "").trim();
   const estimatedHours =
     selectedEstimatedPreset !== null ? selectedEstimatedPreset : toOptionalNumber(customEstimatedHours);
@@ -605,7 +627,7 @@ export function TaskUpsertionForm(props: {
               onChange={(value) => setForm((current) => ({ ...current, assigneeId: value }))}
               options={[
                 { value: "", label: "Sin asignar" },
-                ...assignees.map((assignee) => ({ value: assignee.id, label: assignee.name }))
+                ...visibleAssignees.map((assignee) => ({ value: assignee.id, label: assignee.name }))
               ]}
               disabled={formDisabled}
               ariaLabel="Asignado a"
