@@ -173,6 +173,22 @@ function buildVisibleFocusedFilterUsers(
   return scopedUsers.map((entry) => ({ id: entry.id, name: entry.name }));
 }
 
+function FocusedBurndownSkeleton() {
+  return (
+    <div
+      className="loading-skeleton-stack"
+      role="status"
+      aria-label="Actualizando grafica del sprint"
+    >
+      <div className="loading-skeleton loading-skeleton-chart" aria-hidden="true" />
+      <div className="loading-skeleton-row" aria-hidden="true">
+        <span className="loading-skeleton loading-skeleton-chip" />
+        <span className="loading-skeleton loading-skeleton-chip loading-skeleton-chip-wide" />
+      </div>
+    </div>
+  );
+}
+
 const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
   loading: boolean;
   columns: FocusedBoard["columns"];
@@ -394,6 +410,9 @@ export const FocusedView = observer(function FocusedView() {
   const [pendingTaskIds, setPendingTaskIds] = React.useState<Record<string, boolean>>({});
   const [openingTaskIds, setOpeningTaskIds] = React.useState<Record<string, boolean>>({});
   const [chartLoading, setChartLoading] = React.useState(false);
+  const [boardResolved, setBoardResolved] = React.useState(false);
+  const [contextsLoading, setContextsLoading] = React.useState(false);
+  const [contextsResolved, setContextsResolved] = React.useState(false);
   const [selectedContextKey, setSelectedContextKey] = React.useState(() => readStoredFocusedContextKey());
   const [chartRefreshToken, setChartRefreshToken] = React.useState(0);
   const [availableContexts, setAvailableContexts] = React.useState<FocusedCreationContext[]>([]);
@@ -408,6 +427,7 @@ export const FocusedView = observer(function FocusedView() {
   const boardMutationVersionRef = React.useRef(0);
   const latestReloadRequestIdRef = React.useRef(0);
   const activeReloadCountRef = React.useRef(0);
+  const initialBoardResolvedRef = React.useRef(false);
 
   const reloadBoard = React.useCallback(async (options?: { force?: boolean }) => {
     if (!options?.force && pendingMutationCountRef.current > 0) {
@@ -437,6 +457,10 @@ export const FocusedView = observer(function FocusedView() {
       }
     } finally {
       activeReloadCountRef.current = Math.max(0, activeReloadCountRef.current - 1);
+      if (!initialBoardResolvedRef.current) {
+        initialBoardResolvedRef.current = true;
+        setBoardResolved(true);
+      }
       if (activeReloadCountRef.current === 0) {
         setLoading(false);
       }
@@ -457,10 +481,13 @@ export const FocusedView = observer(function FocusedView() {
   React.useEffect(() => {
     if (!user || focusedProductIds.length === 0) {
       setAvailableContexts([]);
+      setContextsLoading(false);
+      setContextsResolved(true);
       return;
     }
 
     let active = true;
+    setContextsLoading(true);
 
     void (async () => {
       try {
@@ -499,6 +526,11 @@ export const FocusedView = observer(function FocusedView() {
       } catch {
         if (active) {
           setAvailableContexts([]);
+        }
+      } finally {
+        if (active) {
+          setContextsLoading(false);
+          setContextsResolved(true);
         }
       }
     })();
@@ -548,6 +580,13 @@ export const FocusedView = observer(function FocusedView() {
   const editLabel = canEditTasks ? "Editar" : "Abrir";
   const selectedChartProductId = selectedContext?.productId ?? "";
   const selectedChartSprintId = selectedContext?.sprintId ?? "";
+  const selectedChartKey = selectedChartProductId && selectedChartSprintId
+    ? `${selectedChartProductId}:${selectedChartSprintId}`
+    : "";
+  const latestChartKeyRef = React.useRef("");
+  const shouldShowChartSkeleton = selectedContext
+    ? store.burndown.length === 0 && (chartLoading || latestChartKeyRef.current !== selectedChartKey)
+    : contextsLoading || !boardResolved || !contextsResolved;
   const selectedBoard = React.useMemo<FocusedBoard>(() => {
     if (!selectedContext) {
       return board;
@@ -642,12 +681,18 @@ export const FocusedView = observer(function FocusedView() {
 
   React.useEffect(() => {
     if (!selectedChartProductId || !selectedChartSprintId) {
+      latestChartKeyRef.current = "";
       store.setBurnup([]);
       store.setBurndown([]);
       return;
     }
 
     let active = true;
+    if (latestChartKeyRef.current !== selectedChartKey) {
+      store.setBurnup([]);
+      store.setBurndown([]);
+      latestChartKeyRef.current = selectedChartKey;
+    }
     setChartLoading(true);
     void Promise.all([
       productController.loadBurnup(selectedChartProductId, selectedChartSprintId),
@@ -663,7 +708,7 @@ export const FocusedView = observer(function FocusedView() {
     return () => {
       active = false;
     };
-  }, [chartRefreshToken, productController, selectedChartProductId, selectedChartSprintId, store]);
+  }, [chartRefreshToken, productController, selectedChartKey, selectedChartProductId, selectedChartSprintId, store]);
 
   const refreshSelectedChart = React.useCallback(() => {
     if (!selectedChartProductId || !selectedChartSprintId) {
@@ -1040,7 +1085,13 @@ export const FocusedView = observer(function FocusedView() {
           </div>
 
           {!selectedContext ? (
-            <p className="muted">No hay un sprint activo visible para calcular burnup y burndown.</p>
+            shouldShowChartSkeleton ? (
+              <FocusedBurndownSkeleton />
+            ) : (
+              <p className="muted">No hay un sprint activo visible para calcular burnup y burndown.</p>
+            )
+          ) : shouldShowChartSkeleton ? (
+            <FocusedBurndownSkeleton />
           ) : store.burndown.length > 0 ? (
             <ReactECharts
               option={buildBurndownOption(store.burndown, chartTheme)}
@@ -1048,8 +1099,6 @@ export const FocusedView = observer(function FocusedView() {
               lazyUpdate
               style={{ height: 320, width: "100%" }}
             />
-          ) : chartLoading ? (
-            <p className="muted">Actualizando grafica del sprint...</p>
           ) : (
             <p className="muted">Aun no hay serie temporal disponible para este sprint.</p>
           )}

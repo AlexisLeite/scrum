@@ -3421,6 +3421,76 @@ th {
   max-width: 100%;
 }
 
+.loading-skeleton-stack {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.loading-skeleton-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.7rem;
+}
+
+.loading-skeleton {
+  --loading-skeleton-border: color-mix(in srgb, var(--border-soft) 88%, transparent);
+  --loading-skeleton-top: color-mix(in srgb, var(--bg-card) 96%, var(--bg-soft));
+  --loading-skeleton-bottom: color-mix(in srgb, var(--bg-soft) 82%, transparent);
+  --loading-skeleton-sheen: color-mix(in srgb, var(--text-muted) 12%, var(--bg-card));
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--loading-skeleton-border);
+  background:
+    linear-gradient(180deg, var(--loading-skeleton-top), var(--loading-skeleton-bottom)),
+    var(--bg-card);
+}
+
+.loading-skeleton-chart {
+  min-height: 320px;
+  border-radius: calc(var(--radius-md) - 4px);
+}
+
+.loading-skeleton-chip {
+  width: 5.5rem;
+  height: 0.7rem;
+  border-radius: 999px;
+}
+
+.loading-skeleton-chip-wide {
+  width: 7rem;
+}
+
+.loading-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--loading-skeleton-sheen) 48%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: loading-skeleton-shimmer 1.8s ease-in-out infinite;
+}
+
+:root[data-theme="dark"] .loading-skeleton {
+  --loading-skeleton-border: color-mix(in srgb, var(--border-soft) 72%, transparent);
+  --loading-skeleton-top: color-mix(in srgb, var(--bg-card) 94%, var(--bg-soft));
+  --loading-skeleton-bottom: color-mix(in srgb, var(--bg-soft) 90%, transparent);
+  --loading-skeleton-sheen: color-mix(in srgb, var(--text-muted) 5%, var(--bg-soft));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .loading-skeleton {
+    --loading-skeleton-border: color-mix(in srgb, var(--border-soft) 72%, transparent);
+    --loading-skeleton-top: color-mix(in srgb, var(--bg-card) 94%, var(--bg-soft));
+    --loading-skeleton-bottom: color-mix(in srgb, var(--bg-soft) 90%, transparent);
+    --loading-skeleton-sheen: color-mix(in srgb, var(--text-muted) 5%, var(--bg-soft));
+  }
+}
+
 .focused-board-card {
   overflow: hidden;
 }
@@ -3432,6 +3502,12 @@ th {
 .focused-board-card .kb-columns {
   margin-inline: -0.1rem;
   padding-inline: 0.1rem;
+}
+
+@keyframes loading-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .focused-refresh-button {
