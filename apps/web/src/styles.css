@@ -3003,6 +3003,73 @@ html .drawer-content .card {
   padding: 0;
 }
 
+.markdown-preview pre code.hljs {
+  display: block;
+  color: color-mix(in srgb, var(--text-main) 92%, var(--text-muted));
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  line-height: 1.65;
+}
+
+.markdown-preview .hljs-comment,
+.markdown-preview .hljs-quote {
+  color: color-mix(in srgb, var(--text-muted) 86%, #7c8aa5 14%);
+  font-style: italic;
+}
+
+.markdown-preview .hljs-keyword,
+.markdown-preview .hljs-selector-tag,
+.markdown-preview .hljs-subst,
+.markdown-preview .hljs-name,
+.markdown-preview .hljs-literal,
+.markdown-preview .hljs-section,
+.markdown-preview .hljs-link {
+  color: #8b5cf6;
+}
+
+.markdown-preview .hljs-string,
+.markdown-preview .hljs-title,
+.markdown-preview .hljs-attr,
+.markdown-preview .hljs-template-tag,
+.markdown-preview .hljs-template-variable {
+  color: #0f766e;
+}
+
+.markdown-preview .hljs-number,
+.markdown-preview .hljs-symbol,
+.markdown-preview .hljs-bullet,
+.markdown-preview .hljs-variable,
+.markdown-preview .hljs-meta,
+.markdown-preview .hljs-built_in,
+.markdown-preview .hljs-type {
+  color: #2563eb;
+}
+
+.markdown-preview .hljs-function,
+.markdown-preview .hljs-title.function_,
+.markdown-preview .hljs-title.class_,
+.markdown-preview .hljs-property,
+.markdown-preview .hljs-params {
+  color: #c2410c;
+}
+
+.markdown-preview .hljs-regexp,
+.markdown-preview .hljs-addition,
+.markdown-preview .hljs-attribute {
+  color: #15803d;
+}
+
+.markdown-preview .hljs-deletion {
+  color: #b91c1c;
+}
+
+.markdown-preview .hljs-emphasis {
+  font-style: italic;
+}
+
+.markdown-preview .hljs-strong {
+  font-weight: 700;
+}
+
 .markdown-preview blockquote {
   border-left: 3px solid var(--accent-b);
   padding-left: 0.9rem;

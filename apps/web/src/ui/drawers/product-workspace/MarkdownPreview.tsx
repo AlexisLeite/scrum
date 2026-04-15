@@ -1,5 +1,6 @@
 import React from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import { ProductController, TeamController } from "../../../controllers";
 import { useRootStore } from "../../../stores/root-store";
@@ -49,6 +50,7 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
       <div className={`markdown-preview ${compact ? "is-compact" : ""} ${className}`.trim()}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
+          rehypePlugins={[[rehypeHighlight, { detect: true }]]}
           urlTransform={(url) => {
             if (parseInternalReferenceHref(url)) {
               return url;
