@@ -301,7 +301,7 @@ export function TaskUpsertionForm(props: {
       customEstimatedHours: initialEstimatedHours.custom,
       actualHours: task?.actualHours != null ? String(task.actualHours) : ""
     },
-    enabled: !readOnly
+    enabled: !readOnly && !task
   });
   const { value: form, setValue: setForm, isHydratingRemote, saveError, clearDraft } = draft;
   const title = typeof form.title === "string" ? form.title : "";

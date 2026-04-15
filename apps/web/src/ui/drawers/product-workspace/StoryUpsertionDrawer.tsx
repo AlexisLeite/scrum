@@ -123,7 +123,7 @@ export function StoryUpsertionForm(props: {
       storyPoints: String(story?.storyPoints ?? 3),
       status: story?.status === "READY" ? "READY" : "DRAFT"
     },
-    enabled: true
+    enabled: !story
   });
   const { value: form, setValue: setForm, isHydratingRemote, saveError, clearDraft } = draft;
   const title = typeof form.title === "string" ? form.title : "";

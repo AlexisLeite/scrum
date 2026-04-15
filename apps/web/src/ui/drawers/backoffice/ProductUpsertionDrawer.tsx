@@ -125,7 +125,7 @@ export function ProductUpsertionForm(props: {
       key: product?.key ?? "",
       description: product?.description ?? ""
     },
-    enabled: !saving
+    enabled: !isEditing && !saving
   });
   const { value: form, setValue: setForm, isHydratingRemote, saveError, clearDraft } = draft;
   const name = typeof form.name === "string" ? form.name : "";

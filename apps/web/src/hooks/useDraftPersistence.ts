@@ -5,6 +5,8 @@ import { apiClient } from "../api/client";
 const DRAFT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const REMOTE_SAVE_INTERVAL_MS = 15_000;
 const STORAGE_PREFIX = "scrum:draft:";
+const NEW_ENTITY_ID = "-1";
+const SCOPED_NEW_ENTITY_PREFIX = "new:";
 
 type StoredDraft<T> = {
   payload: T;
@@ -13,6 +15,13 @@ type StoredDraft<T> = {
 
 function buildStorageKey(userId: string, entityType: DraftEntityType, entityId: string) {
   return `${STORAGE_PREFIX}${userId}:${entityType}:${entityId}`;
+}
+
+function buildDraftEntityId(entityId: string, productId?: string) {
+  if (entityId !== NEW_ENTITY_ID || !productId) {
+    return entityId;
+  }
+  return `${SCOPED_NEW_ENTITY_PREFIX}${productId}`;
 }
 
 function cleanupExpiredLocalDrafts() {
@@ -121,12 +130,14 @@ export function useDraftPersistence<T extends Record<string, unknown>>(options: 
   const [value, setValue] = React.useState<T>(initialSnapshot);
   const [isHydratingRemote, setIsHydratingRemote] = React.useState(false);
   const [saveError, setSaveError] = React.useState("");
+  const draftEntityId = React.useMemo(() => buildDraftEntityId(entityId, productId), [entityId, productId]);
   const storageKey = React.useMemo(
-    () => (userId ? buildStorageKey(userId, entityType, entityId) : null),
-    [entityId, entityType, userId]
+    () => (userId ? buildStorageKey(userId, entityType, draftEntityId) : null),
+    [draftEntityId, entityType, userId]
   );
   const lastSavedJsonRef = React.useRef(JSON.stringify(initialSnapshot));
   const isMountedRef = React.useRef(false);
+  const hasHydratedDraftRef = React.useRef(false);
 
   React.useEffect(() => {
     isMountedRef.current = true;
@@ -138,11 +149,13 @@ export function useDraftPersistence<T extends Record<string, unknown>>(options: 
   React.useEffect(() => {
     const nextJson = JSON.stringify(initialSnapshot);
     lastSavedJsonRef.current = nextJson;
+    hasHydratedDraftRef.current = false;
 
     if (!enabled || !userId || !storageKey) {
       setValue(initialSnapshot);
       setIsHydratingRemote(false);
       setSaveError("");
+      hasHydratedDraftRef.current = true;
       return;
     }
 
@@ -170,6 +183,7 @@ export function useDraftPersistence<T extends Record<string, unknown>>(options: 
         writeLocalDraft(storageKey, chosenPayload);
       }
 
+      hasHydratedDraftRef.current = true;
       setIsHydratingRemote(false);
       return;
     }
@@ -177,7 +191,7 @@ export function useDraftPersistence<T extends Record<string, unknown>>(options: 
     let active = true;
     void (async () => {
       try {
-        const remoteDraft = await apiClient.get<DraftDto | null>(buildDraftPath(entityType, entityId, productId));
+        const remoteDraft = await apiClient.get<DraftDto | null>(buildDraftPath(entityType, draftEntityId, productId));
         if (!active) {
           return;
         }
@@ -206,6 +220,7 @@ export function useDraftPersistence<T extends Record<string, unknown>>(options: 
         setSaveError(error instanceof Error ? error.message : "No se pudo recuperar el borrador remoto.");
       } finally {
         if (active) {
+          hasHydratedDraftRef.current = true;
           setIsHydratingRemote(false);
         }
       }
@@ -214,10 +229,10 @@ export function useDraftPersistence<T extends Record<string, unknown>>(options: 
     return () => {
       active = false;
     };
-  }, [enabled, entityId, entityType, initialSnapshot, productId, remoteDraft, skipRemoteLoad, storageKey, userId]);
+  }, [draftEntityId, enabled, entityType, initialSnapshot, productId, remoteDraft, skipRemoteLoad, storageKey, userId]);
 
   React.useEffect(() => {
-    if (!enabled || !storageKey || !userId || isHydratingRemote) {
+    if (!enabled || !storageKey || !userId || isHydratingRemote || !hasHydratedDraftRef.current) {
       return;
     }
     writeLocalDraft(storageKey, value);
@@ -236,7 +251,7 @@ export function useDraftPersistence<T extends Record<string, unknown>>(options: 
 
       void (async () => {
         try {
-          const response = await apiClient.patch<DraftDto>(buildDraftPath(entityType, entityId), {
+          const response = await apiClient.patch<DraftDto>(buildDraftPath(entityType, draftEntityId), {
             payload: value,
             productId
           });
@@ -256,7 +271,7 @@ export function useDraftPersistence<T extends Record<string, unknown>>(options: 
     }, REMOTE_SAVE_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
-  }, [enabled, entityId, entityType, isHydratingRemote, productId, storageKey, userId, value]);
+  }, [draftEntityId, enabled, entityType, isHydratingRemote, productId, storageKey, userId, value]);
 
   const clearDraft = React.useCallback(async () => {
     if (!enabled || !userId || !storageKey) {
@@ -267,12 +282,12 @@ export function useDraftPersistence<T extends Record<string, unknown>>(options: 
     lastSavedJsonRef.current = JSON.stringify(initialSnapshot);
 
     try {
-      await apiClient.del(buildDraftPath(entityType, entityId, productId));
+      await apiClient.del(buildDraftPath(entityType, draftEntityId, productId));
       setSaveError("");
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "No se pudo eliminar el borrador remoto.");
     }
-  }, [enabled, entityId, entityType, initialSnapshot, productId, storageKey, userId]);
+  }, [draftEntityId, enabled, entityType, initialSnapshot, productId, storageKey, userId]);
 
   return {
     value,

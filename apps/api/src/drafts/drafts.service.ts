@@ -6,6 +6,8 @@ import { TeamScopeService } from "../common/team-scope.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 const DRAFT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const NEW_ENTITY_ID = "-1";
+const SCOPED_NEW_ENTITY_PREFIX = "new:";
 
 @Injectable()
 export class DraftsService {
@@ -153,9 +155,12 @@ export class DraftsService {
       return task.productId;
     }
 
-    const resolvedProductId = entityId !== "-1"
-      ? await this.resolveProductIdFromEntity(entityType, entityId)
-      : productId;
+    const scopedProductId = this.parseScopedNewEntityProductId(entityType, entityId, productId);
+    const resolvedProductId = scopedProductId ?? (
+      entityId !== NEW_ENTITY_ID
+        ? await this.resolveProductIdFromEntity(entityType, entityId)
+        : productId
+    );
 
     if (!resolvedProductId) {
       throw new BadRequestException("productId is required for new draft entities");
@@ -206,6 +211,31 @@ export class DraftsService {
     }
 
     throw new BadRequestException("Unsupported draft scope");
+  }
+
+  private parseScopedNewEntityProductId(
+    entityType: DraftEntityType,
+    entityId: string,
+    productId?: string
+  ): string | null {
+    if (!entityId.startsWith(SCOPED_NEW_ENTITY_PREFIX)) {
+      return null;
+    }
+
+    if (entityType !== DraftEntityType.STORY && entityType !== DraftEntityType.TASK) {
+      throw new BadRequestException("Unsupported scoped draft entity type");
+    }
+
+    const scopedProductId = entityId.slice(SCOPED_NEW_ENTITY_PREFIX.length).trim();
+    if (!scopedProductId) {
+      throw new BadRequestException("Invalid scoped draft entity id");
+    }
+
+    if (productId && productId !== scopedProductId) {
+      throw new BadRequestException("Draft product scope mismatch");
+    }
+
+    return scopedProductId;
   }
 
   private async cleanupExpiredDrafts(userId: string) {
