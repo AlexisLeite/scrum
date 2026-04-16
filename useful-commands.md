@@ -25,3 +25,7 @@ printf 'read(25)\n' | nc 127.0.0.1 7777
 ```
 
 Use this remote stream first when checking TypeScript/watch status, before running extra commands like `pnpm typecheck`, `turbo run typecheck`, or `tsc`.
+
+# Open ssh port on remote postgres
+
+ssh -L 6543:127.0.0.1:5433 usuario@95.111.237.196
