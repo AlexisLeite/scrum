@@ -1,7 +1,9 @@
 import React from "react";
+import { marked, type Token } from "marked";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
+import { FiAlertTriangle, FiCheck, FiCopy } from "react-icons/fi";
 import { ProductController, TeamController } from "../../../controllers";
 import { useRootStore } from "../../../stores/root-store";
 import { parseInternalReferenceHref } from "../../../lib/internal-references";
@@ -25,6 +27,12 @@ type MarkdownPreviewProps = {
 };
 
 const DEFAULT_PREVIEW_SIZE = 600;
+type CopyState = "idle" | "copied" | "error";
+type MarkdownPreProps = React.HTMLAttributes<HTMLPreElement> & {
+  children?: React.ReactNode;
+  node?: unknown;
+  copyValue?: string;
+};
 
 export function MarkdownPreview(props: MarkdownPreviewProps) {
   const store = useRootStore();
@@ -44,6 +52,8 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
   const truncatedContent = rawContent.length > previewSize ? markdownTruncate(rawContent, previewSize) : rawContent;
   const mustSlice = truncatedContent.length < rawContent.length;
   const content = expanded || !mustSlice ? rawContent : truncatedContent.trimEnd();
+  const fullCodeBlocks = React.useMemo(() => extractMarkdownCodeBlocks(rawContent), [rawContent]);
+  let renderedCodeBlockIndex = 0;
 
   return (
     <>
@@ -96,6 +106,13 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
                   />
                 </button>
               );
+            },
+            pre(preProps) {
+              const fallbackCode = extractTextContent(preProps.children);
+              const copyValue = fullCodeBlocks[renderedCodeBlockIndex] ?? fallbackCode;
+              renderedCodeBlockIndex += 1;
+
+              return <MarkdownCodeBlock {...preProps} copyValue={copyValue} />;
             }
           }}
         >
@@ -115,6 +132,129 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
       />
     </>
   );
+}
+
+function MarkdownCodeBlock(props: MarkdownPreProps) {
+  const { children, node: _node, copyValue, ...preProps } = props;
+  const [copyState, setCopyState] = React.useState<CopyState>("idle");
+  const code = copyValue ?? "";
+  const canCopy = code.length > 0;
+
+  React.useEffect(() => {
+    if (copyState === "idle") {
+      return undefined;
+    }
+
+    const resetTimeout = window.setTimeout(() => setCopyState("idle"), 2000);
+    return () => window.clearTimeout(resetTimeout);
+  }, [copyState]);
+
+  const handleCopy = React.useCallback(async () => {
+    if (!canCopy) {
+      return;
+    }
+
+    try {
+      await writeToClipboard(code);
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+  }, [canCopy, code]);
+
+  const buttonLabel = copyState === "copied" ? "Copiado" : copyState === "error" ? "Reintentar" : "Copiar";
+  const buttonIcon = copyState === "copied"
+    ? <FiCheck aria-hidden="true" />
+    : copyState === "error"
+      ? <FiAlertTriangle aria-hidden="true" />
+      : <FiCopy aria-hidden="true" />;
+
+  return (
+    <div className="markdown-preview-code-block">
+      <button
+        type="button"
+        className={`btn btn-secondary sm markdown-preview-copy-button${copyState === "idle" ? "" : ` is-${copyState}`}`}
+        onClick={() => void handleCopy()}
+        disabled={!canCopy}
+        aria-label={buttonLabel === "Reintentar" ? "Reintentar copiado del bloque de codigo" : `${buttonLabel} bloque de codigo`}
+        title={buttonLabel === "Reintentar" ? "No se pudo copiar. Intentar nuevamente." : `${buttonLabel} bloque de codigo`}
+      >
+        {buttonIcon}
+        <span>{buttonLabel}</span>
+      </button>
+      <pre {...preProps}>{children}</pre>
+    </div>
+  );
+}
+
+function extractTextContent(node: React.ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+
+  if (Array.isArray(node)) {
+    return node.map((child) => extractTextContent(child)).join("");
+  }
+
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+    return extractTextContent(node.props.children);
+  }
+
+  return "";
+}
+
+function extractMarkdownCodeBlocks(markdown: string): string[] {
+  const blocks: string[] = [];
+  collectCodeBlocks(marked.lexer(markdown, { gfm: true }), blocks);
+  return blocks;
+}
+
+function collectCodeBlocks(tokens: readonly Token[] | undefined, blocks: string[]) {
+  for (const token of tokens ?? []) {
+    if (token.type === "code") {
+      blocks.push(token.text);
+      continue;
+    }
+
+    const nestedTokens = "tokens" in token && Array.isArray(token.tokens) ? token.tokens : undefined;
+    if (nestedTokens) {
+      collectCodeBlocks(nestedTokens, blocks);
+    }
+
+    if (token.type === "list") {
+      for (const item of token.items) {
+        collectCodeBlocks(item.tokens, blocks);
+      }
+    }
+  }
+}
+
+async function writeToClipboard(value: string) {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  if (typeof document === "undefined") {
+    throw new Error("Clipboard API unavailable");
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+
+  if (!copied) {
+    throw new Error("Clipboard copy failed");
+  }
 }
 
 async function openInternalReference(

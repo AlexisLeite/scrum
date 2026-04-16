@@ -3046,6 +3046,11 @@ html .drawer-content .card {
   color: var(--text-secondary);
 }
 
+.task-message-body.markdown-preview pre {
+  background: color-mix(in srgb, var(--panel-elevated) 90%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--border-subtle) 52%, transparent);
+}
+
 .task-message-derived {
   display: grid;
   gap: 0.45rem;
@@ -3185,12 +3190,47 @@ html .drawer-content .card {
   font-size: 0.92em;
 }
 
+.markdown-preview-code-block {
+  position: relative;
+  margin: 1rem 0;
+}
+
+.markdown-preview-copy-button {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.markdown-preview-copy-button svg {
+  flex: none;
+}
+
+.markdown-preview-copy-button.is-copied {
+  color: var(--code-highlight-success);
+  border-color: color-mix(in srgb, var(--code-highlight-success) 35%, var(--border-subtle));
+}
+
+.markdown-preview-copy-button.is-error {
+  color: var(--code-highlight-danger);
+  border-color: color-mix(in srgb, var(--code-highlight-danger) 35%, var(--border-subtle));
+}
+
 .markdown-preview pre {
   background: color-mix(in srgb, var(--panel-muted) 94%, transparent);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   padding: 0.8rem 0.9rem;
   overflow: auto;
+}
+
+.markdown-preview-code-block pre {
+  margin: 0;
+  padding-top: 3rem;
+  padding-right: 5.25rem;
 }
 
 .markdown-preview pre code {
