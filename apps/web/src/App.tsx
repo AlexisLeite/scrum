@@ -63,6 +63,8 @@ import {
   canViewUsersAdministration,
   getUserInitials,
 } from "./lib/permissions";
+import { PageTitleProvider } from "./hooks/usePageTitle";
+import { resolvePathPageTitle } from "./lib/page-title";
 
 const SESSION_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
@@ -125,170 +127,185 @@ export const App = observer(function App() {
 
   const user = store.session.user;
   const showMinimalShell = location.pathname === "/login" || location.pathname.startsWith("/auth/gitlab/callback");
+  const fallbackPageTitle = React.useMemo(() => resolvePathPageTitle(location.pathname), [location.pathname]);
 
   return (
-    <div className={showMinimalShell ? "auth-app-shell" : "app-shell"}>
-      {!showMinimalShell ? <AuthenticatedHeader /> : null}
-      <main className={showMinimalShell ? "auth-page-wrap" : "page-wrap"}>
-        <Routes>
-          <Route path="/" element={<RootRedirect />} />
-          <Route path="/login" element={<LoginView />} />
-          <Route path="/signup" element={<Navigate to="/login" replace />} />
-          <Route path="/profile" element={<Navigate to="/settings" replace />} />
-          <Route path="/settings" element={<Protected><SettingsView /></Protected>} />
-          <Route path="/focused" element={<Protected><FocusedView /></Protected>} />
-          <Route path="/auth/gitlab/callback" element={<GitlabCallbackView />} />
+    <PageTitleProvider fallbackTitle={fallbackPageTitle}>
+      <div className={showMinimalShell ? "auth-app-shell" : "app-shell"}>
+        {!showMinimalShell ? <AuthenticatedHeader /> : null}
+        <main className={showMinimalShell ? "auth-page-wrap" : "page-wrap"}>
+          <Routes>
+            <Route path="/" element={<RootRedirect />} />
+            <Route path="/login" element={<LoginView />} />
+            <Route path="/signup" element={<Navigate to="/login" replace />} />
+            <Route path="/profile" element={<Navigate to="/settings" replace />} />
+            <Route path="/settings" element={<Protected><SettingsView /></Protected>} />
+            <Route path="/focused" element={<Protected><FocusedView /></Protected>} />
+            <Route path="/auth/gitlab/callback" element={<GitlabCallbackView />} />
 
-          <Route
-            path="/administration"
-            element={
-              <Protected>
-                <ProtectedAdministration>
-                  <AdministrationShell />
-                </ProtectedAdministration>
-              </Protected>
-            }
-          >
-            <Route index element={<AdministrationIndexRedirect />} />
             <Route
-              path="products"
+              path="/administration"
               element={
-                <ProtectedAdministrationFeature allowed={canViewProductsAdministration}>
-                  <ProductsBackofficeView />
-                </ProtectedAdministrationFeature>
+                <Protected>
+                  <ProtectedAdministration>
+                    <AdministrationShell />
+                  </ProtectedAdministration>
+                </Protected>
               }
-            />
-            <Route
-              path="backups"
-              element={
-                <ProtectedAdministrationFeature allowed={canViewBackupsAdministration}>
-                  <AdminBackupsView />
-                </ProtectedAdministrationFeature>
-              }
-            />
-            <Route
-              path="users"
-              element={
-                <ProtectedAdministrationFeature allowed={canViewUsersAdministration}>
-                  <AdminUsersManagementView />
-                </ProtectedAdministrationFeature>
-              }
-            />
-            <Route
-              path="roles"
-              element={
-                <ProtectedAdministrationFeature allowed={canViewRolesAdministration}>
-                  <AdminRolesView />
-                </ProtectedAdministrationFeature>
-              }
-            />
-          </Route>
+            >
+              <Route index element={<AdministrationIndexRedirect />} />
+              <Route
+                path="products"
+                element={
+                  <ProtectedAdministrationFeature allowed={canViewProductsAdministration}>
+                    <ProductsBackofficeView />
+                  </ProtectedAdministrationFeature>
+                }
+              />
+              <Route
+                path="backups"
+                element={
+                  <ProtectedAdministrationFeature allowed={canViewBackupsAdministration}>
+                    <AdminBackupsView />
+                  </ProtectedAdministrationFeature>
+                }
+              />
+              <Route
+                path="users"
+                element={
+                  <ProtectedAdministrationFeature allowed={canViewUsersAdministration}>
+                    <AdminUsersManagementView />
+                  </ProtectedAdministrationFeature>
+                }
+              />
+              <Route
+                path="roles"
+                element={
+                  <ProtectedAdministrationFeature allowed={canViewRolesAdministration}>
+                    <AdminRolesView />
+                  </ProtectedAdministrationFeature>
+                }
+              />
+            </Route>
 
-          <Route path="/products/:productId" element={<Protected><ProductWorkspaceLayout /></Protected>}>
-            <Route
-              index
-              element={
-                <ProtectedProductFeature allowed={canViewProductWorkspace}>
-                  <Navigate to={productRoutes.overview} replace />
-                </ProtectedProductFeature>
-              }
-            />
-            <Route
-              path={productRoutes.rootDefinition}
-              element={
-                <ProtectedProductFeature allowed={canViewProductDefinition}>
-                  <ProductDefinitionView />
-                </ProtectedProductFeature>
-              }
-            />
-            <Route
-              path={productRoutes.overview}
-              element={
-                <ProtectedProductFeature allowed={canViewProductWorkspace}>
-                  <ProductOverviewView />
-                </ProtectedProductFeature>
-              }
-            />
-            <Route
-              path={productRoutes.backlog}
-              element={
-                <ProtectedProductFeature allowed={canViewProductBacklog}>
-                  <ProductBacklogView />
-                </ProtectedProductFeature>
-              }
-            />
-            <Route
-              path={productRoutes.storyTasks}
-              element={
-                <ProtectedProductFeature allowed={canViewProductBacklog}>
-                  <StoryTasksView />
-                </ProtectedProductFeature>
-              }
-            />
-            <Route
-              path={productRoutes.storyDefinition}
-              element={
-                <ProtectedProductFeature allowed={canViewProductBacklog}>
-                  <StoryDefinitionView />
-                </ProtectedProductFeature>
-              }
-            />
-            <Route
-              path={productRoutes.sprints}
-              element={
-                <ProtectedProductFeature allowed={canViewProductSprints}>
-                  <SprintPlanningView />
-                </ProtectedProductFeature>
-              }
-            />
-            <Route
-              path={productRoutes.sprintDefinition}
-              element={
-                <ProtectedProductFeature allowed={canViewProductSprints}>
-                  <SprintDefinitionView />
-                </ProtectedProductFeature>
-              }
-            />
-            <Route
-              path={productRoutes.board}
-              element={
-                <ProtectedProductFeature allowed={canViewSprintBoard}>
-                  <SprintBoardView />
-                </ProtectedProductFeature>
-              }
-            />
-            <Route
-              path={productRoutes.metrics}
-              element={
-                <ProtectedProductFeature allowed={canViewProductMetrics}>
-                  <ProductMetricsView />
-                </ProtectedProductFeature>
-              }
-            />
-            <Route
-              path={productRoutes.taskDefinition}
-              element={
-                <ProtectedProductFeature allowed={canViewProductWorkspace}>
-                  <TaskDefinitionView />
-                </ProtectedProductFeature>
-              }
-            />
-          </Route>
+            <Route path="/products/:productId" element={<Protected><ProductWorkspaceLayout /></Protected>}>
+              <Route
+                index
+                element={
+                  <ProtectedProductFeature allowed={canViewProductWorkspace}>
+                    <Navigate to={productRoutes.overview} replace />
+                  </ProtectedProductFeature>
+                }
+              />
+              <Route
+                path={productRoutes.rootDefinition}
+                element={
+                  <ProtectedProductFeature allowed={canViewProductDefinition}>
+                    <ProductDefinitionView />
+                  </ProtectedProductFeature>
+                }
+              />
+              <Route
+                path={productRoutes.overview}
+                element={
+                  <ProtectedProductFeature allowed={canViewProductWorkspace}>
+                    <ProductOverviewView />
+                  </ProtectedProductFeature>
+                }
+              />
+              <Route
+                path={productRoutes.backlog}
+                element={
+                  <ProtectedProductFeature allowed={canViewProductBacklog}>
+                    <ProductBacklogView />
+                  </ProtectedProductFeature>
+                }
+              />
+              <Route
+                path={productRoutes.storyTasks}
+                element={
+                  <ProtectedProductFeature allowed={canViewProductBacklog}>
+                    <StoryTasksView />
+                  </ProtectedProductFeature>
+                }
+              />
+              <Route
+                path={productRoutes.storyDefinition}
+                element={
+                  <ProtectedProductFeature allowed={canViewProductBacklog}>
+                    <StoryDefinitionView />
+                  </ProtectedProductFeature>
+                }
+              />
+              <Route
+                path={productRoutes.sprints}
+                element={
+                  <ProtectedProductFeature allowed={canViewProductSprints}>
+                    <SprintPlanningView />
+                  </ProtectedProductFeature>
+                }
+              />
+              <Route
+                path={productRoutes.sprintDefinition}
+                element={
+                  <ProtectedProductFeature allowed={canViewProductSprints}>
+                    <SprintDefinitionView />
+                  </ProtectedProductFeature>
+                }
+              />
+              <Route
+                path={productRoutes.board}
+                element={
+                  <ProtectedProductFeature allowed={canViewSprintBoard}>
+                    <SprintBoardView />
+                  </ProtectedProductFeature>
+                }
+              />
+              <Route
+                path={productRoutes.metrics}
+                element={
+                  <ProtectedProductFeature allowed={canViewProductMetrics}>
+                    <ProductMetricsView />
+                  </ProtectedProductFeature>
+                }
+              />
+              <Route
+                path={productRoutes.taskDefinition}
+                element={
+                  <ProtectedProductFeature allowed={canViewProductWorkspace}>
+                    <TaskDefinitionView />
+                  </ProtectedProductFeature>
+                }
+              />
+            </Route>
 
-          <Route path="/products/:productId/stories/:storyId/tasks" element={<Protected><LegacyStoryTasksRedirect /></Protected>} />
-          <Route path="/products/:productId/sprints/manage" element={<Protected><LegacySprintsManageRedirect /></Protected>} />
-          <Route path="/products/:productId/sprints/:sprintId/execute" element={<Protected><LegacyExecuteSprintRedirect /></Protected>} />
-          <Route path="/products/:productId/indicators" element={<Protected><LegacyIndicatorsRedirect /></Protected>} />
-          <Route path="/products" element={<Navigate to="/administration/products" replace />} />
-          <Route path="/teams" element={<Navigate to="/focused" replace />} />
-          <Route path="/admin" element={<Navigate to="/administration" replace />} />
-          <Route path="*" element={<RootRedirect />} />
-        </Routes>
-      </main>
+            <Route
+              path="/products/:productId/stories/:storyId/tasks"
+              element={<Protected><LegacyStoryTasksRedirect /></Protected>}
+            />
+            <Route
+              path="/products/:productId/sprints/manage"
+              element={<Protected><LegacySprintsManageRedirect /></Protected>}
+            />
+            <Route
+              path="/products/:productId/sprints/:sprintId/execute"
+              element={<Protected><LegacyExecuteSprintRedirect /></Protected>}
+            />
+            <Route
+              path="/products/:productId/indicators"
+              element={<Protected><LegacyIndicatorsRedirect /></Protected>}
+            />
+            <Route path="/products" element={<Navigate to="/administration/products" replace />} />
+            <Route path="/teams" element={<Navigate to="/focused" replace />} />
+            <Route path="/admin" element={<Navigate to="/administration" replace />} />
+            <Route path="*" element={<RootRedirect />} />
+          </Routes>
+        </main>
 
-      <DrawerHost controller={store.drawers} />
-      <ModalsController.Component />
-    </div>
+        <DrawerHost controller={store.drawers} />
+        <ModalsController.Component />
+      </div>
+    </PageTitleProvider>
   );
 });
 

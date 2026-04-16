@@ -3,6 +3,7 @@ import { observer } from "mobx-react-lite";
 import ReactECharts from "echarts-for-react";
 import { useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
+import { usePageTitle } from "../../hooks/usePageTitle";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
 import { productCollectionScope, useRootStore } from "../../stores/root-store";
 import { TaskUpsertionDrawer } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
@@ -35,6 +36,11 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const [boardLoading, setBoardLoading] = React.useState(false);
   const [pendingTaskIds, setPendingTaskIds] = React.useState<Record<string, boolean>>({});
   const productScopeKey = productId ? productCollectionScope(productId) : null;
+  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
+  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
+  const currentSprint = sprints.find((sprint) => sprint.id === sprintId);
+  usePageTitle(currentSprint ? `Ejecucion de sprint: ${currentSprint.name}` : "Ejecucion de sprint");
+  const { assignableUsers } = useProductAssignableUsers(controller, productId ? [productId] : []);
 
   const reloadBoardData = React.useCallback(async () => {
     if (!productId || !sprintId) return;
@@ -60,11 +66,6 @@ export const SprintBoardView = observer(function SprintBoardView() {
   }, [controller, productId, sprintId, reloadBoardData]);
 
   if (!productId || !sprintId) return null;
-
-  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
-  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
-  const { assignableUsers } = useProductAssignableUsers(controller, [productId]);
-  const currentSprint = sprints.find((sprint) => sprint.id === sprintId);
   const isClosedSprint = currentSprint?.status === "COMPLETED" || currentSprint?.status === "CANCELLED";
   const boardReadOnly = currentSprint?.status !== "ACTIVE" || !canManageSprintBoard;
   const boardAssignees = assignableUsers;

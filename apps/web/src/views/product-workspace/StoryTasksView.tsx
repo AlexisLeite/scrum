@@ -2,6 +2,7 @@ import React from "react";
 import { observer } from "mobx-react-lite";
 import { useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
+import { usePageTitle } from "../../hooks/usePageTitle";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
 import { productCollectionScope, storyCollectionScope, useRootStore } from "../../stores/root-store";
 import { SearchableSelect, buildSearchableSelectOptions } from "../../ui/SearchableSelect";
@@ -37,6 +38,14 @@ export const StoryTasksView = observer(function StoryTasksView() {
   const [completionRequest, setCompletionRequest] = React.useState<{ taskId: string; title: string } | null>(null);
   const storyScopeKey = storyId ? storyCollectionScope(storyId) : null;
   const productScopeKey = productId ? productCollectionScope(productId) : null;
+  const tasks = store.tasks.getItems(storyScopeKey) as TaskItem[];
+  const tasksLoading = store.tasks.isLoadingScope(storyScopeKey);
+  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
+  const storiesLoading = store.stories.isLoadingScope(productScopeKey);
+  const currentStory = stories.find((story) => story.id === storyId);
+  usePageTitle(currentStory ? `Tareas de historia: ${currentStory.title}` : "Tareas de historia");
+  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
+  const sprintsLoading = store.sprints.isLoadingScope(productScopeKey);
 
   React.useEffect(() => {
     if (!storyId || !productId) return;
@@ -46,14 +55,6 @@ export const StoryTasksView = observer(function StoryTasksView() {
   }, [controller, productId, storyId]);
 
   if (!storyId || !productId) return null;
-
-  const tasks = store.tasks.getItems(storyScopeKey) as TaskItem[];
-  const tasksLoading = store.tasks.isLoadingScope(storyScopeKey);
-  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
-  const storiesLoading = store.stories.isLoadingScope(productScopeKey);
-  const currentStory = stories.find((story) => story.id === storyId);
-  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
-  const sprintsLoading = store.sprints.isLoadingScope(productScopeKey);
   const sprintNameById = new Map(sprints.map((sprint) => [sprint.id, sprint.name]));
   const assigneeNameById = new Map(assignableUsers.map((entry) => [entry.id, entry.name]));
   const statusOptions = buildStatusOptions(...tasks.map((task) => task.status));

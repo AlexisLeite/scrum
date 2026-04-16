@@ -11,6 +11,7 @@ import { ProductController } from "../../controllers";
 import { TaskInfoPopover } from "../../components/TaskInfoPopover";
 import { TaskSearchPicker, type TaskSearchPlacement } from "../../components/TaskSearchPicker";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
+import { usePageTitle } from "../../hooks/usePageTitle";
 import {
   productBacklogPath,
   productBoardPath, productSprintsPath
@@ -192,6 +193,10 @@ export const ProductDefinitionView = observer(function ProductDefinitionView() {
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
+  const productsScopeKey = sessionCollectionScope(store.session.user?.id);
+  const products = store.products.getItems(productsScopeKey) as ProductItem[];
+  const product = products.find((entry) => entry.id === productId);
+  usePageTitle(product ? `Producto: ${product.name}` : "Definicion de producto");
 
   React.useEffect(() => {
     if (!productId) return;
@@ -201,10 +206,6 @@ export const ProductDefinitionView = observer(function ProductDefinitionView() {
   if (!productId) {
     return <Navigate to="/products" replace />;
   }
-
-  const productsScopeKey = sessionCollectionScope(store.session.user?.id);
-  const products = store.products.getItems(productsScopeKey) as ProductItem[];
-  const product = products.find((entry) => entry.id === productId);
 
   if (!product && store.products.isLoadingScope(productsScopeKey)) {
     return (
@@ -258,6 +259,10 @@ export const StoryDefinitionView = observer(function StoryDefinitionView() {
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const { productId, storyId } = useParams<{ productId: string; storyId: string }>();
   const navigate = useNavigate();
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
+  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
+  const story = stories.find((entry) => entry.id === storyId);
+  usePageTitle(story ? `Historia: ${story.title}` : "Definicion de historia");
 
   React.useEffect(() => {
     if (!productId) return;
@@ -267,10 +272,6 @@ export const StoryDefinitionView = observer(function StoryDefinitionView() {
   if (!productId || !storyId) {
     return <Navigate to="/products" replace />;
   }
-
-  const productScopeKey = productId ? productCollectionScope(productId) : null;
-  const stories = store.stories.getItems(productScopeKey) as StoryItem[];
-  const story = stories.find((entry) => entry.id === storyId);
 
   if (!story && store.stories.isLoadingScope(productScopeKey)) {
     return (
@@ -349,6 +350,10 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
   const chartTheme = useEChartsTheme();
   const { productId, sprintId } = useParams<{ productId: string; sprintId: string }>();
   const navigate = useNavigate();
+  const productScopeKey = productId ? productCollectionScope(productId) : null;
+  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
+  const sprint = sprints.find((entry) => entry.id === sprintId);
+  usePageTitle(sprint ? `Planificar sprint: ${sprint.name}` : "Planificar sprint");
   const user = store.session.user;
   const {
     assignableUsers,
@@ -381,10 +386,6 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
   if (!productId || !sprintId) {
     return <Navigate to="/products" replace />;
   }
-
-  const productScopeKey = productId ? productCollectionScope(productId) : null;
-  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
-  const sprint = sprints.find((entry) => entry.id === sprintId);
 
   const reloadMembers = React.useCallback(async () => {
     if (!sprintId) return;
@@ -1239,6 +1240,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
   const canCreateLinkedTask = !forcedReadonly && canCreateTaskFromMessage(user, productId);
   const canWriteMessages = taskDetail ? canCommentOnVisibleTask(user, taskDetail, user?.id, productId) : false;
   const readOnlyTask = !canEditTask;
+  usePageTitle(taskDetail ? `Tarea: ${taskDetail.title}` : "Definicion de tarea");
 
   if (!productId || !taskId) {
     return <Navigate to="/products" replace />;
