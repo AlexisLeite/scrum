@@ -3,6 +3,7 @@ import { NestFactory } from "@nestjs/core";
 import { ExpressAdapter } from "@nestjs/platform-express";
 import cookieParser from "cookie-parser";
 import express, { type Express } from "express";
+import type { NextFunction } from "express";
 import { static as serveStatic } from "express";
 import { Request, Response } from "express";
 import { AppModule } from "./app.module";
@@ -17,7 +18,7 @@ function normalizeOrigins(rawOrigins: string | undefined): string[] {
 
   return configuredOrigins.flatMap((origin) => {
     if (origin.startsWith("https://") && !origin.match(/:\d+$/)) {
-      return [origin, `${origin}:443`];
+      return [origin, `${origin}:443`, `${origin}:5443`];
     }
     return [origin];
   });
@@ -39,11 +40,27 @@ export function ensureDatabaseEnv(): void {
 }
 
 export async function configureApp(app: INestApplication): Promise<void> {
+  const allowedOrigins = resolveAllowedOrigins();
   app.setGlobalPrefix("api/v1");
   app.use(cookieParser());
+  app.use("/media", (req: Request, res: Response, next: NextFunction) => {
+    const origin = typeof req.headers.origin === "string" ? req.headers.origin : "*";
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    if (origin !== "*") {
+      res.setHeader("Vary", "Origin");
+    }
+
+    if (req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
+      res.status(204).end();
+      return;
+    }
+
+    next();
+  });
   app.use("/media", serveStatic(resolveMediaRoot()));
   app.enableCors({
-    origin: resolveAllowedOrigins(),
+    origin: allowedOrigins,
     credentials: true
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

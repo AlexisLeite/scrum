@@ -2,6 +2,7 @@ import { marked, type Token, type Tokens } from "marked";
 import type {
   Content,
   ContentCanvas,
+  ContentImage,
   ContentOrderedList,
   ContentStack,
   ContentTable,
@@ -28,7 +29,7 @@ type InlineFormatting = {
   style?: string;
 };
 
-type InlineContent = string | {
+type InlineTextRun = {
   text: string;
   bold?: boolean;
   italics?: boolean;
@@ -38,11 +39,190 @@ type InlineContent = string | {
   style?: string;
 };
 
+type InlineContent = string | InlineTextRun;
+
 type RenderContext = {
   pendingTocItem: boolean;
 };
 
+type PdfContentNode = Record<string, unknown>;
+
 let pdfFontsRegistered = false;
+const A4_PAGE_WIDTH = 595.28;
+const PRINT_IMAGE_WIDTH = A4_PAGE_WIDTH * 0.65;
+const DEV_MEDIA_ROOT = "/root/repos/scrum/shared";
+
+const PRINT_DOCUMENT_DEFAULT_STYLE = {
+  font: "Roboto",
+  fontSize: 11,
+  lineHeight: 1.35,
+  color: "#1f2d3d"
+};
+
+const PRINT_DOCUMENT_STYLES = {
+  coverTitle: {
+    fontSize: 26,
+    bold: true,
+    color: "#16395d"
+  },
+  coverDate: {
+    margin: [0, 18, 0, 0],
+    fontSize: 12,
+    color: "#4f6378"
+  },
+  tocTitle: {
+    fontSize: 20,
+    bold: true,
+    color: "#16395d"
+  },
+  tocEntry: {
+    fontSize: 11,
+    color: "#1f2d3d"
+  },
+  tocEntryNumber: {
+    fontSize: 11,
+    bold: true,
+    color: "#16395d"
+  },
+  inlineCode: {
+    fontSize: 9,
+    color: "#16395d",
+    background: "#edf4ff"
+  },
+  codeBlockLabel: {
+    fontSize: 8,
+    bold: true,
+    color: "#5c6f86"
+  },
+  codeBlockText: {
+    fontSize: 9,
+    color: "#13263a",
+    lineHeight: 1.2
+  },
+  heading1: {
+    fontSize: 22,
+    bold: true,
+    color: "#16395d"
+  },
+  heading2: {
+    fontSize: 18,
+    bold: true,
+    color: "#16395d"
+  },
+  heading3: {
+    fontSize: 15,
+    bold: true,
+    color: "#204f7a"
+  },
+  heading4: {
+    fontSize: 13,
+    bold: true,
+    color: "#204f7a"
+  },
+  heading5: {
+    fontSize: 12,
+    bold: true,
+    color: "#315f88"
+  },
+  heading6: {
+    fontSize: 11,
+    bold: true,
+    color: "#315f88"
+  }
+};
+
+const CODE_TOKEN_COLORS = {
+  keyword: "#a626a4",
+  definition: "#0f6c74",
+  type: "#2563eb",
+  builtin: "#2563eb",
+  function: "#b45309",
+  string: "#2f855a",
+  number: "#b45309",
+  comment: "#8a9199",
+  property: "#334155",
+  tag: "#c2410c",
+  attribute: "#7c3aed",
+  variable: "#0f766e",
+  operator: "#64748b",
+  punctuation: "#94a3b8",
+  decorator: "#c026d3"
+} as const;
+
+type CodeLanguageFamily =
+  | "clike"
+  | "json"
+  | "bash"
+  | "python"
+  | "sql"
+  | "markup"
+  | "css"
+  | "plain";
+
+type CodeTokenKind = keyof typeof CODE_TOKEN_COLORS;
+
+type HighlightState = {
+  blockComment?: "clike" | "markup";
+  pendingIdentifierKind?: Extract<CodeTokenKind, "definition" | "function">;
+};
+
+const CODE_TOKEN_FORMATTING: Partial<Record<CodeTokenKind, Pick<InlineTextRun, "bold" | "italics">>> = {
+  keyword: {
+    bold: true
+  },
+  definition: {
+    bold: true
+  },
+  function: {
+    bold: true
+  },
+  comment: {
+    italics: true
+  },
+  decorator: {
+    bold: true
+  }
+};
+
+const CODE_KEYWORDS: Record<Exclude<CodeLanguageFamily, "plain" | "markup" | "css" | "json">, Set<string>> = {
+  clike: new Set([
+    "abstract", "as", "asserts", "async", "await", "break", "case", "catch", "class", "const", "continue", "debugger",
+    "declare", "default", "delete", "do", "else", "enum", "export", "extends", "finally", "for", "from", "function",
+    "if", "implements", "import", "in", "infer", "instanceof", "interface", "keyof", "let", "namespace", "new",
+    "private", "protected", "public", "readonly", "return", "satisfies", "static", "super", "switch", "this", "throw",
+    "try", "type", "typeof", "using", "var", "void", "while", "with", "yield"
+  ]),
+  bash: new Set(["if", "then", "else", "elif", "fi", "for", "do", "done", "case", "esac", "while", "in", "function"]),
+  python: new Set([
+    "and", "as", "assert", "break", "class", "continue", "def", "elif", "else", "except", "false", "finally", "for",
+    "from", "if", "import", "in", "is", "lambda", "none", "nonlocal", "not", "or", "pass", "raise", "return", "true",
+    "try", "while", "with", "yield"
+  ]),
+  sql: new Set([
+    "all", "alter", "and", "as", "by", "case", "create", "delete", "desc", "distinct", "drop", "else", "from", "group",
+    "having", "inner", "insert", "into", "is", "join", "left", "limit", "not", "null", "offset", "on", "order", "outer",
+    "right", "select", "set", "table", "then", "union", "update", "values", "when", "where"
+  ])
+};
+
+const CLIKE_DEFINITION_KEYWORDS = new Set(["type", "interface", "class", "enum", "namespace"]);
+const CLIKE_TYPE_NAMES = new Set([
+  "any", "array", "bigint", "boolean", "date", "map", "never", "null", "number", "object", "promise", "readonlyarray",
+  "record", "regexp", "set", "string", "symbol", "unknown", "url", "urlsearchparams", "void"
+]);
+const CLIKE_BUILTINS = new Set([
+  "array", "console", "date", "error", "json", "map", "math", "number", "object", "promise", "record", "regexp", "set",
+  "string", "window", "document", "url", "urlsearchparams"
+]);
+const CLIKE_LITERAL_KEYWORDS = new Set(["false", "null", "true", "undefined"]);
+const PYTHON_BUILTINS = new Set(["dict", "int", "list", "print", "set", "str", "tuple"]);
+const SQL_BUILTINS = new Set(["avg", "count", "max", "min", "sum"]);
+const OPERATOR_TOKENS = [
+  "?.[", "?.(", ">>>", "===", "!==", "=>", "&&", "||", "??", "?.", "<=", ">=", "==", "!=", "+=", "-=", "*=", "/=",
+  "%=", "::", "..."
+];
+const PUNCTUATION_CHARS = new Set(["{", "}", "[", "]", "(", ")", ",", ".", ";"]);
+const OPERATOR_CHARS = new Set(["!", "%", "&", "*", "+", "-", "/", ":", "<", "=", ">", "?", "^", "|", "~"]);
 
 function clampHeadingLevel(level: number) {
   return Math.max(1, Math.min(6, Math.trunc(level) || 1));
@@ -50,6 +230,426 @@ function clampHeadingLevel(level: number) {
 
 function isFenceLine(line: string) {
   return /^(```|~~~)/.test(line.trim());
+}
+
+function decodeHtmlEntities(value: string) {
+  return value.replace(/&(#x?[0-9a-f]+|amp|lt|gt|quot|apos|nbsp);/gi, (match, entity: string) => {
+    const normalized = entity.toLowerCase();
+
+    if (normalized === "amp") return "&";
+    if (normalized === "lt") return "<";
+    if (normalized === "gt") return ">";
+    if (normalized === "quot") return "\"";
+    if (normalized === "apos") return "'";
+    if (normalized === "nbsp") return " ";
+
+    if (!normalized.startsWith("#")) {
+      return match;
+    }
+
+    const isHex = normalized.startsWith("#x");
+    const rawCodePoint = normalized.slice(isHex ? 2 : 1);
+    const parsed = Number.parseInt(rawCodePoint, isHex ? 16 : 10);
+    if (!Number.isFinite(parsed)) {
+      return match;
+    }
+
+    try {
+      return String.fromCodePoint(parsed);
+    } catch {
+      return match;
+    }
+  });
+}
+
+function pushHighlightedSegment(
+  segments: InlineContent[],
+  text: string,
+  kind?: CodeTokenKind
+) {
+  if (!text) {
+    return;
+  }
+
+  if (!kind) {
+    segments.push(text);
+    return;
+  }
+
+  segments.push({
+    text,
+    color: CODE_TOKEN_COLORS[kind],
+    ...CODE_TOKEN_FORMATTING[kind]
+  });
+}
+
+function isEscapedCharacter(line: string, index: number) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && line[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
+}
+
+function normalizeCodeLanguage(lang: string | undefined): CodeLanguageFamily {
+  const normalized = (lang ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return "plain";
+  }
+
+  if (["ts", "tsx", "js", "jsx", "typescript", "javascript", "java", "c", "cpp", "csharp", "cs", "go", "rust", "php"].includes(normalized)) {
+    return "clike";
+  }
+
+  if (["json", "jsonc"].includes(normalized)) {
+    return "json";
+  }
+
+  if (["sh", "bash", "zsh", "shell", "console"].includes(normalized)) {
+    return "bash";
+  }
+
+  if (["py", "python"].includes(normalized)) {
+    return "python";
+  }
+
+  if (["sql", "postgresql", "mysql", "sqlite"].includes(normalized)) {
+    return "sql";
+  }
+
+  if (["html", "xml", "svg"].includes(normalized)) {
+    return "markup";
+  }
+
+  if (["css", "scss", "sass", "less"].includes(normalized)) {
+    return "css";
+  }
+
+  return "plain";
+}
+
+function renderQuotedSegment(
+  line: string,
+  start: number,
+  delimiter: "\"" | "'" | "`",
+  segments: InlineContent[]
+) {
+  let cursor = start + 1;
+  while (cursor < line.length) {
+    if (line[cursor] === delimiter && !isEscapedCharacter(line, cursor)) {
+      cursor += 1;
+      break;
+    }
+    cursor += 1;
+  }
+  pushHighlightedSegment(segments, line.slice(start, cursor), "string");
+  return cursor;
+}
+
+function renderBlockCommentSegment(
+  line: string,
+  start: number,
+  closeToken: string,
+  segments: InlineContent[],
+  state: HighlightState,
+  kind: HighlightState["blockComment"]
+) {
+  const closeIndex = line.indexOf(closeToken, start + 2);
+  if (closeIndex === -1) {
+    pushHighlightedSegment(segments, line.slice(start), "comment");
+    state.blockComment = kind;
+    return line.length;
+  }
+
+  pushHighlightedSegment(segments, line.slice(start, closeIndex + closeToken.length), "comment");
+  state.blockComment = undefined;
+  return closeIndex + closeToken.length;
+}
+
+function findPreviousNonWhitespaceChar(line: string, cursor: number) {
+  for (let index = cursor - 1; index >= 0; index -= 1) {
+    const char = line[index];
+    if (!/\s/.test(char)) {
+      return char;
+    }
+  }
+
+  return undefined;
+}
+
+function findNextNonWhitespaceChar(line: string, cursor: number) {
+  for (let index = cursor; index < line.length; index += 1) {
+    const char = line[index];
+    if (!/\s/.test(char)) {
+      return char;
+    }
+  }
+
+  return undefined;
+}
+
+function resolveIdentifierFollowup(line: string, cursor: number) {
+  let nextIndex = cursor;
+  while (nextIndex < line.length && /\s/.test(line[nextIndex])) {
+    nextIndex += 1;
+  }
+
+  if (line[nextIndex] === "?" || line[nextIndex] === "!") {
+    nextIndex += 1;
+    while (nextIndex < line.length && /\s/.test(line[nextIndex])) {
+      nextIndex += 1;
+    }
+  }
+
+  return line[nextIndex];
+}
+
+function isTypeLikeIdentifier(identifier: string) {
+  return /^[A-Z][A-Za-z0-9_$]*$/.test(identifier);
+}
+
+function highlightIdentifier(
+  identifier: string,
+  family: CodeLanguageFamily,
+  segments: InlineContent[],
+  state: HighlightState,
+  previousChar: string | undefined,
+  nextChar: string | undefined,
+  previousNonWhitespaceChar: string | undefined,
+  nextNonWhitespaceChar: string | undefined,
+  followupChar: string | undefined
+) {
+  const lower = identifier.toLowerCase();
+
+  if (family === "json") {
+    if (followupChar === ":") {
+      pushHighlightedSegment(segments, identifier, "property");
+      return;
+    }
+    if (["true", "false", "null"].includes(lower)) {
+      pushHighlightedSegment(segments, identifier, "keyword");
+      return;
+    }
+    pushHighlightedSegment(segments, identifier);
+    return;
+  }
+
+  if (family === "markup") {
+    pushHighlightedSegment(segments, identifier, previousChar === "<" || previousChar === "/" ? "tag" : "attribute");
+    return;
+  }
+
+  if (family === "css") {
+    pushHighlightedSegment(segments, identifier, followupChar === ":" ? "property" : identifier.startsWith("--") ? "variable" : undefined);
+    return;
+  }
+
+  if (state.pendingIdentifierKind) {
+    pushHighlightedSegment(segments, identifier, state.pendingIdentifierKind);
+    state.pendingIdentifierKind = undefined;
+    return;
+  }
+
+  if (family !== "plain" && family !== "json" && CODE_KEYWORDS[family as keyof typeof CODE_KEYWORDS]?.has(lower)) {
+    pushHighlightedSegment(segments, identifier, "keyword");
+
+    if (family === "clike") {
+      if (CLIKE_DEFINITION_KEYWORDS.has(lower)) {
+        state.pendingIdentifierKind = "definition";
+      } else if (lower === "function") {
+        state.pendingIdentifierKind = "function";
+      }
+    } else if (family === "python") {
+      if (lower === "class") {
+        state.pendingIdentifierKind = "definition";
+      } else if (lower === "def") {
+        state.pendingIdentifierKind = "function";
+      }
+    } else if (family === "bash" && lower === "function") {
+      state.pendingIdentifierKind = "function";
+    }
+
+    return;
+  }
+
+  if (family === "clike" && CLIKE_LITERAL_KEYWORDS.has(lower)) {
+    pushHighlightedSegment(segments, identifier, "keyword");
+    return;
+  }
+
+  if (family === "clike") {
+    if (followupChar === ":") {
+      pushHighlightedSegment(segments, identifier, "property");
+      return;
+    }
+
+    if (previousNonWhitespaceChar === ".") {
+      pushHighlightedSegment(segments, identifier, nextNonWhitespaceChar === "(" ? "function" : "property");
+      return;
+    }
+
+    if (nextNonWhitespaceChar === "(") {
+      pushHighlightedSegment(segments, identifier, "function");
+      return;
+    }
+
+    if (CLIKE_TYPE_NAMES.has(lower) || isTypeLikeIdentifier(identifier)) {
+      pushHighlightedSegment(segments, identifier, "type");
+      return;
+    }
+
+    if (CLIKE_BUILTINS.has(lower)) {
+      pushHighlightedSegment(segments, identifier, "builtin");
+      return;
+    }
+  }
+
+  if (family === "python") {
+    if (nextNonWhitespaceChar === "(") {
+      pushHighlightedSegment(segments, identifier, "function");
+      return;
+    }
+
+    if (PYTHON_BUILTINS.has(lower)) {
+      pushHighlightedSegment(segments, identifier, "builtin");
+      return;
+    }
+  }
+
+  if (family === "sql" && SQL_BUILTINS.has(lower) && nextNonWhitespaceChar === "(") {
+    pushHighlightedSegment(segments, identifier, "function");
+    return;
+  }
+
+  if (family === "bash" && identifier.startsWith("$")) {
+    pushHighlightedSegment(segments, identifier, "variable");
+    return;
+  }
+
+  pushHighlightedSegment(segments, identifier);
+}
+
+function highlightLine(line: string, family: CodeLanguageFamily, state: HighlightState): InlineContent[] {
+  const segments: InlineContent[] = [];
+  let cursor = 0;
+
+  if (state.blockComment === "clike") {
+    cursor = renderBlockCommentSegment(line, 0, "*/", segments, state, "clike");
+  } else if (state.blockComment === "markup") {
+    cursor = renderBlockCommentSegment(line, 0, "-->", segments, state, "markup");
+  }
+
+  while (cursor < line.length) {
+    const current = line[cursor];
+    const nextTwo = line.slice(cursor, cursor + 2);
+    const nextFour = line.slice(cursor, cursor + 4);
+    const tail = line.slice(cursor);
+
+    if (family === "markup" && nextFour === "<!--") {
+      cursor = renderBlockCommentSegment(line, cursor, "-->", segments, state, "markup");
+      continue;
+    }
+
+    if (nextTwo === "/*" && (family === "clike" || family === "css" || family === "sql")) {
+      cursor = renderBlockCommentSegment(line, cursor, "*/", segments, state, "clike");
+      continue;
+    }
+
+    if ((family === "clike" || family === "css") && nextTwo === "//") {
+      pushHighlightedSegment(segments, tail, "comment");
+      break;
+    }
+
+    if ((family === "bash" || family === "python") && current === "#") {
+      pushHighlightedSegment(segments, tail, "comment");
+      break;
+    }
+
+    const decoratorMatch = (family === "clike" || family === "python") ? /^@[A-Za-z_][A-Za-z0-9_$-]*/.exec(tail) : null;
+    if (decoratorMatch) {
+      pushHighlightedSegment(segments, decoratorMatch[0], "decorator");
+      cursor += decoratorMatch[0].length;
+      continue;
+    }
+
+    if (family === "sql" && nextTwo === "--") {
+      pushHighlightedSegment(segments, tail, "comment");
+      break;
+    }
+
+    if (current === "\"" || current === "'" || current === "`") {
+      cursor = renderQuotedSegment(line, cursor, current, segments);
+      continue;
+    }
+
+    const variableMatch = family === "bash" ? /^\$[A-Za-z_][A-Za-z0-9_]*/.exec(tail) : null;
+    if (variableMatch) {
+      pushHighlightedSegment(segments, variableMatch[0], "variable");
+      cursor += variableMatch[0].length;
+      continue;
+    }
+
+    const operatorToken = OPERATOR_TOKENS.find((token) => tail.startsWith(token));
+    if (operatorToken) {
+      pushHighlightedSegment(segments, operatorToken, "operator");
+      cursor += operatorToken.length;
+      continue;
+    }
+
+    const numberMatch = /^-?(?:0x[\da-fA-F]+|\d+(?:\.\d+)?)/.exec(tail);
+    if (numberMatch) {
+      pushHighlightedSegment(segments, numberMatch[0], "number");
+      cursor += numberMatch[0].length;
+      continue;
+    }
+
+    const identifierMatch = /^(?:--[A-Za-z_-][\w-]*|[A-Za-z_][A-Za-z0-9_-]*)/.exec(tail);
+    if (identifierMatch) {
+      const identifier = identifierMatch[0];
+      const previousChar = cursor > 0 ? line[cursor - 1] : undefined;
+      const nextChar = line[cursor + identifier.length];
+      const previousNonWhitespaceChar = findPreviousNonWhitespaceChar(line, cursor);
+      const nextNonWhitespaceChar = findNextNonWhitespaceChar(line, cursor + identifier.length);
+      const followupChar = resolveIdentifierFollowup(line, cursor + identifier.length);
+
+      highlightIdentifier(
+        identifier,
+        family,
+        segments,
+        state,
+        previousChar,
+        nextChar,
+        previousNonWhitespaceChar,
+        nextNonWhitespaceChar,
+        followupChar
+      );
+      cursor += identifier.length;
+      continue;
+    }
+
+    if (PUNCTUATION_CHARS.has(current)) {
+      pushHighlightedSegment(segments, current, "punctuation");
+      cursor += 1;
+      continue;
+    }
+
+    if (OPERATOR_CHARS.has(current)) {
+      pushHighlightedSegment(segments, current, "operator");
+      cursor += 1;
+      continue;
+    }
+
+    pushHighlightedSegment(segments, current);
+    cursor += 1;
+  }
+
+  return segments.length > 0 ? segments : [" "];
+}
+
+function highlightCodeLines(value: string, lang: string | undefined) {
+  const family = normalizeCodeLanguage(lang);
+  const state: HighlightState = {};
+  return normalizeCodeBlockLines(value).map((line) => highlightLine(line, family, state));
 }
 
 export function shiftMarkdownHeadings(markdown: string, targetLevel: number) {
@@ -104,12 +704,13 @@ export function shiftMarkdownHeadings(markdown: string, targetLevel: number) {
 }
 
 function renderInlineText(text: string, formatting: InlineFormatting = {}): InlineContent {
+  const decodedText = decodeHtmlEntities(text);
   if (!Object.keys(formatting).length) {
-    return text;
+    return decodedText;
   }
 
   return {
-    text,
+    text: decodedText,
     ...formatting
   };
 }
@@ -192,6 +793,292 @@ function renderTableCell(cell: Tokens.TableCell): TableCell {
   };
 }
 
+function hasRenderableInlineTokens(tokens: Token[] | undefined): boolean {
+  if (!tokens?.length) {
+    return false;
+  }
+
+  return tokens.some((token) => {
+    switch (token.type) {
+      case "br":
+      case "image":
+        return true;
+      case "text":
+      case "codespan":
+      case "escape":
+      case "html":
+        return Boolean(token.text?.trim());
+      default:
+        if ("tokens" in token && token.tokens?.length) {
+          return hasRenderableInlineTokens(token.tokens);
+        }
+        if ("text" in token && typeof token.text === "string") {
+          return Boolean(token.text.trim());
+        }
+        return false;
+    }
+  });
+}
+
+function resolveImageSource(source: string) {
+  const normalized = source.trim();
+  if (!normalized) {
+    return normalized;
+  }
+
+  if (
+    normalized.startsWith("data:") ||
+    normalized.startsWith("blob:") ||
+    normalized.startsWith("http://") ||
+    normalized.startsWith("https://")
+  ) {
+    return normalized;
+  }
+
+  if (typeof window === "undefined") {
+    return normalized;
+  }
+
+  try {
+    return new URL(normalized, window.location.href).toString();
+  } catch {
+    return normalized;
+  }
+}
+
+function renderImageToken(token: Tokens.Image): ContentImage | ContentText {
+  const imageSource = resolveImageSource(token.href ?? "");
+  if (!imageSource) {
+    return {
+      text: `[Imagen: ${token.text || token.href}]`,
+      italics: true,
+      color: "#5c6f86",
+      margin: [0, 0, 0, 10]
+    };
+  }
+
+  return {
+    image: imageSource,
+    width: PRINT_IMAGE_WIDTH,
+    alignment: "center",
+    margin: [0, 8, 0, 12]
+  };
+}
+
+function isPdfContentNode(value: unknown): value is PdfContentNode {
+  return Boolean(value) && typeof value === "object";
+}
+
+function shouldInlineImageSource(source: string) {
+  return Boolean(source) && !source.startsWith("data:");
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("No se pudo leer la imagen descargada."));
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === "string") {
+        resolve(result);
+        return;
+      }
+      reject(new Error("No se pudo convertir la imagen a data URL."));
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
+function buildImageFetchCandidates(source: string) {
+  const candidates = new Set<string>();
+  candidates.add(source);
+
+  if (typeof window === "undefined") {
+    return Array.from(candidates);
+  }
+
+  try {
+    const resolvedUrl = new URL(source, window.location.href);
+
+    if (resolvedUrl.pathname.startsWith("/media/")) {
+      candidates.add(`${window.location.origin}/@fs${DEV_MEDIA_ROOT}${resolvedUrl.pathname}`);
+    }
+  } catch {
+    return Array.from(candidates);
+  }
+
+  return Array.from(candidates);
+}
+
+async function inlineImageSource(source: string, cache: Map<string, Promise<string>>) {
+  if (!shouldInlineImageSource(source)) {
+    return source;
+  }
+
+  const cached = cache.get(source);
+  if (cached) {
+    return cached;
+  }
+
+  const pending = (async () => {
+    const candidates = buildImageFetchCandidates(source);
+    let lastError: Error | null = null;
+
+    for (const candidate of candidates) {
+      try {
+        const response = await fetch(candidate, {
+          credentials: "omit"
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        if (!blob.type.startsWith("image/")) {
+          throw new Error("respuesta no es imagen");
+        }
+
+        return blobToDataUrl(blob);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+
+    throw new Error(`No se pudo descargar la imagen ${source}. ${lastError?.message ?? ""}`.trim());
+  })();
+
+  cache.set(source, pending);
+  return pending;
+}
+
+async function inlineDocumentImages(node: unknown, cache: Map<string, Promise<string>>): Promise<void> {
+  if (Array.isArray(node)) {
+    for (const entry of node) {
+      await inlineDocumentImages(entry, cache);
+    }
+    return;
+  }
+
+  if (!isPdfContentNode(node)) {
+    return;
+  }
+
+  if (typeof node.image === "string" && shouldInlineImageSource(node.image)) {
+    node.image = await inlineImageSource(node.image, cache);
+  }
+
+  if (Array.isArray(node.stack)) {
+    await inlineDocumentImages(node.stack, cache);
+  }
+
+  if (Array.isArray(node.columns)) {
+    await inlineDocumentImages(node.columns, cache);
+  }
+
+  if (Array.isArray(node.ul)) {
+    await inlineDocumentImages(node.ul, cache);
+  }
+
+  if (Array.isArray(node.ol)) {
+    await inlineDocumentImages(node.ol, cache);
+  }
+
+  if (Array.isArray(node.text)) {
+    await inlineDocumentImages(node.text, cache);
+  }
+
+  if (isPdfContentNode(node.table) && Array.isArray(node.table.body)) {
+    for (const row of node.table.body) {
+      await inlineDocumentImages(row, cache);
+    }
+  }
+}
+
+function renderParagraphToken(token: Tokens.Paragraph): Content[] {
+  const inlineTokens = token.tokens ?? [];
+  const content: Content[] = [];
+  let bufferedTokens: Token[] = [];
+
+  const flushParagraph = () => {
+    if (!hasRenderableInlineTokens(bufferedTokens)) {
+      bufferedTokens = [];
+      return;
+    }
+
+    content.push({
+      text: asTextContent(bufferedTokens) as ContentText["text"],
+      margin: [0, 0, 0, 10]
+    });
+    bufferedTokens = [];
+  };
+
+  for (const inlineToken of inlineTokens) {
+    if (inlineToken.type === "image") {
+      flushParagraph();
+      content.push(renderImageToken(inlineToken as Tokens.Image));
+      continue;
+    }
+
+    bufferedTokens.push(inlineToken);
+  }
+
+  flushParagraph();
+  return content;
+}
+
+function normalizeCodeBlockLines(value: string) {
+  const normalized = (value ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\t/g, "    ");
+
+  return normalized.split("\n");
+}
+
+function renderCodeBlock(token: Tokens.Code): ContentTable {
+  const lines = highlightCodeLines(token.text, token.lang);
+  const blockStack: Content[] = [];
+
+  if (token.lang?.trim()) {
+    blockStack.push({
+      text: token.lang.trim(),
+      style: "codeBlockLabel",
+      margin: [0, 0, 0, 6]
+    });
+  }
+
+  for (const line of lines) {
+    blockStack.push({
+      text: line,
+      style: "codeBlockText",
+      preserveLeadingSpaces: true,
+      preserveTrailingSpaces: true,
+      margin: [0, 0, 0, 0]
+    });
+  }
+
+  return {
+    table: {
+      widths: ["*"],
+      body: [[{
+        stack: blockStack
+      }]]
+    },
+    layout: {
+      hLineWidth: () => 0.75,
+      vLineWidth: () => 0.75,
+      hLineColor: () => "#d9e1e8",
+      vLineColor: () => "#d9e1e8",
+      paddingTop: () => 9,
+      paddingRight: () => 12,
+      paddingBottom: () => 9,
+      paddingLeft: () => 12
+    },
+    margin: [0, 4, 0, 12]
+  };
+}
+
 function renderListItem(item: Tokens.ListItem, context: RenderContext): Content {
   const blocks = renderBlockTokens(item.tokens, context);
   if (blocks.length === 1) {
@@ -243,11 +1130,7 @@ function renderBlockTokens(tokens: Token[] | undefined, context: RenderContext):
       }
       case "paragraph": {
         const paragraphToken = token as Tokens.Paragraph;
-        const paragraphNode: ContentText = {
-          text: asTextContent(paragraphToken.tokens) as ContentText["text"],
-          margin: [0, 0, 0, 10]
-        };
-        content.push(paragraphNode);
+        content.push(...renderParagraphToken(paragraphToken));
         break;
       }
       case "text": {
@@ -288,11 +1171,7 @@ function renderBlockTokens(tokens: Token[] | undefined, context: RenderContext):
       case "code":
         {
           const codeToken = token as Tokens.Code;
-          const codeNode: ContentText = {
-            text: codeToken.lang ? `${codeToken.lang}\n${codeToken.text}` : codeToken.text,
-            style: "codeBlock",
-            margin: [0, 4, 0, 12]
-          };
+          const codeNode = renderCodeBlock(codeToken);
           content.push(codeNode);
         }
         break;
@@ -343,7 +1222,7 @@ function renderBlockTokens(tokens: Token[] | undefined, context: RenderContext):
           }
 
           const htmlNode: ContentText = {
-            text: htmlToken.text.trim(),
+            text: decodeHtmlEntities(htmlToken.text.trim()),
             margin: [0, 0, 0, 10]
           };
           content.push(htmlNode);
@@ -418,12 +1297,7 @@ export function buildProductPrintDocument(args: {
   return {
     pageSize: "A4",
     pageMargins: [48, 56, 48, 60],
-    defaultStyle: {
-      font: "Roboto",
-      fontSize: 11,
-      lineHeight: 1.35,
-      color: "#1f2d3d"
-    },
+    defaultStyle: PRINT_DOCUMENT_DEFAULT_STYLE,
     content: [
       {
         stack: [
@@ -459,72 +1333,33 @@ export function buildProductPrintDocument(args: {
       },
       ...sections
     ],
-    styles: {
-      coverTitle: {
-        fontSize: 26,
-        bold: true,
-        color: "#16395d"
-      },
-      coverDate: {
-        margin: [0, 18, 0, 0],
-        fontSize: 12,
-        color: "#4f6378"
-      },
-      tocTitle: {
-        fontSize: 20,
-        bold: true,
-        color: "#16395d"
-      },
-      tocEntry: {
-        fontSize: 11,
-        color: "#1f2d3d"
-      },
-      tocEntryNumber: {
-        fontSize: 11,
-        bold: true,
-        color: "#16395d"
-      },
-      inlineCode: {
-        fontSize: 9,
-        color: "#16395d",
-        background: "#edf4ff"
-      },
-      codeBlock: {
-        fontSize: 9,
-        color: "#13263a",
-        background: "#f4f7fb"
-      },
-      heading1: {
-        fontSize: 22,
-        bold: true,
-        color: "#16395d"
-      },
-      heading2: {
-        fontSize: 18,
-        bold: true,
-        color: "#16395d"
-      },
-      heading3: {
-        fontSize: 15,
-        bold: true,
-        color: "#204f7a"
-      },
-      heading4: {
-        fontSize: 13,
-        bold: true,
-        color: "#204f7a"
-      },
-      heading5: {
-        fontSize: 12,
-        bold: true,
-        color: "#315f88"
-      },
-      heading6: {
-        fontSize: 11,
-        bold: true,
-        color: "#315f88"
-      }
-    }
+    styles: PRINT_DOCUMENT_STYLES
+  };
+}
+
+export function buildTaskPrintDocument(args: {
+  title: string;
+  description?: string | null;
+}): TDocumentDefinitions {
+  const taskTitle = args.title.trim() || "Tarea";
+  const tokens = marked.lexer(buildSectionMarkdown({
+    id: "task:description",
+    title: taskTitle,
+    markdown: args.description?.trim() ?? "",
+    level: 1
+  }), {
+    gfm: true,
+    breaks: true
+  });
+
+  return {
+    pageSize: "A4",
+    pageMargins: [48, 56, 48, 60],
+    defaultStyle: PRINT_DOCUMENT_DEFAULT_STYLE,
+    content: renderBlockTokens(tokens, {
+      pendingTocItem: false
+    }),
+    styles: PRINT_DOCUMENT_STYLES
   };
 }
 
@@ -534,6 +1369,7 @@ export async function printProductDocument(args: {
 }) {
   const pdfMake = await loadPdfMake();
   const document = buildProductPrintDocument(args);
+  await inlineDocumentImages(document.content, new Map());
   await pdfMake.createPdf(document).print();
 }
 
@@ -543,6 +1379,18 @@ export async function downloadProductDocument(args: {
 }) {
   const pdfMake = await loadPdfMake();
   const document = buildProductPrintDocument(args);
+  await inlineDocumentImages(document.content, new Map());
   const fileName = `${slugify(args.productName)}-documento.pdf`;
+  await pdfMake.createPdf(document).download(fileName);
+}
+
+export async function downloadTaskDocument(args: {
+  title: string;
+  description?: string | null;
+}) {
+  const pdfMake = await loadPdfMake();
+  const document = buildTaskPrintDocument(args);
+  await inlineDocumentImages(document.content, new Map());
+  const fileName = `${slugify(args.title.trim() || "tarea")}-tarea.pdf`;
   await pdfMake.createPdf(document).download(fileName);
 }

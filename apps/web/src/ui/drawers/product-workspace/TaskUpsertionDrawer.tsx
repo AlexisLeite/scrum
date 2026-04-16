@@ -1,4 +1,5 @@
 import React from "react";
+import { FiPrinter } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import { DraftDto } from "@scrum/contracts";
 import { ProductController } from "../../../controllers";
@@ -6,6 +7,7 @@ import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productTaskDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { filterAssignableUsersBySprintScope } from "../../../lib/assignable-users";
+import { downloadTaskDocument } from "../../../util/product-print-pdf";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
@@ -254,6 +256,8 @@ export function TaskUpsertionForm(props: {
   const customHoursInputRef = React.useRef<HTMLInputElement | null>(null);
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const [printing, setPrinting] = React.useState(false);
+  const [printError, setPrintError] = React.useState("");
   const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false);
   const [storyOptions, setStoryOptions] = React.useState(stories);
   const initialStatus = task?.status ?? defaultStatus ?? statusOptions[0] ?? "Todo";
@@ -528,12 +532,35 @@ export function TaskUpsertionForm(props: {
     ]
   );
   const hasUnsavedChanges = !readOnly && !isHydratingRemote && !taskCloseSnapshotsEqual(currentCloseSnapshot, closeBaseline);
+  const canPrintTask = !saving && !isHydratingRemote && !printing && Boolean(title.trim());
 
   useDrawerCloseGuard({
     controller: drawerController,
     drawerId,
     when: hasUnsavedChanges
   });
+
+  const handlePrint = async () => {
+    const taskTitle = title.trim();
+    if (!taskTitle) {
+      setPrintError("El titulo es obligatorio para descargar el PDF.");
+      return;
+    }
+
+    setPrintError("");
+    setPrinting(true);
+
+    try {
+      await downloadTaskDocument({
+        title: taskTitle,
+        description
+      });
+    } catch (downloadError) {
+      setPrintError(downloadError instanceof Error ? downloadError.message : "No se pudo descargar el PDF de la tarea.");
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   return (
     <>
@@ -751,6 +778,18 @@ export function TaskUpsertionForm(props: {
               {task ? "Guardar tarea" : "Crear tarea"}
             </button>
           ) : null}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => {
+              void handlePrint();
+            }}
+            disabled={!canPrintTask}
+            aria-busy={printing}
+          >
+            <FiPrinter aria-hidden="true" />
+            {printing ? "Descargando..." : "Imprimir"}
+          </button>
           {task && definitionHref ? (
             <button
               type="button"
@@ -782,7 +821,7 @@ export function TaskUpsertionForm(props: {
             {readOnly ? "Cerrar" : closeLabel}
           </button>
         </div>
-        <DrawerErrorBanner messages={[saveError, error]} />
+        <DrawerErrorBanner messages={[saveError, error, printError]} />
         {task ? (
           <ActivityTimeline
             controller={controller}
