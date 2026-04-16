@@ -65,38 +65,38 @@
   line-height: 1.2;
 }
 
-.rich-description-content > :is(h1, h2, h3, h4, h5, h6):first-child {
+.rich-description-content> :is(h1, h2, h3, h4, h5, h6):first-child {
   margin-top: 0;
 }
 
 .rich-description-content h1 {
   font-size: var(--rich-heading-1-size);
-  margin: 2rem 0 1rem;
+  margin: 3.8rem 0 1.9rem;
 }
 
 .rich-description-content h2 {
   font-size: var(--rich-heading-2-size);
-  margin: 1.75rem 0 0.95rem;
+  margin: 3.3rem 0 1.7rem;
 }
 
 .rich-description-content h3 {
   font-size: var(--rich-heading-3-size);
-  margin: 1.5rem 0 0.85rem;
+  margin: 2.9rem 0 1.5rem;
 }
 
 .rich-description-content h4 {
   font-size: var(--rich-heading-4-size);
-  margin: 1.35rem 0 0.75rem;
+  margin: 2.5rem 0 1.3rem;
 }
 
 .rich-description-content h5 {
   font-size: var(--rich-heading-5-size);
-  margin: 1.2rem 0 0.65rem;
+  margin: 2.2rem 0 1.15rem;
 }
 
 .rich-description-content h6 {
   font-size: var(--rich-heading-6-size);
-  margin: 1rem 0 0.55rem;
+  margin: 1.9rem 0 1.05rem;
 }
 
 .rich-description-content img {
