@@ -65,28 +65,38 @@
   line-height: 1.2;
 }
 
+.rich-description-content > :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+
 .rich-description-content h1 {
   font-size: var(--rich-heading-1-size);
+  margin: 2rem 0 1rem;
 }
 
 .rich-description-content h2 {
   font-size: var(--rich-heading-2-size);
+  margin: 1.75rem 0 0.95rem;
 }
 
 .rich-description-content h3 {
   font-size: var(--rich-heading-3-size);
+  margin: 1.5rem 0 0.85rem;
 }
 
 .rich-description-content h4 {
   font-size: var(--rich-heading-4-size);
+  margin: 1.35rem 0 0.75rem;
 }
 
 .rich-description-content h5 {
   font-size: var(--rich-heading-5-size);
+  margin: 1.2rem 0 0.65rem;
 }
 
 .rich-description-content h6 {
   font-size: var(--rich-heading-6-size);
+  margin: 1rem 0 0.55rem;
 }
 
 .rich-description-content img {
