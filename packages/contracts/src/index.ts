@@ -573,7 +573,7 @@ export interface StoryDto {
   title: string;
   description: string | null;
   storyPoints: number;
-  status: "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
+  status: "DRAFT" | "READY" | "IN_SPRINT" | "DONE" | "CLOSED";
   backlogRank: number;
   createdAt: string;
   updatedAt: string;

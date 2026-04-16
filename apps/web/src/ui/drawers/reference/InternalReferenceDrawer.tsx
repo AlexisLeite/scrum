@@ -8,6 +8,7 @@ import { Drawer, DrawerRenderContext } from "../Drawer";
 import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { ActivityTimeline } from "../product-workspace/ActivityTimeline";
 import { MarkdownPreview } from "../product-workspace/MarkdownPreview";
+import { getStoryStatusLabel } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 
 type ProductItem = {
   id: string;
@@ -219,7 +220,7 @@ function StoryReferenceCard(props: { controller: ProductController; story: Story
             <h4>{story.title}</h4>
             <div className="row-actions compact">
               <span className="pill">SP {story.storyPoints}</span>
-              <span className={`status status-${story.status.toLowerCase()}`}>{story.status}</span>
+              <span className={`status status-${story.status.toLowerCase()}`}>{getStoryStatusLabel(story.status)}</span>
             </div>
           </div>
         </div>

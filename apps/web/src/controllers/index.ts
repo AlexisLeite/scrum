@@ -323,6 +323,14 @@ export class ProductController {
     return story;
   }
 
+  async closeStory(storyId: string) {
+    return apiClient.post<any>(`/stories/${storyId}/close`);
+  }
+
+  async reopenStory(storyId: string) {
+    return apiClient.post<any>(`/stories/${storyId}/reopen`);
+  }
+
   async rankStory(storyId: string, backlogRank: number) {
     const story = await apiClient.post<any>(`/stories/${storyId}/rank`, { backlogRank });
     this.store.stories.upsert(story);

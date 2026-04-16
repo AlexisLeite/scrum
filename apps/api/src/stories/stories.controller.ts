@@ -24,6 +24,16 @@ export class StoriesController {
     return this.storiesService.update(id, dto, user);
   }
 
+  @Post("stories/:id/close")
+  close(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.storiesService.close(id, user);
+  }
+
+  @Post("stories/:id/reopen")
+  reopen(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.storiesService.reopen(id, user);
+  }
+
   @Delete("stories/:id")
   remove(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.storiesService.remove(id, user);

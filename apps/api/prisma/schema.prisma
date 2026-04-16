@@ -436,6 +436,7 @@ enum StoryStatus {
   READY
   IN_SPRINT
   DONE
+  CLOSED
 }
 
 enum SprintStatus {

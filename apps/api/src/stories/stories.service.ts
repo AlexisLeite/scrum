@@ -129,8 +129,8 @@ export class StoriesService {
       "Insufficient product permission"
     );
 
-    if (dto.status === StoryStatus.IN_SPRINT || dto.status === StoryStatus.DONE) {
-      throw new BadRequestException("Story status IN_SPRINT/DONE is derived from tasks");
+    if (dto.status === StoryStatus.IN_SPRINT || dto.status === StoryStatus.DONE || dto.status === StoryStatus.CLOSED) {
+      throw new BadRequestException("Story status IN_SPRINT/DONE/CLOSED cannot be set during creation");
     }
 
     const maxRank = await this.prisma.userStory.aggregate({
@@ -176,8 +176,8 @@ export class StoriesService {
       "Insufficient product permission"
     );
 
-    if (dto.status === StoryStatus.IN_SPRINT || dto.status === StoryStatus.DONE) {
-      throw new BadRequestException("Story status IN_SPRINT/DONE is derived from tasks");
+    if (dto.status === StoryStatus.IN_SPRINT || dto.status === StoryStatus.DONE || dto.status === StoryStatus.CLOSED) {
+      throw new BadRequestException("Story status IN_SPRINT/DONE/CLOSED cannot be set from the generic update endpoint");
     }
 
     const updated = await this.prisma.userStory.update({
@@ -202,6 +202,50 @@ export class StoriesService {
       afterJson: updated
     });
     return updated;
+  }
+
+  async close(id: string, user: AuthUser) {
+    const existing = await this.prisma.userStory.findUnique({ where: { id } });
+    if (!existing) {
+      throw new BadRequestException("Story not found");
+    }
+    this.permissionsService.assertProductPermission(
+      user,
+      existing.productId,
+      "product.admin.story.update",
+      "Insufficient product permission"
+    );
+
+    if (existing.status === StoryStatus.CLOSED) {
+      return existing;
+    }
+
+    const { openTaskCount } = await this.getStoryTaskSummary(id);
+    if (openTaskCount > 0) {
+      throw new BadRequestException("Story can only be closed when all tasks are terminal");
+    }
+
+    return this.persistStoryUpdate(existing, { status: StoryStatus.CLOSED }, user);
+  }
+
+  async reopen(id: string, user: AuthUser) {
+    const existing = await this.prisma.userStory.findUnique({ where: { id } });
+    if (!existing) {
+      throw new BadRequestException("Story not found");
+    }
+    this.permissionsService.assertProductPermission(
+      user,
+      existing.productId,
+      "product.admin.story.update",
+      "Insufficient product permission"
+    );
+
+    if (existing.status !== StoryStatus.CLOSED) {
+      return existing;
+    }
+
+    const nextStatus = await this.resolveReopenedStatus(id);
+    return this.persistStoryUpdate(existing, { status: nextStatus }, user);
   }
 
   async remove(id: string, user: AuthUser) {
@@ -261,21 +305,88 @@ export class StoriesService {
     return updated;
   }
 
+  private async getStoryTaskSummary(storyId: string) {
+    const [taskCount, terminalTaskCount, inSprintCount] = await Promise.all([
+      this.prisma.task.count({ where: { storyId } }),
+      this.prisma.task.count({ where: { storyId, status: { in: [...COMPLETED_TASK_STATUSES] } } }),
+      this.prisma.task.count({ where: { storyId, sprintId: { not: null } } })
+    ]);
+
+    return {
+      taskCount,
+      terminalTaskCount,
+      inSprintCount,
+      openTaskCount: Math.max(taskCount - terminalTaskCount, 0)
+    };
+  }
+
+  private async resolveReopenedStatus(storyId: string) {
+    const { taskCount, terminalTaskCount, inSprintCount } = await this.getStoryTaskSummary(storyId);
+
+    if (taskCount > 0 && terminalTaskCount === taskCount) {
+      return StoryStatus.DONE;
+    }
+    if (inSprintCount > 0) {
+      return StoryStatus.IN_SPRINT;
+    }
+    return StoryStatus.READY;
+  }
+
+  private async persistStoryUpdate(
+    existing: {
+      id: string;
+      productId: string;
+      title: string;
+      description: string | null;
+      storyPoints: number;
+      status: StoryStatus;
+      backlogRank: number;
+    },
+    data: {
+      title?: string;
+      description?: string | null;
+      storyPoints?: number;
+      status?: StoryStatus;
+      backlogRank?: number;
+    },
+    user: AuthUser
+  ) {
+    const updated = await this.prisma.userStory.update({
+      where: { id: existing.id },
+      data
+    });
+    await this.activityService.record({
+      actorUserId: user.sub,
+      productId: existing.productId,
+      entityType: ActivityEntityType.STORY,
+      entityId: updated.id,
+      action: "STORY_UPDATED",
+      metadataJson: {
+        changedFields: this.getStoryChangedFields(existing, updated)
+      },
+      beforeJson: existing,
+      afterJson: updated
+    });
+    return updated;
+  }
+
   private getStoryChangedFields(
     before: {
       title: string;
       description: string | null;
       storyPoints: number;
       status: StoryStatus;
+      backlogRank?: number;
     },
     after: {
       title: string;
       description: string | null;
       storyPoints: number;
       status: StoryStatus;
+      backlogRank?: number;
     }
   ): string[] {
-    const keys: Array<keyof typeof before> = ["title", "description", "storyPoints", "status"];
+    const keys: Array<keyof typeof before> = ["title", "description", "storyPoints", "status", "backlogRank"];
     return keys.filter((key) => before[key] !== after[key]);
   }
 }

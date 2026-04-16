@@ -30,7 +30,7 @@ import { TaskMessageThread, type TaskMessageNode } from "../../ui/drawers/produc
 import { TaskUpsertionDrawer, TaskUpsertionForm } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { RichDescriptionField } from "../../ui/drawers/product-workspace/RichDescriptionField";
 import { canCommentOnVisibleTask, canCreateTaskFromMessage, canEditTaskFields } from "../../lib/permissions";
-import { buildStatusOptions, DEFAULT_TASK_STATUS_OPTIONS, getErrorMessage, isTaskTerminalStatus } from "./ProductWorkspaceViewShared";
+import { buildStatusOptions, DEFAULT_TASK_STATUS_OPTIONS, getErrorMessage, getStoryStatusLabel, isTaskTerminalStatus } from "./ProductWorkspaceViewShared";
 
 type ProductItem = {
   id: string;
@@ -44,7 +44,7 @@ type StoryItem = {
   title: string;
   description: string | null;
   storyPoints: number;
-  status: "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
+  status: "DRAFT" | "READY" | "IN_SPRINT" | "DONE" | "CLOSED";
 };
 
 type SprintItem = {
@@ -305,7 +305,7 @@ export const StoryDefinitionView = observer(function StoryDefinitionView() {
         context={
           <>
             <span className="muted">SP {story.storyPoints}</span>
-            <span className={taskStatusClass(story.status)}>{story.status}</span>
+            <span className={taskStatusClass(story.status)}>{getStoryStatusLabel(story.status)}</span>
           </>
         }
       />

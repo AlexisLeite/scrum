@@ -1,0 +1,1 @@
+ALTER TYPE "public"."StoryStatus" ADD VALUE IF NOT EXISTS 'CLOSED';

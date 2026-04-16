@@ -2384,6 +2384,7 @@ a.btn-secondary,
 
 .status-completed,
 .status-done,
+.status-closed,
 .status-platform-admin {
   color: var(--ok-text);
   border-color: var(--ok-border);

@@ -19,7 +19,9 @@ import {
   buildStatusOptions,
   getErrorMessage,
   getStoryTaskCounts,
+  isStoryClosedStatus,
   isTaskClosedStatus,
+  isTaskTerminalStatus,
   matchesStorySearch,
   normalizeSearchValue,
   SprintItem,
@@ -37,6 +39,7 @@ type BacklogTaskFilterOption = {
 };
 
 type StoryWithSearchState = StoryItem & {
+  canCloseStory: boolean;
   matchesSearch: boolean;
 };
 
@@ -132,12 +135,14 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const [openingTaskId, setOpeningTaskId] = React.useState("");
   const [actionError, setActionError] = React.useState("");
   const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [showClosedStories, setShowClosedStories] = React.useState(false);
   const [showClosedTasks, setShowClosedTasks] = React.useState(false);
   const [taskAssigneeFilter, setTaskAssigneeFilter] = React.useState("");
   const [taskCreatorFilter, setTaskCreatorFilter] = React.useState("");
   const [taskStatusFilter, setTaskStatusFilter] = React.useState("");
   const [taskCreatedFrom, setTaskCreatedFrom] = React.useState("");
   const [taskCreatedTo, setTaskCreatedTo] = React.useState("");
+  const [storyStatusActionId, setStoryStatusActionId] = React.useState("");
   const productScopeKey = productId ? productCollectionScope(productId) : null;
 
   React.useEffect(() => {
@@ -202,6 +207,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   }, [stories]);
 
   const hasActiveFilters =
+    showClosedStories ||
     showClosedTasks ||
     taskAssigneeFilter !== "" ||
     taskCreatorFilter !== "" ||
@@ -211,7 +217,9 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
 
   const visibleStories = React.useMemo<StoryWithSearchState[]>(() => {
     return stories
+      .filter((story) => showClosedStories || !isStoryClosedStatus(story.status))
       .map((story) => {
+        const canCloseStory = (story.tasks ?? []).every((task) => isTaskTerminalStatus(task.status));
         const filteredTasks = (story.tasks ?? []).filter((task) => {
           if (!showClosedTasks && isTaskClosedStatus(task.status)) {
             return false;
@@ -249,6 +257,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
 
         return {
           ...story,
+          canCloseStory,
           tasks: normalizedSearch ? searchedTasks : filteredTasks,
           matchesSearch
         };
@@ -256,6 +265,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
       .filter((story) => (normalizedSearch ? story.matchesSearch : true));
   }, [
     normalizedSearch,
+    showClosedStories,
     showClosedTasks,
     stories,
     taskAssigneeFilter,
@@ -265,7 +275,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
     taskStatusFilter
   ]);
   const filteredStories = React.useMemo(
-    () => sortStories(visibleStories.map(({ matchesSearch, ...story }) => story), sortBy),
+    () => sortStories(visibleStories.map(({ matchesSearch, ...story }) => story), sortBy) as StoryWithSearchState[],
     [sortBy, visibleStories]
   );
   const shouldAutoExpandStories = Boolean(normalizedSearch || hasActiveFilters);
@@ -384,12 +394,36 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   };
 
   const clearFilters = () => {
+    setShowClosedStories(false);
     setShowClosedTasks(false);
     setTaskAssigneeFilter("");
     setTaskCreatorFilter("");
     setTaskStatusFilter("");
     setTaskCreatedFrom("");
     setTaskCreatedTo("");
+  };
+
+  const updateStoryArchiveState = async (story: StoryItem, action: "close" | "reopen") => {
+    setActionError("");
+    setStoryStatusActionId(story.id);
+    try {
+      if (action === "close") {
+        const sourceStory = stories.find((entry) => entry.id === story.id) ?? story;
+        const hasOpenTasks = (sourceStory.tasks ?? []).some((task) => !isTaskTerminalStatus(task.status));
+        if (hasOpenTasks) {
+          setActionError(`La historia "${story.title}" aun tiene tareas abiertas.`);
+          return;
+        }
+        await controller.closeStory(story.id);
+      } else {
+        await controller.reopenStory(story.id);
+      }
+      await reloadBacklog();
+    } catch (error) {
+      setActionError(getErrorMessage(error));
+    } finally {
+      setStoryStatusActionId("");
+    }
   };
 
   return (
@@ -510,6 +544,14 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
                   <label className="story-list-filter-option" style={backlogFilterCheckboxStyle}>
                     <input
                       type="checkbox"
+                      checked={showClosedStories}
+                      onChange={(event) => setShowClosedStories(event.target.checked)}
+                    />
+                    Mostrar historias cerradas
+                  </label>
+                  <label className="story-list-filter-option" style={backlogFilterCheckboxStyle}>
+                    <input
+                      type="checkbox"
                       checked={showClosedTasks}
                       onChange={(event) => setShowClosedTasks(event.target.checked)}
                     />
@@ -539,15 +581,23 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
               canManageTasks={canManageTasks}
               openingTaskId={openingTaskId}
               expandedTaskIds={expandedTaskIds}
+              canCloseStory={story.canCloseStory}
               onToggleStory={toggleStory}
               onEditStory={openStoryDrawer}
               onCreateTask={(entry) => {
                 void openNewTaskDrawer(entry);
               }}
+              onCloseStory={(entry) => {
+                void updateStoryArchiveState(entry, "close");
+              }}
+              onReopenStory={(entry) => {
+                void updateStoryArchiveState(entry, "reopen");
+              }}
               onOpenTask={(taskId) => {
                 void openTaskDrawer(taskId);
               }}
               onToggleTask={toggleTask}
+              statusActionPending={storyStatusActionId === story.id}
             />
           ))}
           {stories.length === 0 ? <p className="muted">No hay historias. Crea la primera historia para iniciar el backlog.</p> : null}

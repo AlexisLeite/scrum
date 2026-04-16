@@ -1,6 +1,6 @@
 import { ProductAssignableUserDto, ProductPrintLayoutDto } from "@scrum/contracts";
 
-export type StoryStatus = "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
+export type StoryStatus = "DRAFT" | "READY" | "IN_SPRINT" | "DONE" | "CLOSED";
 export type SprintStatus = "PLANNED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
 
 export type ProductItem = {
@@ -128,6 +128,14 @@ export function isTaskClosedStatus(status: string | null | undefined): boolean {
 
 export function isTaskTerminalStatus(status: string | null | undefined): boolean {
   return isTaskDoneStatus(status) || isTaskClosedStatus(status);
+}
+
+export function isStoryClosedStatus(status: StoryStatus | string | null | undefined): boolean {
+  return (status ?? "").trim() === "CLOSED";
+}
+
+export function getStoryStatusLabel(status: StoryStatus | string | null | undefined): string {
+  return isStoryClosedStatus(status) ? "Cerrada" : (status ?? "").trim();
 }
 
 export type StorySortOption = "title-asc" | "title-desc" | "created-desc" | "created-asc";

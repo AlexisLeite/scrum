@@ -904,7 +904,9 @@ export class TasksService {
 
     let nextStatus = story.status;
 
-    if (taskCount > 0 && doneCount === taskCount) {
+    if (story.status === StoryStatus.CLOSED && doneCount === taskCount) {
+      nextStatus = StoryStatus.CLOSED;
+    } else if (taskCount > 0 && doneCount === taskCount) {
       nextStatus = StoryStatus.DONE;
     } else if (inSprintCount > 0) {
       nextStatus = StoryStatus.IN_SPRINT;

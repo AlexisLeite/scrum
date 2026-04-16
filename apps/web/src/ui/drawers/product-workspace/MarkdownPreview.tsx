@@ -282,7 +282,7 @@ async function openInternalReference(
         title: string;
         description: string | null;
         storyPoints: number;
-        status: "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
+        status: "DRAFT" | "READY" | "IN_SPRINT" | "DONE" | "CLOSED";
       }>).find((entry) => entry.id === reference.entityId);
 
       if (story) {

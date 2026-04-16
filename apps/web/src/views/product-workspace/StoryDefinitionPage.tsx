@@ -5,13 +5,14 @@ import { ProductController } from "../../controllers";
 import { productBacklogPath } from "../../routes/product-routes";
 import { productCollectionScope, useRootStore } from "../../stores/root-store";
 import { StoryUpsertionForm } from "../../ui/drawers/product-workspace/StoryUpsertionDrawer";
+import { getStoryStatusLabel } from "./ProductWorkspaceViewShared";
 
 type StoryItem = {
   id: string;
   title: string;
   description: string | null;
   storyPoints: number;
-  status: "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
+  status: "DRAFT" | "READY" | "IN_SPRINT" | "DONE" | "CLOSED";
 };
 
 export const StoryDefinitionPage = observer(function StoryDefinitionPage() {
@@ -87,7 +88,7 @@ export const StoryDefinitionPage = observer(function StoryDefinitionPage() {
         </div>
         <div className="row-actions compact">
           <span className="pill">SP {story.storyPoints}</span>
-          <span className={`status status-${story.status.toLowerCase().replace(/_/g, "-")}`}>{story.status}</span>
+          <span className={`status status-${story.status.toLowerCase().replace(/_/g, "-")}`}>{getStoryStatusLabel(story.status)}</span>
           <NavLink className="btn btn-secondary" to={productBacklogPath(productId)}>
             Volver al backlog
           </NavLink>

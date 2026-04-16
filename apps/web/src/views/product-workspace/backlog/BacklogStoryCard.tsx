@@ -2,7 +2,7 @@ import React from "react";
 import { FiChevronRight, FiEdit3, FiPlus } from "react-icons/fi";
 import { StoryInfoPopover } from "./StoryInfoPopover";
 import { BacklogTaskItem } from "./BacklogTaskItem";
-import { StoryItem, sortStoryTasks } from "../ProductWorkspaceViewShared";
+import { getStoryStatusLabel, isStoryClosedStatus, StoryItem, sortStoryTasks } from "../ProductWorkspaceViewShared";
 
 type BacklogStoryCardProps = {
   story: StoryItem;
@@ -11,11 +11,15 @@ type BacklogStoryCardProps = {
   canManageTasks: boolean;
   openingTaskId: string;
   expandedTaskIds: Record<string, boolean>;
+  canCloseStory: boolean;
   onToggleStory: (storyId: string) => void;
   onEditStory: (story: StoryItem) => void;
   onCreateTask: (story: StoryItem) => void;
+  onCloseStory: (story: StoryItem) => void;
+  onReopenStory: (story: StoryItem) => void;
   onOpenTask: (taskId: string) => void;
   onToggleTask: (taskId: string) => void;
+  statusActionPending: boolean;
 };
 
 export function BacklogStoryCard(props: BacklogStoryCardProps) {
@@ -26,16 +30,22 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
     canManageTasks,
     openingTaskId,
     expandedTaskIds,
+    canCloseStory,
     onToggleStory,
     onEditStory,
     onCreateTask,
+    onCloseStory,
+    onReopenStory,
     onOpenTask,
-    onToggleTask
+    onToggleTask,
+    statusActionPending
   } = props;
   const panelId = React.useId();
   const orderedTasks = React.useMemo(() => sortStoryTasks(story.tasks ?? []), [story.tasks]);
   const taskCount = orderedTasks.length;
   const storyStatusClass = `status status-${story.status.toLowerCase().replace(/\s+/g, "-").replace(/_/g, "-")}`;
+  const canReopenStory = isStoryClosedStatus(story.status);
+  const showCloseStoryAction = canCloseStory && !canReopenStory;
 
   return (
     <article className="story-card">
@@ -44,7 +54,7 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
           <span className="story-card-title-copy">
             <span className="story-card-title-topline">
               <span className="story-card-title-badge">Historia</span>
-              <span className={storyStatusClass}>{story.status}</span>
+              <span className={storyStatusClass}>{getStoryStatusLabel(story.status)}</span>
             </span>
             <span className="story-card-title-text">{story.title}</span>
             <span className="story-card-title-subcopy">
@@ -54,6 +64,26 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
         </button>
         <div className="story-card-actions">
           <StoryInfoPopover story={story} />
+          {canReopenStory ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => onReopenStory(story)}
+              disabled={!canManageStories || statusActionPending}
+            >
+              {statusActionPending ? "Reabriendo..." : "Reabrir"}
+            </button>
+          ) : null}
+          {showCloseStoryAction ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => onCloseStory(story)}
+              disabled={!canManageStories || statusActionPending}
+            >
+              {statusActionPending ? "Cerrando..." : "Cerrar"}
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn btn-secondary btn-icon story-list-icon-button story-card-edit-button"

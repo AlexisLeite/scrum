@@ -14,14 +14,14 @@ import { ActivityTimeline } from "./ActivityTimeline";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { RichDescriptionField } from "./RichDescriptionField";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
-import { buildStatusOptions } from "../../../views/product-workspace/ProductWorkspaceViewShared";
+import { buildStatusOptions, getStoryStatusLabel } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 
 type EditableStory = {
   id: string;
   title: string;
   description: string | null;
   storyPoints: number;
-  status: "DRAFT" | "READY" | "IN_SPRINT" | "DONE";
+  status: "DRAFT" | "READY" | "IN_SPRINT" | "DONE" | "CLOSED";
 };
 
 type StoryUpsertionDrawerOptions = {
@@ -33,6 +33,10 @@ type StoryUpsertionDrawerOptions = {
 };
 
 const manualStoryStatuses: Array<"DRAFT" | "READY"> = ["DRAFT", "READY"];
+
+function isManualStoryStatus(status: EditableStory["status"] | null | undefined): status is "DRAFT" | "READY" {
+  return status === "DRAFT" || status === "READY";
+}
 
 type StoryTask = {
   id: string;
@@ -131,6 +135,7 @@ export function StoryUpsertionForm(props: {
   const storyPoints = typeof form.storyPoints === "string" ? form.storyPoints : "3";
   const status = form.status === "READY" ? "READY" : "DRAFT";
   const formDisabled = saving || isHydratingRemote;
+  const editableManualStatus = !story || isManualStoryStatus(story.status);
   const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
     title: story?.title ?? "",
     description: story?.description ?? "",
@@ -219,16 +224,19 @@ export function StoryUpsertionForm(props: {
     setError("");
     setSaving(true);
     try {
-      const payload = {
-        title: title.trim(),
-        description: description.trim(),
-        storyPoints: Number(storyPoints),
-        status
-      };
-
       const savedStory = story
-        ? await controller.updateStory(story.id, payload)
-        : await controller.createStory(productId, payload);
+        ? await controller.updateStory(story.id, {
+            title: title.trim(),
+            description: description.trim(),
+            storyPoints: Number(storyPoints),
+            ...(editableManualStatus ? { status } : {})
+          })
+        : await controller.createStory(productId, {
+            title: title.trim(),
+            description: description.trim(),
+            storyPoints: Number(storyPoints),
+            status
+          });
 
       setCloseBaseline(currentCloseSnapshot);
       await clearDraft();
@@ -389,16 +397,30 @@ export function StoryUpsertionForm(props: {
         </label>
       </div>
 
-      <label>
-        Estado manual
-        <SearchableSelect
-          value={status}
-          onChange={(value) => setForm((current) => ({ ...current, status: value as "DRAFT" | "READY" }))}
-          options={buildSearchableSelectOptions([...manualStoryStatuses])}
-          disabled={formDisabled}
-          ariaLabel="Estado manual"
-        />
-      </label>
+      {editableManualStatus ? (
+        <label>
+          Estado manual
+          <SearchableSelect
+            value={status}
+            onChange={(value) => setForm((current) => ({ ...current, status: value as "DRAFT" | "READY" }))}
+            options={buildSearchableSelectOptions([...manualStoryStatuses])}
+            disabled={formDisabled}
+            ariaLabel="Estado manual"
+          />
+        </label>
+      ) : (
+        <label>
+          Estado actual
+          <div className="row-actions compact">
+            <span className={statusClass(story?.status ?? "DRAFT")}>{getStoryStatusLabel(story?.status ?? "DRAFT")}</span>
+          </div>
+          <p className="muted">
+            {story?.status === "CLOSED"
+              ? "Esta historia esta cerrada y se reabre desde el backlog."
+              : "Este estado se deriva automaticamente de las tareas asociadas."}
+          </p>
+        </label>
+      )}
 
       <RichDescriptionField
         label="Descripcion"
