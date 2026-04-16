@@ -51,6 +51,42 @@
   box-sizing: border-box;
   resize: none;
   overflow-y: hidden;
+  --rich-heading-1-size: 2.0625rem;
+  --rich-heading-2-size: 1.84375rem;
+  --rich-heading-3-size: 1.625rem;
+  --rich-heading-4-size: 1.40625rem;
+  --rich-heading-5-size: 1.1875rem;
+  --rich-heading-6-size: 1rem;
+}
+
+.rich-description-content :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--text-main);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.rich-description-content h1 {
+  font-size: var(--rich-heading-1-size);
+}
+
+.rich-description-content h2 {
+  font-size: var(--rich-heading-2-size);
+}
+
+.rich-description-content h3 {
+  font-size: var(--rich-heading-3-size);
+}
+
+.rich-description-content h4 {
+  font-size: var(--rich-heading-4-size);
+}
+
+.rich-description-content h5 {
+  font-size: var(--rich-heading-5-size);
+}
+
+.rich-description-content h6 {
+  font-size: var(--rich-heading-6-size);
 }
 
 .rich-description-content img {
