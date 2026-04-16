@@ -16,7 +16,7 @@ import {
   SYSTEM_PERMISSION_KEYS,
   UserProductRoleAssignmentDto
 } from "@scrum/contracts";
-import { Prisma, Role as PrismaRole, RoleDefinitionScope } from "@prisma/client";
+import { Role as PrismaRole, RoleDefinitionScope } from "@prisma/client";
 import type { AuthUser } from "../common/current-user.decorator";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -372,23 +372,6 @@ export class PermissionsService implements OnModuleInit {
       const foundKeys = new Set(roleDefinitions.map((role) => role.key));
       const missing = roleKeys.filter((roleKey) => !foundKeys.has(roleKey));
       throw new BadRequestException(`Invalid roleKeys: ${missing.join(", ")}`);
-    }
-
-    const productById = new Map(products.map((product) => [product.id, product]));
-    const roleScopeByKey = new Map(roleDefinitions.map((role) => [role.key, role.scope]));
-
-    for (const assignment of nextAssignments) {
-      const product = productById.get(assignment.productId);
-      if (!product) {
-        continue;
-      }
-      const expectedScope = product.isSystem ? RoleDefinitionScope.SYSTEM : RoleDefinitionScope.PRODUCT;
-      const invalidRoleKeys = assignment.roleKeys.filter((roleKey) => roleScopeByKey.get(roleKey) !== expectedScope);
-      if (invalidRoleKeys.length > 0) {
-        throw new BadRequestException(
-          `Roles incompatibles con ${product.isSystem ? "SYSTEM" : `producto ${product.key}`}: ${invalidRoleKeys.join(", ")}`
-        );
-      }
     }
 
     const existing = await this.prisma.productMember.findMany({
