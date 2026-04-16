@@ -3,19 +3,17 @@ import ReactECharts from "echarts-for-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { FiInfo, FiMenu, FiTrash2 } from "react-icons/fi";
+import { FiMenu, FiTrash2 } from "react-icons/fi";
 import { observer } from "mobx-react-lite";
-import { createPortal } from "react-dom";
 import { NavLink, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { apiClient } from "../../api/client";
 import { ProductController } from "../../controllers";
-import { TaskSearchPicker } from "../../components/TaskSearchPicker";
+import { TaskInfoPopover } from "../../components/TaskInfoPopover";
+import { TaskSearchPicker, type TaskSearchPlacement } from "../../components/TaskSearchPicker";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
 import {
   productBacklogPath,
-  productBoardPath,
-  productOverviewPath,
-  productSprintsPath
+  productBoardPath, productSprintsPath
 } from "../../routes/product-routes";
 import {
   productCollectionScope,
@@ -189,200 +187,6 @@ function DefinitionHeader(props: {
   );
 }
 
-function TaskInfoPopover(props: { task: { title: string; description: string | null } }) {
-  const { task } = props;
-  const [open, setOpen] = React.useState(false);
-  const [placement, setPlacement] = React.useState<{
-    vertical: "top" | "bottom";
-    horizontal: "start" | "end";
-    top: number;
-    left: number;
-    maxHeight: number;
-    maxWidth: number;
-  }>({
-    vertical: "bottom",
-    horizontal: "end",
-    top: 0,
-    left: 0,
-    maxHeight: 320,
-    maxWidth: 420
-  });
-  const panelId = React.useId();
-  const triggerRef = React.useRef<HTMLButtonElement | null>(null);
-  const panelRef = React.useRef<HTMLDivElement | null>(null);
-  const closeTimeoutRef = React.useRef<number | null>(null);
-
-  const clearCloseTimeout = React.useCallback(() => {
-    if (closeTimeoutRef.current !== null) {
-      window.clearTimeout(closeTimeoutRef.current);
-      closeTimeoutRef.current = null;
-    }
-  }, []);
-
-  const openPopover = React.useCallback(() => {
-    clearCloseTimeout();
-    setOpen(true);
-  }, [clearCloseTimeout]);
-
-  const scheduleClosePopover = React.useCallback(() => {
-    clearCloseTimeout();
-    closeTimeoutRef.current = window.setTimeout(() => {
-      setOpen(false);
-      closeTimeoutRef.current = null;
-    }, 90);
-  }, [clearCloseTimeout]);
-
-  const updatePlacement = React.useCallback(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const trigger = triggerRef.current;
-    const panel = panelRef.current;
-
-    if (!trigger || !panel) {
-      return;
-    }
-
-    const viewportMargin = 16;
-    const gap = 10;
-    const triggerRect = trigger.getBoundingClientRect();
-    const panelRect = panel.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - triggerRect.bottom - viewportMargin - gap;
-    const spaceAbove = triggerRect.top - viewportMargin - gap;
-    const vertical =
-      spaceBelow >= Math.min(panelRect.height, 220) || spaceBelow >= spaceAbove ? "bottom" : "top";
-    const maxHeight = Math.max(120, Math.floor(vertical === "bottom" ? spaceBelow : spaceAbove));
-    const spaceRight = window.innerWidth - triggerRect.left - viewportMargin;
-    const spaceLeft = triggerRect.right - viewportMargin;
-    const horizontal =
-      spaceRight >= Math.min(panelRect.width, 280) || spaceRight >= spaceLeft ? "start" : "end";
-    const maxWidth = Math.max(220, Math.floor(horizontal === "start" ? spaceRight : spaceLeft));
-    const visiblePanelHeight = Math.min(panelRect.height || maxHeight, maxHeight);
-    const visiblePanelWidth = Math.min(panelRect.width || maxWidth, maxWidth);
-    const top = vertical === "bottom"
-      ? Math.max(viewportMargin, Math.min(triggerRect.bottom + gap, window.innerHeight - viewportMargin - visiblePanelHeight))
-      : Math.max(viewportMargin, triggerRect.top - gap - visiblePanelHeight);
-    const alignedLeft = horizontal === "start"
-      ? triggerRect.left
-      : triggerRect.right - visiblePanelWidth;
-    const left = Math.max(
-      viewportMargin,
-      Math.min(alignedLeft, window.innerWidth - viewportMargin - visiblePanelWidth)
-    );
-
-    setPlacement((current) => {
-      if (
-        current.vertical === vertical &&
-        current.horizontal === horizontal &&
-        current.top === top &&
-        current.left === left &&
-        current.maxHeight === maxHeight &&
-        current.maxWidth === maxWidth
-      ) {
-        return current;
-      }
-
-      return { vertical, horizontal, top, left, maxHeight, maxWidth };
-    });
-  }, []);
-
-  React.useLayoutEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    updatePlacement();
-
-    const handleViewportChange = () => {
-      updatePlacement();
-    };
-
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange, true);
-
-    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(handleViewportChange) : null;
-    if (resizeObserver) {
-      if (triggerRef.current) {
-        resizeObserver.observe(triggerRef.current);
-      }
-      if (panelRef.current) {
-        resizeObserver.observe(panelRef.current);
-      }
-    }
-
-    return () => {
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange, true);
-      resizeObserver?.disconnect();
-    };
-  }, [open, updatePlacement]);
-
-  React.useEffect(() => {
-    return () => {
-      if (closeTimeoutRef.current !== null) {
-        window.clearTimeout(closeTimeoutRef.current);
-        closeTimeoutRef.current = null;
-      }
-    };
-  }, []);
-
-  return (
-    <div
-      className={`story-info-popover ${open ? "is-open" : ""}`.trim()}
-      onMouseEnter={openPopover}
-      onMouseLeave={scheduleClosePopover}
-      onFocusCapture={openPopover}
-      onBlurCapture={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
-          return;
-        }
-        scheduleClosePopover();
-      }}
-    >
-      <button
-        ref={triggerRef}
-        type="button"
-        className="btn btn-secondary btn-icon story-list-icon-button"
-        aria-label={`Ver informacion de ${task.title}`}
-        aria-describedby={open ? panelId : undefined}
-      >
-        <FiInfo aria-hidden="true" focusable="false" />
-      </button>
-      {open && typeof document !== "undefined"
-        ? createPortal(
-          <div
-            id={panelId}
-            ref={panelRef}
-            className="story-info-popover-panel"
-            role="tooltip"
-            onMouseEnter={openPopover}
-            onMouseLeave={scheduleClosePopover}
-            data-side={placement.vertical}
-            data-align={placement.horizontal}
-            style={{
-              top: `${placement.top}px`,
-              left: `${placement.left}px`,
-              maxHeight: `${placement.maxHeight}px`,
-              maxWidth: `${placement.maxWidth}px`
-            }}
-          >
-            <MarkdownPreview
-              markdown={task.description}
-              compact
-              previewSize={400}
-              className="markdown-preview-card"
-              emptyLabel="Sin informacion adicional"
-            />
-          </div>,
-          document.body
-        )
-        : null}
-    </div>
-  );
-}
-
 export const ProductDefinitionView = observer(function ProductDefinitionView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
@@ -431,7 +235,7 @@ export const ProductDefinitionView = observer(function ProductDefinitionView() {
         description="Edicion completa del producto, descripcion funcional e historial sin depender del drawer."
         backLabel="Volver a productos"
         backHref="/products"
-        context={<span className="pill">{product.key}</span>}
+        context={<span className="muted">{product.key}</span>}
       />
       <section className="card definition-page-card">
         <ProductUpsertionForm
@@ -499,7 +303,7 @@ export const StoryDefinitionView = observer(function StoryDefinitionView() {
         backHref={productBacklogPath(productId)}
         context={
           <>
-            <span className="pill">SP {story.storyPoints}</span>
+            <span className="muted">SP {story.storyPoints}</span>
             <span className={taskStatusClass(story.status)}>{story.status}</span>
           </>
         }
@@ -831,10 +635,13 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
     }
   }, [reloadTaskPools]);
 
-  const addTaskToSprint = React.useCallback(async (taskId: string) => {
+  const addTaskToSprint = React.useCallback(async (taskId: string, placement: TaskSearchPlacement = "end") => {
     if (!sprintId) return;
     await runTaskMutation(taskId, async () => {
-      await controller.addTaskToSprint(sprintId, taskId);
+      const task = await controller.addTaskToSprint(sprintId, taskId);
+      if (placement === "start") {
+        await controller.moveBoardTask(sprintId, taskId, { status: task.status, position: 0 });
+      }
     });
   }, [controller, runTaskMutation, sprintId]);
 
@@ -1018,7 +825,9 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
                   <h3>Usuarios</h3>
                   <p className="muted">Selecciona exactamente quienes forman parte del sprint y habilita su asignacion inicial.</p>
                 </div>
-                <span className="pill">{normalizedSelectedMemberIds.length}/{availableMembers.length}</span>
+                <span className="sprint-planning-head-meta">
+                  {normalizedSelectedMemberIds.length}/{availableMembers.length}
+                </span>
               </div>
 
               <div className="row-actions compact sprint-member-toolbar">
@@ -1076,7 +885,9 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
                   <h3>Estadisticas</h3>
                   <p className="muted">Cruza carga, velocidad y equipo seleccionado para decidir un alcance viable.</p>
                 </div>
-                <span className="pill">{velocityLoading ? "Calculando..." : `${probabilityPercent}%`}</span>
+                <span className="sprint-planning-head-meta">
+                  {velocityLoading ? "Calculando..." : `${probabilityPercent}%`}
+                </span>
               </div>
               {velocityError ? <p className="error-text">{velocityError}</p> : null}
               <div className="metrics-grid metrics-summary-grid sprint-planning-metrics">
@@ -1148,60 +959,78 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
                 <h3>Grilla de tareas del sprint</h3>
                 <p className="muted">Agrega trabajo, ajusta puntos y deja la asignacion inicial lista antes de empezar.</p>
               </div>
-              <span className="pill">{orderedTasks.length}</span>
             </div>
-            <TaskSearchPicker
-              label="Agregar tarea"
-              tasks={pendingTasks}
-              loading={tasksLoading}
-              placeholder="Busca por titulo, historia o responsable"
-              onPick={addTaskToSprint}
-              onOpenTask={(taskId) => {
-                const task = pendingTasks.find((entry) => entry.id === taskId);
-                if (task) {
-                  openPendingTaskDrawer(task);
-                }
-              }}
-            />
             {tasksError ? <p className="error-text">{tasksError}</p> : null}
-            {tasksLoading ? <p className="muted">Cargando tareas...</p> : null}
 
-            {orderedTasks.length === 0 ? (
-              <p className="muted">Aun no hay tareas asignadas al sprint.</p>
-            ) : (
-              <div className="sprint-task-table-shell">
-                <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-                  <SortableContext items={orderedTasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-                    <table className="table sprint-task-table">
-                      <thead>
-                        <tr>
-                          <th aria-label="Orden"></th>
-                          <th>Tarea</th>
-                          <th>Info</th>
-                          <th>Puntos</th>
-                          <th>Asignacion</th>
-                          <th aria-label="Acciones"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {orderedTasks.map((task) => (
-                          <SortableSprintTaskRow
-                            key={task.id}
-                            task={task}
-                            assigneeOptions={resolveTaskAssigneeOptions(task)}
-                            isPending={Boolean(pendingTaskIds[task.id])}
-                            onOpen={() => openTaskDrawer(task)}
-                            onRemove={() => void removeTaskFromSprint(task.id)}
-                            onUpdateEffortPoints={(effortPoints) => void updateTaskEffortPoints(task.id, effortPoints)}
-                            onUpdateAssignee={(assigneeId) => void updateTaskAssignee(task.id, assigneeId)}
-                          />
-                        ))}
-                      </tbody>
-                    </table>
-                  </SortableContext>
-                </DndContext>
+            <div className="sprint-task-split-layout">
+              <TaskSearchPicker
+                label="Agregar tarea"
+                tasks={pendingTasks}
+                filterAssignees={selectedMembers.map((member) => ({ id: member.id, name: member.name }))}
+                loading={tasksLoading}
+                placeholder="Busca por titulo, descripcion, historia o responsable"
+                showPills={false}
+                onPick={addTaskToSprint}
+                onOpenTask={(taskId) => {
+                  const task = pendingTasks.find((entry) => entry.id === taskId);
+                  if (task) {
+                    openPendingTaskDrawer(task);
+                  }
+                }}
+              />
+
+              <div className="sprint-task-pane-panel">
+                <div className="sprint-task-pane-panel-head">
+                  <div>
+                    <strong>Grilla actual del sprint</strong>
+                    <p className="muted">Reordena tareas, ajusta puntos y define responsables sin salir de la planificacion.</p>
+                  </div>
+                </div>
+
+                <div className="sprint-task-split-pane-content">
+                  <div className="sprint-task-table-shell" aria-busy={tasksLoading}>
+                    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+                      <SortableContext items={orderedTasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+                        <table className="table sprint-task-table">
+                          <thead>
+                            <tr>
+                              <th aria-label="Orden"></th>
+                              <th>Tarea</th>
+                              <th>Info</th>
+                              <th>Puntos</th>
+                              <th>Asignacion</th>
+                              <th aria-label="Acciones"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {orderedTasks.length === 0 ? (
+                              <tr>
+                                <td colSpan={6}>
+                                  <p className="muted sprint-task-table-empty">
+                                    Aun no hay tareas asignadas al sprint. La primera tarea aparecerá aquí sin mover la grilla.
+                                  </p>
+                                </td>
+                              </tr>
+                            ) : orderedTasks.map((task) => (
+                              <SortableSprintTaskRow
+                                key={task.id}
+                                task={task}
+                                assigneeOptions={resolveTaskAssigneeOptions(task)}
+                                isPending={Boolean(pendingTaskIds[task.id])}
+                                onOpen={() => openTaskDrawer(task)}
+                                onRemove={() => void removeTaskFromSprint(task.id)}
+                                onUpdateEffortPoints={(effortPoints) => void updateTaskEffortPoints(task.id, effortPoints)}
+                                onUpdateAssignee={(assigneeId) => void updateTaskAssignee(task.id, assigneeId)}
+                              />
+                            ))}
+                          </tbody>
+                        </table>
+                      </SortableContext>
+                    </DndContext>
+                  </div>
+                </div>
               </div>
-            )}
+            </div>
           </section>
         </>
       )}
@@ -1631,7 +1460,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
         context={
           <>
             <span className={taskStatusClass(taskDetail.status)}>{taskDetail.status}</span>
-            <span className="pill">{taskDetail.story?.title ?? "Sin historia"}</span>
+            <span className="muted">{taskDetail.story?.title ?? "Sin historia"}</span>
           </>
         }
       />

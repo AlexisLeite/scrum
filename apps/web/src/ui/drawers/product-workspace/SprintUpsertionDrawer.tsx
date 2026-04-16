@@ -4,7 +4,7 @@ import { ProductController } from "../../../controllers";
 import { canCommentOnVisibleTask, canCreateTaskFromMessage, canEditTaskFields } from "../../../lib/permissions";
 import { productSprintDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
-import { TaskSearchPicker } from "../../../components/TaskSearchPicker";
+import { TaskSearchPicker, type TaskSearchPlacement } from "../../../components/TaskSearchPicker";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
@@ -57,28 +57,6 @@ function taskMatchesQuery(task: PendingTask, query: string): boolean {
     .map(normalize)
     .join(" ")
     .includes(normalizedQuery);
-}
-
-function getSuggestionImage(markdown: string | null | undefined): string {
-  return markdown?.match(/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/)?.[1] ?? "";
-}
-
-function getSuggestionPreview(markdown: string | null | undefined): string {
-  const normalized = (markdown ?? "")
-    .replace(/!\[[^\]]*\]\((?:[^)\s]+)(?:\s+"[^"]*")?\)/g, " ")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/`{1,3}([^`]*)`{1,3}/g, "$1")
-    .replace(/^[\s>*#+-]+/gm, " ")
-    .replace(/^\d+\.\s+/gm, " ")
-    .replace(/<\/?[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!normalized) {
-    return "";
-  }
-
-  return normalized.length > 140 ? `${normalized.slice(0, 137).trimEnd()}...` : normalized;
 }
 
 export class SprintUpsertionDrawer extends Drawer {
@@ -145,7 +123,6 @@ export function SprintUpsertionForm(props: {
   const [sprintTasks, setSprintTasks] = React.useState<PendingTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(false);
   const [sprintTaskQuery, setSprintTaskQuery] = React.useState("");
-  const [visibleSuggestionCount, setVisibleSuggestionCount] = React.useState(5);
   const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
     name: sprint?.name ?? "",
     goal: sprint?.goal ?? "",
@@ -254,11 +231,14 @@ export function SprintUpsertionForm(props: {
     }
   };
 
-  const addTaskToSprint = async (taskId: string) => {
+  const addTaskToSprint = async (taskId: string, placement: TaskSearchPlacement = "end") => {
     if (!sprint) return;
     setError("");
     try {
-      await controller.addTaskToSprint(sprint.id, taskId);
+      const task = await controller.addTaskToSprint(sprint.id, taskId);
+      if (placement === "start") {
+        await controller.moveBoardTask(sprint.id, taskId, { status: task.status, position: 0 });
+      }
       await loadTaskPools();
       if (onDone) {
         await onDone();
@@ -286,20 +266,6 @@ export function SprintUpsertionForm(props: {
     () => sprintTasks.filter((task) => taskMatchesQuery(task, sprintTaskQuery)),
     [sprintTaskQuery, sprintTasks]
   );
-  const suggestedTasks = React.useMemo(
-    () =>
-      pendingTasks.slice(0, visibleSuggestionCount).map((task) => ({
-        task,
-        imageSrc: getSuggestionImage(task.description),
-        preview: getSuggestionPreview(task.description)
-      })),
-    [pendingTasks, visibleSuggestionCount]
-  );
-  const hasMoreSuggestedTasks = pendingTasks.length > suggestedTasks.length;
-
-  React.useEffect(() => {
-    setVisibleSuggestionCount(5);
-  }, [sprint?.id]);
 
   const openTaskDetail = React.useCallback(
     (task: PendingTask) => {
@@ -441,17 +407,18 @@ export function SprintUpsertionForm(props: {
           <div className="section-head sprint-task-manager-head">
             <div>
               <h4>Tareas del sprint</h4>
-              <p className="muted">Agrega tareas desde un buscador con teclado y filtra la lista actual sin perder contexto.</p>
+              <p className="muted">Explora el listado completo, filtra por contexto y agrega cada tarea al inicio o al final sin perder la grilla actual.</p>
             </div>
           </div>
-          {tasksLoading ? <p className="muted">Cargando tareas...</p> : null}
 
-          <div className="sprint-task-picker-shell">
+          <div className="sprint-task-picker-shell sprint-task-split-layout">
             <TaskSearchPicker
               label="Agregar tarea al sprint"
               tasks={pendingTasks}
+              filterAssignees={sprintTasks
+                .flatMap((task) => (task.assignee?.id && task.assignee?.name ? [{ id: task.assignee.id, name: task.assignee.name }] : []))}
               loading={tasksLoading}
-              placeholder="Busca por tarea, historia o responsable. Enter agrega la seleccionada"
+              placeholder="Busca por tarea, descripcion, historia o responsable"
               onPick={addTaskToSprint}
               onOpenTask={(taskId) => {
                 const task = pendingTasks.find((entry) => entry.id === taskId);
@@ -460,119 +427,75 @@ export function SprintUpsertionForm(props: {
                 }
               }}
             />
-            {pendingTasks.length > 0 ? (
-              <div className="sprint-task-suggestions">
-                <div className="sprint-task-suggestions-head">
-                  <div>
-                    <p className="sprint-task-suggestions-kicker">Sugeridas para este sprint</p>
-                    <p className="muted">Las primeras tarjetas priorizan tareas recientes y muestran contexto para decidir rapido.</p>
-                  </div>
-                  <span className="pill">{pendingTasks.length} candidatas</span>
+
+            <div className="sprint-task-pane-toolbar">
+              <label className="sprint-task-filter sprint-task-pane-filter">
+                <span>Filtrar</span>
+                <input
+                  value={sprintTaskQuery}
+                  onChange={(event) => setSprintTaskQuery(event.target.value)}
+                  placeholder="Filtrar por titulo, historia o responsable"
+                />
+              </label>
+              <span className="pill">{`${visibleSprintTasks.length}/${sprintTasks.length}`}</span>
+            </div>
+
+            <div className="sprint-task-pane-panel">
+              <div className="sprint-task-pane-panel-head">
+                <div>
+                  <strong>Tareas ya agregadas</strong>
+                  <p className="muted">Revisa el orden actual y quita las que no correspondan antes de guardar el sprint.</p>
                 </div>
-                <div className="sprint-task-suggestion-list">
-                  {suggestedTasks.map(({ task, imageSrc, preview }) => (
-                    <article key={task.id} className="sprint-task-suggestion card">
-                      <div className="sprint-task-suggestion-top">
-                        <div className="sprint-task-suggestion-heading">
-                          <strong>{task.title}</strong>
-                          <span className={`status status-${task.status.toLowerCase().replace(/\s+/g, "-")}`}>{task.status}</span>
-                        </div>
-                        <div className="sprint-task-suggestion-meta">
-                          <span className="pill">Historia: {task.story?.title ?? "Sin historia"}</span>
-                          {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
-                          <span className="pill">Creada {new Date(task.createdAt).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                      <div className="sprint-task-suggestion-summary">
-                        {imageSrc ? (
-                          <img
-                            className="sprint-task-suggestion-image"
-                            src={imageSrc}
-                            alt={`Imagen adjunta de ${task.title}`}
-                            loading="lazy"
-                          />
-                        ) : null}
-                        <p className={`sprint-task-suggestion-preview ${preview ? "" : "is-empty"}`.trim()}>
-                          {preview || "Sin descripcion"}
-                        </p>
-                      </div>
-                      <div className="row-actions compact sprint-task-suggestion-actions">
-                        <button type="button" className="btn btn-secondary" onClick={() => openTaskDetail(task)}>
-                          Ver detalle
-                        </button>
-                        <button type="button" className="btn btn-primary" onClick={() => void addTaskToSprint(task.id)}>
-                          Agregar
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-                {hasMoreSuggestedTasks ? (
-                  <div className="sprint-task-suggestions-more">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setVisibleSuggestionCount((current) => current + 5)}
-                    >
-                      Mostrar mas
-                    </button>
-                  </div>
-                ) : null}
               </div>
-            ) : null}
-          </div>
 
-          <div className="section-head">
-            <h5>Tareas ya agregadas</h5>
-            <label className="sprint-task-filter">
-              <span>Filtrar</span>
-              <input
-                value={sprintTaskQuery}
-                onChange={(event) => setSprintTaskQuery(event.target.value)}
-                placeholder="Filtrar por titulo, historia o responsable"
-              />
-            </label>
-          </div>
-
-          <div className="story-task-stack">
-            {visibleSprintTasks.length === 0 ? (
-              <p className="muted">No hay tareas asignadas al sprint para el filtro actual.</p>
-            ) : null}
-            {visibleSprintTasks.map((task, index) => (
-              <article key={task.id} className="story-task-card sprint-task-card">
-                <div className="story-task-card-head">
-                  <div>
-                    <p className="story-task-order">Entrada {index + 1}</p>
-                    <strong>{task.title}</strong>
+              <div className="sprint-task-split-pane-content">
+                <div className="sprint-task-list-shell" aria-busy={tasksLoading}>
+                  <div className="story-task-stack">
+                    {visibleSprintTasks.length === 0 ? (
+                      <article className="story-task-card sprint-task-card sprint-task-card-empty">
+                        <strong>No hay tareas asignadas al sprint para el filtro actual.</strong>
+                        <p className="muted">Cuando agregues la primera, aparecerá aquí sin mover el layout del panel.</p>
+                      </article>
+                    ) : null}
+                    {visibleSprintTasks.map((task, index) => (
+                      <article key={task.id} className="story-task-card sprint-task-card">
+                        <div className="story-task-card-head">
+                          <div>
+                            <p className="story-task-order">Entrada {index + 1}</p>
+                            <strong>{task.title}</strong>
+                          </div>
+                          <div className="row-actions compact">
+                            {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
+                            <span className="status status-in-sprint">En sprint</span>
+                          </div>
+                        </div>
+                        <div className="story-task-meta">
+                          <span>Historia: {task.story?.title ?? "-"}</span>
+                          <span>Responsable: {task.assignee?.name ?? "Sin asignar"}</span>
+                          <span>Estado: {task.status}</span>
+                        </div>
+                        <div className="row-actions compact">
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => openTaskDetail(task)}
+                          >
+                            Ver detalle
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => void removeTaskFromSprint(task.id)}
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      </article>
+                    ))}
                   </div>
-                  <div className="row-actions compact">
-                    {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
-                    <span className="status status-in-sprint">En sprint</span>
-                  </div>
                 </div>
-                <div className="story-task-meta">
-                  <span>Historia: {task.story?.title ?? "-"}</span>
-                  <span>Responsable: {task.assignee?.name ?? "Sin asignar"}</span>
-                  <span>Estado: {task.status}</span>
-                </div>
-                <div className="row-actions compact">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => openTaskDetail(task)}
-                  >
-                    Ver detalle
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => void removeTaskFromSprint(task.id)}
-                  >
-                    Quitar
-                  </button>
-                </div>
-              </article>
-            ))}
+              </div>
+            </div>
           </div>
         </section>
       ) : sprint && showTaskManager ? (

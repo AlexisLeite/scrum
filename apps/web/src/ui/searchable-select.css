@@ -1,10 +1,14 @@
 .searchable-select {
   position: relative;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .searchable-select-trigger {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: var(--control-height);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
@@ -17,12 +21,16 @@
   justify-content: space-between;
   gap: 0.75rem;
   text-align: left;
+  box-sizing: border-box;
+  overflow: hidden;
   transition: border-color var(--trans), box-shadow var(--trans), background var(--trans);
 }
 
 .searchable-select-trigger-label {
+  display: block;
   min-width: 0;
-  flex: 1;
+  max-width: 100%;
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -75,12 +83,16 @@
 
 .searchable-select-option {
   width: 100%;
+  min-width: 0;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-main);
   padding: 0.55rem 0.65rem;
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition: background var(--trans), border-color var(--trans), color var(--trans);
 }
 

@@ -170,6 +170,15 @@
   padding: 0.95rem 1rem;
 }
 
+.sprint-task-card-empty {
+  min-height: 6.5rem;
+  align-content: center;
+}
+
+.sprint-task-card-empty p {
+  margin: 0;
+}
+
 .sprint-task-card .story-task-card-head {
   align-items: flex-start;
 }

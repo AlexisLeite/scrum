@@ -1257,8 +1257,15 @@ a.btn-secondary,
 }
 
 .sprint-planning-summary-grid {
-  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
+}
+
+.sprint-planning-head-meta {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .sprint-planning-metrics {
@@ -1279,6 +1286,109 @@ a.btn-secondary,
 .sprint-planning-users-card {
   display: flex;
   flex-direction: column;
+}
+
+.sprint-planning-tasks-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.sprint-task-split-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    "available-toolbar planned-toolbar"
+    "available-panel planned-panel";
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.sprint-task-pane-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.8rem;
+  min-height: calc(var(--control-height) + 1.65rem);
+  flex-wrap: wrap;
+}
+
+.sprint-task-pane-toolbar-copy {
+  display: flex;
+  align-items: flex-end;
+  min-height: 100%;
+}
+
+.sprint-task-pane-label {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.sprint-task-pane-filter {
+  flex: 1 1 18rem;
+  margin: 0;
+}
+
+.sprint-task-split-layout > .task-search-picker {
+  display: contents;
+}
+
+.sprint-task-split-layout .task-search-picker-toolbar {
+  grid-area: available-toolbar;
+}
+
+.sprint-task-split-layout .task-search-picker-panel {
+  grid-area: available-panel;
+}
+
+.sprint-task-split-layout > .sprint-task-pane-toolbar {
+  grid-area: planned-toolbar;
+}
+
+.sprint-task-pane-panel {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent-c) 14%, var(--border));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg-card) 94%, var(--bg-soft));
+  box-shadow: var(--shadow-soft);
+  min-height: 0;
+  height: 100%;
+}
+
+.sprint-task-split-layout > .sprint-task-pane-panel {
+  grid-area: planned-panel;
+}
+
+.sprint-task-pane-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.sprint-task-pane-panel-head strong {
+  display: block;
+  font-size: 0.98rem;
+}
+
+.sprint-task-pane-panel-head p {
+  margin: 0.18rem 0 0;
+  max-width: 48rem;
+}
+
+.sprint-task-split-pane-content {
+  display: grid;
+  min-height: 0;
+}
+
+.sprint-task-split-layout .task-search-picker-panel,
+.sprint-task-split-layout > .sprint-task-pane-panel,
+.sprint-task-split-pane-content > .sprint-task-table-shell,
+.sprint-task-split-pane-content > .sprint-task-list-shell {
+  min-height: 0;
+  height: 100%;
 }
 
 .sprint-member-selector {
@@ -1339,7 +1449,6 @@ a.btn-secondary,
 }
 
 .sprint-task-table-shell {
-  margin-top: 0.8rem;
   overflow-x: auto;
   height: 70vh;
   border-color: color-mix(in srgb, var(--border-soft) 92%, transparent);
@@ -1349,8 +1458,10 @@ a.btn-secondary,
 }
 
 .sprint-task-table {
+  width: 100%;
   min-width: 100%;
   border: none;
+  table-layout: fixed;
 }
 
 .sprint-task-table th,
@@ -1364,22 +1475,24 @@ a.btn-secondary,
 .sprint-task-table td:nth-child(3),
 .sprint-task-table th:last-child,
 .sprint-task-table td:last-child {
-  width: 1%;
+  width: 4rem;
   white-space: nowrap;
 }
 
 .sprint-task-table th:nth-child(4),
 .sprint-task-table td:nth-child(4) {
-  width: 8.5rem;
+  width: 6.5rem;
 }
 
 .sprint-task-table th:nth-child(5),
 .sprint-task-table td:nth-child(5) {
-  width: 0;
+  width: 11rem;
+  min-width: 0;
 }
 
 .sprint-task-title-column {
-  min-width: 20rem;
+  width: auto;
+  min-width: 0;
 }
 
 .sprint-task-title-cell {
@@ -1393,13 +1506,45 @@ a.btn-secondary,
   flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
+  min-width: 0;
+}
+
+.sprint-task-table .story-task-title-button {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.sprint-task-table .story-task-title-text,
+.sprint-task-table .sprint-task-meta > span:not(.status) {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sprint-task-inline-select {
+  width: 100%;
   min-width: 100%;
   min-height: 2.45rem;
   padding: 0.38rem 0.5rem;
   font-size: 0.84rem;
+}
+
+.sprint-task-list-shell {
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--border-soft) 92%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 98%, transparent);
+  padding: 0.35rem;
+}
+
+.sprint-task-list-shell .story-task-stack {
+  min-height: 100%;
+  align-content: start;
 }
 
 .sprint-task-info-cell,
@@ -1420,13 +1565,37 @@ a.btn-secondary,
   opacity: 0.6;
 }
 
+.sprint-task-table-empty {
+  margin: 0;
+  padding: 1rem 0.25rem;
+  text-align: center;
+}
+
 @media (max-width: 980px) {
   .sprint-planning-summary-grid {
     grid-template-columns: 1fr;
   }
 
+  .sprint-task-split-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "available-toolbar"
+      "available-panel"
+      "planned-toolbar"
+      "planned-panel";
+  }
+
+  .sprint-task-pane-toolbar {
+    min-height: auto;
+  }
+
   .sprint-task-title-column {
     min-width: 16rem;
+  }
+
+  .sprint-task-table th:nth-child(5),
+  .sprint-task-table td:nth-child(5) {
+    width: 9.5rem;
   }
 }
 
