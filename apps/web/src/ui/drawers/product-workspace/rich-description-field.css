@@ -144,6 +144,20 @@
   cursor: zoom-in;
 }
 
+.rich-description-content video {
+  display: block;
+  width: min(100%, 42rem);
+  max-width: 100%;
+  max-height: 60vh;
+  margin: 1.2rem auto;
+  border-radius: 16px;
+  background: #05070a;
+}
+
+.rich-description-file-input {
+  display: none;
+}
+
 .rich-description-editor [class*="_imageWrapper_"] [class*="_editImageToolbar_"] {
   opacity: 0;
   visibility: hidden;

@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { FiMaximize2, FiMinimize2 } from "react-icons/fi";
+import { FiMaximize2, FiMinimize2, FiVideo } from "react-icons/fi";
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -103,6 +103,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const minHeight = Math.max(rows, 4) * 24;
   const editorRef = React.useRef<MDXEditorMethods | null>(null);
   const fieldRef = React.useRef<HTMLDivElement | null>(null);
+  const videoInputRef = React.useRef<HTMLInputElement | null>(null);
   const resizeFrameRef = React.useRef<number | null>(null);
   const searchTimeoutRef = React.useRef<number | null>(null);
   const pendingUploadsRef = React.useRef<Map<string, UploadingImage>>(new Map());
@@ -112,6 +113,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const [referenceLoading, setReferenceLoading] = React.useState(false);
   const [selectedReferenceIndex, setSelectedReferenceIndex] = React.useState(0);
   const [uploadingImages, setUploadingImages] = React.useState<Array<{ id: string; alt: string }>>([]);
+  const [uploadingVideos, setUploadingVideos] = React.useState<Array<{ id: string; title: string }>>([]);
   const [uploadError, setUploadError] = React.useState("");
   const [lightboxImage, setLightboxImage] = React.useState<{ src: string; alt?: string } | null>(null);
   const [isMaximized, setIsMaximized] = React.useState(false);
@@ -415,6 +417,41 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     }
   }, [placeCaretAfterImage, replaceRenderedImageSource, syncControlledValue, updateEditorMarkdown]);
 
+  const handleVideoUpload = React.useCallback(async (file: File) => {
+    if (!editorRef.current) {
+      return;
+    }
+
+    const uploadId = createClientId();
+    const title = file.name?.trim() || "Video";
+    setUploadingVideos((current) => [...current, { id: uploadId, title }]);
+    setUploadError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file, file.name || `video-${uploadId}.mp4`);
+      const response = await apiClient.postForm<{ url: string }>("/media/videos", formData);
+      const currentMarkdown = editorRef.current.getMarkdown();
+      const needsLeadingBreak = currentMarkdown.trim().length > 0;
+      const insertion = `${needsLeadingBreak ? "\n\n" : ""}${buildPersistedVideoMarkdown(title, response.url)}\n\n`;
+      editorRef.current.insertMarkdown(insertion);
+      syncControlledValue();
+      scheduleHeightSync();
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "No se pudo subir el video seleccionado.");
+    } finally {
+      setUploadingVideos((current) => current.filter((entry) => entry.id !== uploadId));
+    }
+  }, [scheduleHeightSync, syncControlledValue]);
+
+  const handleVideoInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    files.forEach((file) => {
+      void handleVideoUpload(file);
+    });
+    event.target.value = "";
+  }, [handleVideoUpload]);
+
   React.useEffect(() => {
     const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
     if (!content) {
@@ -699,6 +736,16 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
                   <Separator />
                   <CreateLink />
                   <InsertImage />
+                  <ToolbarButton
+                    label="Insertar video"
+                    onClick={() => {
+                      if (!disabled) {
+                        videoInputRef.current?.click();
+                      }
+                    }}
+                  >
+                    <FiVideo aria-hidden="true" />
+                  </ToolbarButton>
                   <InsertTable />
                   <InsertCodeBlock />
                   <Separator />
@@ -715,10 +762,23 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
           })
         ]}
       />
+      <input
+        ref={videoInputRef}
+        className="rich-description-file-input"
+        type="file"
+        accept="video/*"
+        onChange={handleVideoInputChange}
+      />
       {uploadingImages.length > 0 ? (
         <div className="rich-description-upload-status" aria-live="polite">
           <strong>Subiendo imagen{uploadingImages.length === 1 ? "" : "es"}...</strong>
           <span>{uploadingImages.map((entry) => entry.alt).join(", ")}</span>
+        </div>
+      ) : null}
+      {uploadingVideos.length > 0 ? (
+        <div className="rich-description-upload-status" aria-live="polite">
+          <strong>Subiendo video{uploadingVideos.length === 1 ? "" : "s"}...</strong>
+          <span>{uploadingVideos.map((entry) => entry.title).join(", ")}</span>
         </div>
       ) : null}
       {uploadError ? <p className="error-text">{uploadError}</p> : null}
@@ -792,6 +852,10 @@ function buildUploadingImageMarkdown(alt: string, previewUrl: string) {
 
 function buildPersistedImageMarkdown(alt: string, url: string) {
   return `![${escapeMarkdownLabel(alt)}](${url})`;
+}
+
+function buildPersistedVideoMarkdown(title: string, url: string) {
+  return `<video controls preload="metadata" src="${escapeHtmlAttribute(url)}" title="${escapeHtmlAttribute(title)}"></video>`;
 }
 
 function replaceUploadingImageMarkdown(markdown: string, upload: UploadingImage, replacement: string) {
@@ -991,6 +1055,14 @@ function iconLabel(icon: ReferenceSearchResult["icon"]) {
 
 function escapeMarkdownLabel(value: string): string {
   return value.replace(/[[\]\\]/g, "\\$&");
+}
+
+function escapeHtmlAttribute(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function ToolbarButton(props: ToolbarButtonProps) {

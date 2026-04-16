@@ -36,6 +36,26 @@ export class MediaController {
       url: buildPublicUrl(request, saved.publicPath)
     };
   }
+
+  @Post("videos")
+  @UseInterceptors(FileInterceptor("file"))
+  async uploadVideo(
+    @UploadedFile() file: { originalname?: string; mimetype?: string; buffer: Buffer } | undefined,
+    @Req() request: Request
+  ) {
+    if (!file) {
+      throw new BadRequestException("Video file is required");
+    }
+
+    if (!file.mimetype?.startsWith("video/")) {
+      throw new BadRequestException("Only video uploads are supported");
+    }
+
+    const saved = await this.mediaService.saveVideo(file);
+    return {
+      url: buildPublicUrl(request, saved.publicPath)
+    };
+  }
 }
 
 function buildPublicUrl(request: Request, publicPath: string) {

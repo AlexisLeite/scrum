@@ -3334,6 +3334,17 @@ html .drawer-content .card {
   border-radius: 12px;
 }
 
+.markdown-preview video,
+.markdown-preview-video {
+  display: block;
+  width: min(100%, 820px);
+  max-width: 100%;
+  max-height: 80vh;
+  margin: 1rem auto;
+  border-radius: 16px;
+  background: #05070a;
+}
+
 .markdown-preview-image-button {
   display: inline-flex;
   max-width: 80%;

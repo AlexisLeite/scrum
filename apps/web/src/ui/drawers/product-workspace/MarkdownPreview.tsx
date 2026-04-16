@@ -34,6 +34,17 @@ type MarkdownPreProps = React.HTMLAttributes<HTMLPreElement> & {
   copyValue?: string;
 };
 
+type MarkdownContentBlock =
+  | {
+      type: "markdown";
+      content: string;
+    }
+  | {
+      type: "video";
+      src: string;
+      title?: string;
+    };
+
 export function MarkdownPreview(props: MarkdownPreviewProps) {
   const store = useRootStore();
   const productController = React.useMemo(() => new ProductController(store), [store]);
@@ -53,71 +64,94 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
   const mustSlice = truncatedContent.length < rawContent.length;
   const content = expanded || !mustSlice ? rawContent : truncatedContent.trimEnd();
   const fullCodeBlocks = React.useMemo(() => extractMarkdownCodeBlocks(rawContent), [rawContent]);
+  const contentBlocks = React.useMemo(() => splitMarkdownMediaBlocks(content), [content]);
   let renderedCodeBlockIndex = 0;
 
   return (
     <>
       <div className={`markdown-preview ${compact ? "is-compact" : ""} ${className}`.trim()}>
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[[rehypeHighlight, { detect: true }]]}
-          urlTransform={(url) => {
-            if (parseInternalReferenceHref(url)) {
-              return url;
-            }
+        {contentBlocks.map((block, index) => {
+          if (block.type === "video") {
+            return (
+              <video
+                key={`video-${index}-${block.src}`}
+                className="markdown-preview-video"
+                src={block.src}
+                title={block.title}
+                controls
+                preload="metadata"
+              />
+            );
+          }
 
-            return defaultUrlTransform(url);
-          }}
-          components={{
-            a(anchorProps) {
-              const internalReference = parseInternalReferenceHref(anchorProps.href);
-              if (!internalReference) {
-                return <a {...anchorProps} target="_blank" rel="noreferrer" />;
-              }
+          if (!block.content.trim()) {
+            return null;
+          }
 
-              return (
-                <a
-                  {...anchorProps}
-                  href={anchorProps.href}
-                  className={`internal-reference-link ${anchorProps.className ?? ""}`.trim()}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    void openInternalReference(internalReference, store, productController, teamController);
-                  }}
-                />
-              );
-            },
-            img(imageProps) {
-              if (!imageProps.src) {
-                return null;
-              }
+          return (
+            <ReactMarkdown
+              key={`markdown-${index}`}
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[[rehypeHighlight, { detect: true }]]}
+              urlTransform={(url) => {
+                if (parseInternalReferenceHref(url)) {
+                  return url;
+                }
 
-              return (
-                <button
-                  type="button"
-                  className="markdown-preview-image-button"
-                  aria-label={`Ver imagen ${imageProps.alt?.trim() || ""}`.trim()}
-                  onClick={() => setLightboxImage({ src: imageProps.src!, alt: imageProps.alt })}
-                >
-                  <img
-                    src={imageProps.src}
-                    alt={imageProps.alt ?? "Imagen de markdown"}
-                    title={imageProps.title}
-                  />
-                </button>
-              );
-            },
-            pre(preProps) {
-              const fallbackCode = extractTextContent(preProps.children);
-              const copyValue = fullCodeBlocks[renderedCodeBlockIndex] ?? fallbackCode;
-              renderedCodeBlockIndex += 1;
+                return defaultUrlTransform(url);
+              }}
+              components={{
+                a(anchorProps) {
+                  const internalReference = parseInternalReferenceHref(anchorProps.href);
+                  if (!internalReference) {
+                    return <a {...anchorProps} target="_blank" rel="noreferrer" />;
+                  }
 
-              return <MarkdownCodeBlock {...preProps} copyValue={copyValue} />;
-            }
-          }}
-        >
-          {content}
-        </ReactMarkdown>
+                  return (
+                    <a
+                      {...anchorProps}
+                      href={anchorProps.href}
+                      className={`internal-reference-link ${anchorProps.className ?? ""}`.trim()}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void openInternalReference(internalReference, store, productController, teamController);
+                      }}
+                    />
+                  );
+                },
+                img(imageProps) {
+                  if (!imageProps.src) {
+                    return null;
+                  }
+
+                  return (
+                    <button
+                      type="button"
+                      className="markdown-preview-image-button"
+                      aria-label={`Ver imagen ${imageProps.alt?.trim() || ""}`.trim()}
+                      onClick={() => setLightboxImage({ src: imageProps.src!, alt: imageProps.alt })}
+                    >
+                      <img
+                        src={imageProps.src}
+                        alt={imageProps.alt ?? "Imagen de markdown"}
+                        title={imageProps.title}
+                      />
+                    </button>
+                  );
+                },
+                pre(preProps) {
+                  const fallbackCode = extractTextContent(preProps.children);
+                  const copyValue = fullCodeBlocks[renderedCodeBlockIndex] ?? fallbackCode;
+                  renderedCodeBlockIndex += 1;
+
+                  return <MarkdownCodeBlock {...preProps} copyValue={copyValue} />;
+                }
+              }}
+            >
+              {block.content}
+            </ReactMarkdown>
+          );
+        })}
         {mustSlice ? (
           <button className="btn btn-secondary sm" onClick={() => setExpanded((current) => !current)}>
             {expanded ? "Colapsar" : "Expandir"}
@@ -201,6 +235,63 @@ function extractTextContent(node: React.ReactNode): string {
   }
 
   return "";
+}
+
+function splitMarkdownMediaBlocks(markdown: string): MarkdownContentBlock[] {
+  const blocks: MarkdownContentBlock[] = [];
+  const videoPattern = /<video\b([^>]*)><\/video>/gi;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = videoPattern.exec(markdown)) !== null) {
+    const preceding = markdown.slice(lastIndex, match.index);
+    if (preceding) {
+      blocks.push({
+        type: "markdown",
+        content: preceding
+      });
+    }
+
+    const attributes = match[1] ?? "";
+    const src = extractHtmlAttribute(attributes, "src");
+    if (!src) {
+      blocks.push({
+        type: "markdown",
+        content: match[0]
+      });
+    } else {
+      blocks.push({
+        type: "video",
+        src,
+        title: extractHtmlAttribute(attributes, "title") ?? undefined
+      });
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  const trailing = markdown.slice(lastIndex);
+  if (trailing || blocks.length === 0) {
+    blocks.push({
+      type: "markdown",
+      content: trailing
+    });
+  }
+
+  return blocks;
+}
+
+function extractHtmlAttribute(attributes: string, name: string) {
+  const match = new RegExp(`${name}=\"([^\"]*)\"`, "i").exec(attributes);
+  if (!match) {
+    return null;
+  }
+
+  return match[1]
+    .replaceAll("&quot;", "\"")
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">");
 }
 
 function extractMarkdownCodeBlocks(markdown: string): string[] {
