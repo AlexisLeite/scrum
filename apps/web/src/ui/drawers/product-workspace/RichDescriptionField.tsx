@@ -1,5 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
+import { FiMaximize2, FiMinimize2 } from "react-icons/fi";
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -29,6 +30,7 @@ import {
 import "@mdxeditor/editor/style.css";
 import { apiClient } from "../../../api/client";
 import { buildInternalReferenceMarkdown, ReferenceSearchResult } from "../../../lib/internal-references";
+import { useOverlayEscape } from "../../useOverlayEscape";
 import { ImageLightbox } from "./ImageLightbox";
 import "./rich-description-field.css";
 
@@ -45,6 +47,13 @@ type RichDescriptionFieldProps = {
 export type RichDescriptionFieldHandle = {
   focus: () => void;
   refreshLayout: () => void;
+};
+
+type ToolbarButtonProps = {
+  label: string;
+  pressed?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 };
 
 type UploadingImage = {
@@ -105,6 +114,11 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const [uploadingImages, setUploadingImages] = React.useState<Array<{ id: string; alt: string }>>([]);
   const [uploadError, setUploadError] = React.useState("");
   const [lightboxImage, setLightboxImage] = React.useState<{ src: string; alt?: string } | null>(null);
+  const [isMaximized, setIsMaximized] = React.useState(false);
+  const fieldStyle = {
+    "--rich-description-min-height": `${minHeight}px`,
+    "--rich-description-max-height": isMaximized ? "calc(100vh - 13rem)" : "75vh"
+  } as React.CSSProperties;
 
   const syncEditorHeight = React.useCallback(() => {
     const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
@@ -112,12 +126,16 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       return;
     }
 
-    const maxHeight = Math.round(window.innerHeight * 0.75);
+    const contentRect = content.getBoundingClientRect();
+    const viewportAllowance = Math.max(minHeight, Math.round(window.innerHeight - contentRect.top - (isMaximized ? 28 : 24)));
+    const maxHeight = isMaximized
+      ? viewportAllowance
+      : Math.min(Math.round(window.innerHeight * 0.75), viewportAllowance);
     content.style.height = "auto";
     const nextHeight = Math.min(Math.max(content.scrollHeight, minHeight), maxHeight);
     content.style.height = `${nextHeight}px`;
     content.style.overflowY = content.scrollHeight > maxHeight ? "auto" : "hidden";
-  }, [minHeight]);
+  }, [isMaximized, minHeight]);
 
   const scheduleHeightSync = React.useCallback(() => {
     if (resizeFrameRef.current !== null) {
@@ -284,6 +302,39 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [scheduleHeightSync]);
+
+  useOverlayEscape(() => {
+    setIsMaximized(false);
+  }, isMaximized);
+
+  React.useEffect(() => {
+    if (!isMaximized) {
+      return;
+    }
+
+    const { body } = document;
+    const previousOverflow = body.style.overflow;
+    body.style.overflow = "hidden";
+
+    return () => {
+      body.style.overflow = previousOverflow;
+    };
+  }, [isMaximized]);
+
+  React.useEffect(() => {
+    scheduleHeightSync();
+
+    if (!isMaximized) {
+      return;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      focusEditor();
+      scheduleHeightSync();
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [focusEditor, isMaximized, scheduleHeightSync]);
 
   React.useEffect(() => {
     if (!autoFocus || disabled) {
@@ -598,9 +649,16 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     };
   }, []);
 
-
-  return (
-    <div className="rich-description-field" ref={fieldRef}>
+  const editorField = (
+    <div
+      className={`rich-description-field${isMaximized ? " is-maximized" : ""}`}
+      ref={fieldRef}
+      style={fieldStyle}
+      role={isMaximized ? "dialog" : undefined}
+      aria-modal={isMaximized ? "true" : undefined}
+      aria-label={isMaximized ? `${label} en pantalla completa` : undefined}
+      onMouseDown={isMaximized ? (event) => event.stopPropagation() : undefined}
+    >
       <span className="rich-description-label">{label}</span>
       <MDXEditor
         ref={editorRef}
@@ -643,6 +701,14 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
                   <InsertImage />
                   <InsertTable />
                   <InsertCodeBlock />
+                  <Separator />
+                  <ToolbarButton
+                    label={isMaximized ? "Salir de pantalla completa" : "Pantalla completa"}
+                    pressed={isMaximized}
+                    onClick={() => setIsMaximized((current) => !current)}
+                  >
+                    {isMaximized ? <FiMinimize2 aria-hidden="true" /> : <FiMaximize2 aria-hidden="true" />}
+                  </ToolbarButton>
                 </>
               </DiffSourceToggleWrapper>
             )
@@ -704,8 +770,19 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         alt={lightboxImage?.alt}
         onClose={() => setLightboxImage(null)}
       />
-      <style>{`.rich-description-content { min-height: ${minHeight}px; max-height: 75vh; }`}</style>
     </div>
+  );
+
+  if (!isMaximized || typeof document === "undefined") {
+    return editorField;
+  }
+
+  return createPortal(
+    <div className="rich-description-maximized-shell">
+      <div className="rich-description-maximized-backdrop" onMouseDown={() => setIsMaximized(false)} />
+      {editorField}
+    </div>,
+    document.body
   );
 });
 
@@ -914,4 +991,21 @@ function iconLabel(icon: ReferenceSearchResult["icon"]) {
 
 function escapeMarkdownLabel(value: string): string {
   return value.replace(/[[\]\\]/g, "\\$&");
+}
+
+function ToolbarButton(props: ToolbarButtonProps) {
+  const { label, pressed = false, onClick, children } = props;
+
+  return (
+    <button
+      type="button"
+      className={`rich-description-toolbar-button${pressed ? " is-pressed" : ""}`}
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={pressed}
+      title={label}
+    >
+      {children}
+    </button>
+  );
 }

@@ -4,6 +4,39 @@
   min-width: 0;
 }
 
+.rich-description-maximized-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  pointer-events: none;
+}
+
+.rich-description-maximized-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--bg-soft) 72%, rgba(15, 23, 42, 0.42));
+  backdrop-filter: blur(10px);
+}
+
+.rich-description-field.is-maximized {
+  position: fixed;
+  inset: 18px;
+  z-index: 1201;
+  gap: 0.6rem;
+  padding: clamp(16px, 2vw, 24px);
+  pointer-events: auto;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+  box-shadow: 0 28px 72px rgba(15, 23, 42, 0.24);
+  overflow: auto;
+}
+
+.rich-description-field.is-maximized .rich-description-label {
+  padding-inline: 0.25rem;
+}
+
 .rich-description-label {
   font-weight: 600;
   color: var(--text-main);
@@ -46,6 +79,8 @@
 
 .rich-description-content {
   padding: 0.65rem 0.72rem 30vh;
+  min-height: var(--rich-description-min-height, 96px);
+  max-height: var(--rich-description-max-height, 75vh);
   color: var(--text-main);
   background: transparent;
   box-sizing: border-box;
@@ -115,8 +150,48 @@
   row-gap: 0.3rem;
 }
 
+.rich-description-field.is-maximized .rich-description-editor [class*="_toolbarRoot_"] {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding-top: 0.2rem;
+  padding-bottom: 0.35rem;
+  background: color-mix(in srgb, var(--field-bg) 92%, transparent);
+}
+
 .rich-description-editor [class*="_toolbarGroupOfGroups_"] {
   flex-wrap: wrap;
+}
+
+.rich-description-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.rich-description-toolbar-button:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.rich-description-toolbar-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.rich-description-toolbar-button.is-pressed {
+  border-color: color-mix(in srgb, var(--accent-a) 50%, transparent);
+  background: color-mix(in srgb, var(--accent-b) 12%, var(--panel));
+  color: var(--accent-a);
 }
 
 .rich-description-editor .cm-editor,
