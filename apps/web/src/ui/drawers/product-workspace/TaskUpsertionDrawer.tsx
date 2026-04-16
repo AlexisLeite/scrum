@@ -107,6 +107,7 @@ export class TaskUpsertionDrawer extends Drawer {
         definitionHref={
           this.options.task ? productTaskDefinitionPath(this.options.productId, this.options.task.id) : undefined
         }
+        closeOnSubmit={!this.options.task}
       />
     );
   }
