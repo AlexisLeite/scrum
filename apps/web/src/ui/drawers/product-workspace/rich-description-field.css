@@ -144,6 +144,21 @@
   cursor: zoom-in;
 }
 
+.rich-description-editor [class*="_imageWrapper_"] [class*="_editImageToolbar_"] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition: opacity 160ms ease, visibility 160ms ease, transform 160ms ease;
+}
+
+.rich-description-editor [class*="_imageWrapper_"]:is(:hover, :focus-within) [class*="_editImageToolbar_"] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
 .rich-description-editor [class*="_toolbarRoot_"] {
   flex-wrap: wrap;
   overflow-x: hidden;
