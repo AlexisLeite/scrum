@@ -136,7 +136,6 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     content.style.height = "auto";
     const nextHeight = Math.min(Math.max(content.scrollHeight, minHeight), maxHeight);
     content.style.height = `${nextHeight}px`;
-    content.style.overflowY = content.scrollHeight > maxHeight ? "auto" : "hidden";
   }, [isMaximized, minHeight]);
 
   const scheduleHeightSync = React.useCallback(() => {
