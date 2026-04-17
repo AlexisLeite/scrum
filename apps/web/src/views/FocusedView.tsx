@@ -429,6 +429,55 @@ export const FocusedView = observer(function FocusedView() {
   const activeReloadCountRef = React.useRef(0);
   const initialBoardResolvedRef = React.useRef(false);
 
+  const hydrateFocusedTaskStory = React.useCallback((task: FocusedTask, previousTask?: FocusedTask | null): FocusedTask => {
+    const resolvedStoryId = task.story?.id ?? task.storyId ?? previousTask?.story?.id ?? previousTask?.storyId ?? null;
+    if (!resolvedStoryId) {
+      return {
+        ...previousTask,
+        ...task,
+        storyId: null,
+        story: null
+      };
+    }
+
+    if (task.story?.title?.trim()) {
+      return {
+        ...previousTask,
+        ...task,
+        storyId: resolvedStoryId,
+        story: {
+          id: task.story.id ?? resolvedStoryId,
+          title: task.story.title
+        }
+      };
+    }
+
+    const preservedStory = previousTask
+      && (previousTask.story?.id ?? previousTask.storyId ?? null) === resolvedStoryId
+      && previousTask.story?.title?.trim()
+      ? {
+        id: resolvedStoryId,
+        title: previousTask.story.title
+      }
+      : null;
+
+    const productId = task.productId
+      ?? task.product?.id
+      ?? previousTask?.productId
+      ?? previousTask?.product?.id
+      ?? null;
+    const catalogStory = productId
+      ? taskDrawerCatalogRef.current.storiesByProductId.get(productId)?.find((story) => story.id === resolvedStoryId) ?? null
+      : null;
+
+    return {
+      ...previousTask,
+      ...task,
+      storyId: resolvedStoryId,
+      story: preservedStory ?? (catalogStory ? { id: catalogStory.id, title: catalogStory.title } : null)
+    };
+  }, []);
+
   const reloadBoard = React.useCallback(async (options?: { force?: boolean }) => {
     if (!options?.force && pendingMutationCountRef.current > 0) {
       return;
@@ -445,10 +494,13 @@ export const FocusedView = observer(function FocusedView() {
       if (requestId !== latestReloadRequestIdRef.current || mutationVersion !== boardMutationVersionRef.current) {
         return;
       }
-      setBoard({
+      setBoard((current) => ({
         hasActiveSprint: Boolean(nextBoard.hasActiveSprint),
-        columns: nextBoard.columns ?? []
-      });
+        columns: (nextBoard.columns ?? []).map((column) => ({
+          ...column,
+          tasks: column.tasks.map((task) => hydrateFocusedTaskStory(task as FocusedTask, findTask(current, task.id)))
+        }))
+      }));
       setError("");
       setChartRefreshToken((current) => current + 1);
     } catch (loadError) {
@@ -465,7 +517,7 @@ export const FocusedView = observer(function FocusedView() {
         setLoading(false);
       }
     }
-  }, [productController]);
+  }, [hydrateFocusedTaskStory, productController]);
 
   React.useEffect(() => {
     void reloadBoard();
@@ -904,7 +956,7 @@ export const FocusedView = observer(function FocusedView() {
           }).map((entry) => ({ id: entry.id, name: entry.name }))
           : [];
         return productAssignees.length > 0
-          ? mergeUniqueOptions([...productAssignees, ...buildCurrentTaskAssigneeOption(task)])
+          ? mergeUniqueOptions([...buildCurrentTaskAssigneeOption(task), ...productAssignees])
           : mergeUniqueOptions([...buildCurrentTaskAssigneeOption(task), ...assignees]);
       }
       if (!user || !canAssignFocusedTask(user, task, user.id)) {
@@ -966,7 +1018,7 @@ export const FocusedView = observer(function FocusedView() {
         }
         if (canAssignFocusedTaskToOthers(user, task.productId ?? task.product?.id ?? undefined)) {
           const updatedTask = await productController.assignTask(taskId, { assigneeId });
-          setBoard((current) => patchTaskInBoard(current, updatedTask as FocusedTask));
+          setBoard((current) => patchTaskInBoard(current, hydrateFocusedTaskStory(updatedTask as FocusedTask, findTask(current, taskId))));
           return;
         }
         if (!user) {
@@ -977,16 +1029,16 @@ export const FocusedView = observer(function FocusedView() {
             return;
           }
           const updatedTask = await productController.assignTask(taskId, { assigneeId: null });
-          setBoard((current) => patchTaskInBoard(current, updatedTask as FocusedTask));
+          setBoard((current) => patchTaskInBoard(current, hydrateFocusedTaskStory(updatedTask as FocusedTask, findTask(current, taskId))));
           return;
         }
         if (assigneeId !== user.id || !canClaimFocusedTask(user, task)) {
           return;
         }
         const updatedTask = await productController.assignTask(taskId, { assigneeId: user.id });
-        setBoard((current) => patchTaskInBoard(current, updatedTask as FocusedTask));
+        setBoard((current) => patchTaskInBoard(current, hydrateFocusedTaskStory(updatedTask as FocusedTask, findTask(current, taskId))));
       }),
-    [board, productController, user, withPendingTask]
+    [board, hydrateFocusedTaskStory, productController, user, withPendingTask]
   );
   const handleFocusedStatusChange = React.useCallback(
     (taskId: string, status: string, actualHours?: number) =>
@@ -996,9 +1048,9 @@ export const FocusedView = observer(function FocusedView() {
           return;
         }
         const updatedTask = await productController.updateTaskStatus(taskId, status, actualHours);
-        setBoard((current) => patchTaskInBoard(current, updatedTask as FocusedTask));
+        setBoard((current) => patchTaskInBoard(current, hydrateFocusedTaskStory(updatedTask as FocusedTask, findTask(current, taskId))));
       }),
-    [board, productController, user, withPendingTask]
+    [board, hydrateFocusedTaskStory, productController, user, withPendingTask]
   );
   const handleFocusedMoveTask = React.useCallback(
     (taskId: string, status: string, position: number, actualHours?: number) =>
@@ -1007,13 +1059,15 @@ export const FocusedView = observer(function FocusedView() {
         const sprintId = task?.sprintId ?? task?.sprint?.id ?? null;
         if (!user || !task || !canMoveFocusedTask(user, task, user.id) || !sprintId) {
           const updatedTask = await productController.updateTaskStatus(taskId, status, actualHours);
-          setBoard((current) => patchTaskInBoard(current, updatedTask as FocusedTask));
+          setBoard((current) => patchTaskInBoard(current, hydrateFocusedTaskStory(updatedTask as FocusedTask, findTask(current, taskId))));
           return;
         }
         const updatedTask = await productController.moveBoardTask(sprintId, taskId, { status, position, actualHours });
-        setBoard((current) => placeTaskInBoard(current, updatedTask as FocusedTask, status, position));
+        setBoard((current) =>
+          placeTaskInBoard(current, hydrateFocusedTaskStory(updatedTask as FocusedTask, findTask(current, taskId)), status, position)
+        );
       }),
-    [board, productController, user, withPendingTask]
+    [board, hydrateFocusedTaskStory, productController, user, withPendingTask]
   );
 
   if (!user) {
