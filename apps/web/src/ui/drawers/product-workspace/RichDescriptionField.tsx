@@ -119,7 +119,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const [isMaximized, setIsMaximized] = React.useState(false);
   const fieldStyle = {
     "--rich-description-min-height": `${minHeight}px`,
-    "--rich-description-max-height": isMaximized ? "calc(100vh - 13rem)" : "75vh"
+    "--rich-description-max-height": isMaximized ? "calc(100vh - 1px)" : "75vh"
   } as React.CSSProperties;
 
   const syncEditorHeight = React.useCallback(() => {

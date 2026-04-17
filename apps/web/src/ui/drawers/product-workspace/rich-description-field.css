@@ -4,6 +4,10 @@
   min-width: 0;
 }
 
+.mdxeditor-rich-text-editor {
+  overflow: auto;
+}
+
 .rich-description-maximized-shell {
   position: fixed;
   inset: 0;
@@ -21,20 +25,23 @@
 
 .rich-description-field.is-maximized {
   position: fixed;
-  inset: 18px;
+  inset: 0;
   z-index: 1201;
-  gap: 0.6rem;
-  padding: clamp(16px, 2vw, 24px);
+  padding: 0;
   pointer-events: auto;
-  border: 1px solid var(--border);
-  border-radius: 24px;
+  border: none;
+  border-radius: 0;
   background: color-mix(in srgb, var(--bg-card) 94%, transparent);
-  box-shadow: 0 28px 72px rgba(15, 23, 42, 0.24);
-  overflow: auto;
+  overflow: hidden;
+}
+
+.rich-description-field.is-maximized .rich-description-editor {
+  border: none;
+  border-radius: 0;
 }
 
 .rich-description-field.is-maximized .rich-description-label {
-  padding-inline: 0.25rem;
+  display: none;
 }
 
 .rich-description-label {
@@ -81,11 +88,13 @@
   padding: 0.65rem 0.72rem 30vh;
   min-height: var(--rich-description-min-height, 96px);
   max-height: var(--rich-description-max-height, 75vh);
+  max-width: 920px;
+  margin: auto;
   color: var(--text-main);
   background: transparent;
   box-sizing: border-box;
   resize: none;
-  overflow-y: hidden;
+  overflow-y: visible;
   --rich-heading-1-size: 2.0625rem;
   --rich-heading-2-size: 1.84375rem;
   --rich-heading-3-size: 1.625rem;
