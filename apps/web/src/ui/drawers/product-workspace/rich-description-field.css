@@ -374,3 +374,13 @@
   color: var(--text-muted);
   font-size: 0.92rem;
 }
+
+[class^="_codeMirrorToolbar"] {
+  display: none;
+}
+
+[class^="_codeMirrorWrapper"] {
+  &:hover [class^="_codeMirrorToolbar"] {
+    display: flex;
+  }
+}
