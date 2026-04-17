@@ -85,7 +85,7 @@
 }
 
 .rich-description-content {
-  padding: 0.65rem 0.72rem 30vh;
+  padding: 0.65rem 0.72rem 0.65rem;
   min-height: var(--rich-description-min-height, 96px);
   max-height: var(--rich-description-max-height, 75vh);
   max-width: 920px;
@@ -101,6 +101,12 @@
   --rich-heading-4-size: 1.40625rem;
   --rich-heading-5-size: 1.1875rem;
   --rich-heading-6-size: 1rem;
+
+  &::after {
+    content: "";
+    display: block;
+    height: 30vh;
+  }
 }
 
 .rich-description-content :is(h1, h2, h3, h4, h5, h6) {
@@ -191,7 +197,7 @@
 .rich-description-field.is-maximized .rich-description-editor [class*="_toolbarRoot_"] {
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: 2;
   padding-top: 0.2rem;
   padding-bottom: 0.35rem;
   background: color-mix(in srgb, var(--field-bg) 92%, transparent);

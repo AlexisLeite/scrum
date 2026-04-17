@@ -108,6 +108,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const searchTimeoutRef = React.useRef<number | null>(null);
   const pendingUploadsRef = React.useRef<Map<string, UploadingImage>>(new Map());
   const resolvedUploadsRef = React.useRef<Map<string, string>>(new Map());
+  const [editorOverlayContainer, setEditorOverlayContainer] = React.useState<HTMLElement | null>(null);
   const [activeAnchor, setActiveAnchor] = React.useState<ActiveAnchor | null>(null);
   const [referenceResults, setReferenceResults] = React.useState<ReferenceSearchResult[]>([]);
   const [referenceLoading, setReferenceLoading] = React.useState(false);
@@ -121,6 +122,11 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     "--rich-description-min-height": `${minHeight}px`,
     "--rich-description-max-height": isMaximized ? "calc(100vh - 1px)" : "75vh"
   } as React.CSSProperties;
+
+  const handleFieldRef = React.useCallback((node: HTMLDivElement | null) => {
+    fieldRef.current = node;
+    setEditorOverlayContainer(node);
+  }, []);
 
   const syncEditorHeight = React.useCallback(() => {
     const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
@@ -688,7 +694,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const editorField = (
     <div
       className={`rich-description-field${isMaximized ? " is-maximized" : ""}`}
-      ref={fieldRef}
+      ref={handleFieldRef}
       style={fieldStyle}
       role={isMaximized ? "dialog" : undefined}
       aria-modal={isMaximized ? "true" : undefined}
@@ -706,6 +712,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         }}
         className="rich-description-editor"
         contentEditableClassName="rich-description-content"
+        overlayContainer={isMaximized ? editorOverlayContainer : undefined}
         readOnly={disabled}
         plugins={[
           headingsPlugin({ allowedHeadingLevels: ALLOWED_HEADING_LEVELS }),
