@@ -1,5 +1,4 @@
 import React from "react";
-import { FiPrinter } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import { DraftDto } from "@scrum/contracts";
 import { ProductController } from "../../../controllers";
@@ -324,6 +323,7 @@ export function TaskUpsertionForm(props: {
     typeof form.customEstimatedHours === "string" ? form.customEstimatedHours : initialEstimatedHours.custom;
   const actualHours = typeof form.actualHours === "string" ? form.actualHours : "";
   const formDisabled = readOnly || saving || isHydratingRemote;
+  const editorDisabled = readOnly || isHydratingRemote;
 
   const shouldSelectStory = !defaultStoryId || Boolean(fixedSprintId) || Boolean(task);
   const storySelectionLocked = !task && Boolean(defaultStoryId);
@@ -532,6 +532,7 @@ export function TaskUpsertionForm(props: {
     ]
   );
   const hasUnsavedChanges = !readOnly && !isHydratingRemote && !taskCloseSnapshotsEqual(currentCloseSnapshot, closeBaseline);
+  const saveActionDisabled = readOnly || isHydratingRemote || saving || !hasUnsavedChanges;
   const canPrintTask = !saving && !isHydratingRemote && !printing && Boolean(title.trim());
 
   useDrawerCloseGuard({
@@ -629,8 +630,12 @@ export function TaskUpsertionForm(props: {
           label="Descripcion"
           value={description}
           onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
-          disabled={formDisabled}
+          disabled={editorDisabled}
           productId={options.productId}
+          onPrint={() => void handlePrint()}
+          printDisabled={!canPrintTask}
+          onSave={!readOnly ? () => void persistTask() : undefined}
+          saveDisabled={saveActionDisabled}
         />
         {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
 
@@ -771,25 +776,13 @@ export function TaskUpsertionForm(props: {
               type="button"
               className="btn btn-primary"
               onClick={() => void persistTask()}
-              disabled={formDisabled}
+              disabled={saveActionDisabled}
               aria-busy={saving}
             >
               {saving ? <span className="submit-loading-indicator" aria-hidden="true" /> : null}
               {task ? "Guardar tarea" : "Crear tarea"}
             </button>
           ) : null}
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => {
-              void handlePrint();
-            }}
-            disabled={!canPrintTask}
-            aria-busy={printing}
-          >
-            <FiPrinter aria-hidden="true" />
-            {printing ? "Descargando..." : "Imprimir"}
-          </button>
           {task && definitionHref ? (
             <button
               type="button"

@@ -6,6 +6,7 @@
 
 .mdxeditor-rich-text-editor {
   overflow: auto;
+  scroll-padding-bottom: var(--rich-description-tail-space, 30vh);
 }
 
 .rich-description-maximized-shell {
@@ -40,6 +41,10 @@
   border-radius: 0;
 }
 
+.rich-description-field.is-maximized .rich-description-content {
+  padding-top: 1px;
+}
+
 .rich-description-field.is-maximized .rich-description-label {
   display: none;
 }
@@ -50,6 +55,7 @@
 }
 
 .rich-description-editor {
+  --rich-description-tail-space: 30vh;
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
@@ -77,6 +83,17 @@
   --code-block-bg: color-mix(in srgb, var(--bg-soft) 78%, transparent);
   --code-block-selection-bg: color-mix(in srgb, var(--accent-a) 28%, var(--bg-soft));
   --code-block-caret: color-mix(in srgb, #ffffff 92%, var(--accent-a) 8%);
+  --code-block-comment: color-mix(in srgb, var(--text-main) 20%, var(--text-muted) 80%);
+}
+
+:root[data-theme="dark"] .rich-description-editor {
+  --code-block-comment: color-mix(in srgb, var(--text-main) 72%, var(--text-muted) 28%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .rich-description-editor {
+    --code-block-comment: color-mix(in srgb, var(--text-main) 72%, var(--text-muted) 28%);
+  }
 }
 
 .rich-description-editor:focus-within {
@@ -105,8 +122,12 @@
   &::after {
     content: "";
     display: block;
-    height: 30vh;
+    height: var(--rich-description-tail-space);
   }
+}
+
+.rich-description-content>* {
+  scroll-margin-bottom: var(--rich-description-tail-space);
 }
 
 .rich-description-content :is(h1, h2, h3, h4, h5, h6) {
@@ -227,6 +248,17 @@
   background: color-mix(in srgb, var(--panel) 92%, transparent);
 }
 
+.rich-description-toolbar-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.rich-description-toolbar-button:disabled:hover {
+  border-color: var(--border-subtle);
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+}
+
 .rich-description-toolbar-button:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
@@ -286,7 +318,11 @@
 
 .rich-description-editor .cm-editor .cm-cursor,
 .rich-description-editor .cm-editor .cm-dropCursor {
-  border-left-color: var(--code-block-caret) !important;
+  border-left-color: color-mix(in srgb, #ffffff 92%, var(--accent-a) 8%)var(--code-block-caret) !important;
+}
+
+.rich-description-editor .cm-editor :is(.ͼ1b, .ͼ1n) {
+  color: var(--code-block-comment) !important;
 }
 
 .rich-description-editor a {

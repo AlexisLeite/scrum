@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { FiMaximize2, FiMinimize2, FiVideo } from "react-icons/fi";
+import { FiMaximize2, FiMinimize2, FiPrinter, FiSave, FiVideo } from "react-icons/fi";
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -42,6 +42,10 @@ type RichDescriptionFieldProps = {
   disabled?: boolean;
   productId?: string;
   autoFocus?: boolean;
+  onPrint?: (() => Promise<void> | void) | undefined;
+  printDisabled?: boolean;
+  onSave?: (() => Promise<void> | void) | undefined;
+  saveDisabled?: boolean;
 };
 
 export type RichDescriptionFieldHandle = {
@@ -53,6 +57,7 @@ type ToolbarButtonProps = {
   label: string;
   pressed?: boolean;
   onClick: () => void;
+  disabled?: boolean;
   children: React.ReactNode;
 };
 
@@ -99,7 +104,19 @@ function normalizeEditorImageUrl(value: string) {
 }
 
 export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle, RichDescriptionFieldProps>(function RichDescriptionField(props, ref) {
-  const { label, value, onChange, rows = 6, disabled = false, productId, autoFocus = false } = props;
+  const {
+    label,
+    value,
+    onChange,
+    rows = 6,
+    disabled = false,
+    productId,
+    autoFocus = false,
+    onPrint,
+    printDisabled = false,
+    onSave,
+    saveDisabled = false
+  } = props;
   const minHeight = Math.max(rows, 4) * 24;
   const editorRef = React.useRef<MDXEditorMethods | null>(null);
   const fieldRef = React.useRef<HTMLDivElement | null>(null);
@@ -755,6 +772,28 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
                   <InsertTable />
                   <InsertCodeBlock />
                   <Separator />
+                  {onPrint ? (
+                    <ToolbarButton
+                      label="Imprimir"
+                      onClick={() => {
+                        void onPrint();
+                      }}
+                      disabled={printDisabled}
+                    >
+                      <FiPrinter aria-hidden="true" />
+                    </ToolbarButton>
+                  ) : null}
+                  {onSave ? (
+                    <ToolbarButton
+                      label="Guardar"
+                      onClick={() => {
+                        void onSave();
+                      }}
+                      disabled={saveDisabled}
+                    >
+                      <FiSave aria-hidden="true" />
+                    </ToolbarButton>
+                  ) : null}
                   <ToolbarButton
                     label={isMaximized ? "Salir de pantalla completa" : "Pantalla completa"}
                     pressed={isMaximized}
@@ -1072,13 +1111,14 @@ function escapeHtmlAttribute(value: string) {
 }
 
 function ToolbarButton(props: ToolbarButtonProps) {
-  const { label, pressed = false, onClick, children } = props;
+  const { label, pressed = false, onClick, disabled = false, children } = props;
 
   return (
     <button
       type="button"
       className={`rich-description-toolbar-button${pressed ? " is-pressed" : ""}`}
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       aria-pressed={pressed}
       title={label}

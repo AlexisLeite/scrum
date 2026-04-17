@@ -64,9 +64,23 @@ const TaskInlineMessageEditor = React.memo(function TaskInlineMessageEditor(prop
   productId: string;
   submitting: boolean;
   submitLabel: string;
+  onEditorSave?: () => void;
+  hasPendingChanges?: boolean;
 }) {
-  const { label, body, onBodyChange, onSubmit, onCancel, productId, submitting, submitLabel } = props;
+  const {
+    label,
+    body,
+    onBodyChange,
+    onSubmit,
+    onCancel,
+    productId,
+    submitting,
+    submitLabel,
+    onEditorSave,
+    hasPendingChanges = Boolean(body.trim())
+  } = props;
   const editorRef = React.useRef<RichDescriptionFieldHandle | null>(null);
+  const submitDisabled = submitting || !body.trim() || !hasPendingChanges;
 
   React.useEffect(() => {
     editorRef.current?.focus();
@@ -84,6 +98,8 @@ const TaskInlineMessageEditor = React.memo(function TaskInlineMessageEditor(prop
         disabled={submitting}
         productId={productId}
         autoFocus
+        onSave={onEditorSave}
+        saveDisabled={submitDisabled}
       />
       <div className="row-actions compact">
         <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={submitting}>
@@ -93,7 +109,7 @@ const TaskInlineMessageEditor = React.memo(function TaskInlineMessageEditor(prop
           type="button"
           className="btn btn-primary"
           onClick={onSubmit}
-          disabled={submitting || !body.trim()}
+          disabled={submitDisabled}
         >
           {submitLabel}
         </button>
@@ -188,6 +204,8 @@ export function TaskMessageThread(props: TaskMessageThreadProps) {
                 productId={rest.productId}
                 submitting={isSubmittingEdit}
                 submitLabel="Guardar edicion"
+                onEditorSave={() => void rest.onSubmitEdit()}
+                hasPendingChanges={rest.editingBody.trim() !== message.body.trim()}
               />
             ) : (
               <MarkdownPreview markdown={message.body} className="task-message-body markdown-preview-card" />
