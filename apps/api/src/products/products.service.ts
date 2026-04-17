@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, Role } from "@prisma/client";
+import { DraftEntityType, Prisma, Role } from "@prisma/client";
 import { AuthUser } from "../common/current-user.decorator";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -115,7 +115,47 @@ export class ProductsService {
     if (!existing || existing.isSystem) {
       throw new NotFoundException("Product not found");
     }
-    await this.prisma.product.delete({ where: { id } });
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.activityLog.deleteMany({
+        where: {
+          productId: id
+        }
+      });
+
+      await tx.userDraft.deleteMany({
+        where: {
+          OR: [
+            { productId: id },
+            {
+              entityType: DraftEntityType.PRODUCT,
+              entityId: id
+            }
+          ]
+        }
+      });
+
+      await tx.task.deleteMany({
+        where: {
+          productId: id
+        }
+      });
+
+      await tx.sprint.deleteMany({
+        where: {
+          productId: id
+        }
+      });
+
+      await tx.userStory.deleteMany({
+        where: {
+          productId: id
+        }
+      });
+
+      await tx.product.delete({ where: { id } });
+    });
+
     return { ok: true };
   }
 

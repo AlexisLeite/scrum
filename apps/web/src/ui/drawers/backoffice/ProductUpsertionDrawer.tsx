@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../../api/client";
 import { ProductController } from "../../../controllers";
 import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
+import { canDeleteProductsAdministration } from "../../../lib/permissions";
 import { productRootDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
@@ -10,6 +11,7 @@ import { RichDescriptionField } from "../product-workspace/RichDescriptionField"
 import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
+import { ModalsController } from "../../modals/ModalsController";
 
 type ProductItem = {
   id: string;
@@ -106,11 +108,13 @@ export function ProductUpsertionForm(props: {
   const store = useRootStore();
   const isEditing = Boolean(product);
   const [saving, setSaving] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
   const [error, setError] = React.useState("");
   const [activity, setActivity] = React.useState<ActivityItem[]>([]);
   const [activityError, setActivityError] = React.useState("");
   const [accessUsers, setAccessUsers] = React.useState<ProductAccessUser[]>([]);
   const [accessError, setAccessError] = React.useState("");
+  const canDeleteProduct = canDeleteProductsAdministration(store.session.user);
   const [closeBaseline, setCloseBaseline] = React.useState<ProductCloseSnapshot>(() => normalizeProductCloseSnapshot({
     name: product?.name ?? "",
     key: product?.key ?? "",
@@ -131,7 +135,7 @@ export function ProductUpsertionForm(props: {
   const name = typeof form.name === "string" ? form.name : "";
   const key = typeof form.key === "string" ? form.key : "";
   const description = typeof form.description === "string" ? form.description : "";
-  const formDisabled = saving || isHydratingRemote;
+  const formDisabled = saving || deleting || isHydratingRemote;
   const currentCloseSnapshot = React.useMemo(
     () => normalizeProductCloseSnapshot({
       name,
@@ -241,6 +245,38 @@ export function ProductUpsertionForm(props: {
     }
   }, [clearDraft, close, closeOnSubmit, controller, description, formDisabled, isEditing, key, name, onSaved, product]);
 
+  const removeProduct = React.useCallback(async () => {
+    if (!product || deleting) {
+      return;
+    }
+
+    const confirmed = await ModalsController.confirm({
+      title: "Eliminar producto",
+      message: `Eliminar "${product.name}" borrara tambien todas las historias, sprints y tareas asociadas. Deseas continuar?`,
+      confirmLabel: "Eliminar producto",
+      cancelLabel: "Cancelar",
+      tone: "danger"
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleting(true);
+    setError("");
+    try {
+      await controller.deleteProduct(product.id);
+      if (onSaved) {
+        await onSaved();
+      }
+      close();
+    } catch (removeError) {
+      setError(errorMessage(removeError));
+    } finally {
+      setDeleting(false);
+    }
+  }, [close, controller, deleting, onSaved, product]);
+
   return (
     <div className="form-grid">
       <label>
@@ -321,6 +357,11 @@ export function ProductUpsertionForm(props: {
             }}
           >
             Ver definicion
+          </button>
+        ) : null}
+        {isEditing && product && canDeleteProduct ? (
+          <button className="btn btn-danger" disabled={formDisabled} onClick={() => void removeProduct()}>
+            {deleting ? "Eliminando..." : "Eliminar"}
           </button>
         ) : null}
         <button

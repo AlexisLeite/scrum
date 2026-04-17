@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
-import { ActivityEntityType, StoryStatus } from "@prisma/client";
+import { ActivityEntityType, DraftEntityType, StoryStatus } from "@prisma/client";
 import { ActivityService } from "../activity/activity.service";
 import { AuthUser } from "../common/current-user.decorator";
 import { PermissionsService } from "../permissions/permissions.service";
@@ -260,7 +260,46 @@ export class StoriesService {
       "Insufficient product permission"
     );
 
-    await this.prisma.userStory.delete({ where: { id } });
+    const tasks = await this.prisma.task.findMany({
+      where: { storyId: id },
+      select: { id: true }
+    });
+    const taskIds = tasks.map((task) => task.id);
+
+    await this.prisma.$transaction(async (tx) => {
+      if (taskIds.length > 0) {
+        await tx.userDraft.deleteMany({
+          where: {
+            OR: [
+              {
+                entityType: DraftEntityType.TASK,
+                entityId: { in: taskIds }
+              },
+              {
+                entityType: DraftEntityType.TASK_MESSAGE,
+                entityId: { in: taskIds }
+              }
+            ]
+          }
+        });
+
+        await tx.task.deleteMany({
+          where: {
+            id: { in: taskIds }
+          }
+        });
+      }
+
+      await tx.userDraft.deleteMany({
+        where: {
+          entityType: DraftEntityType.STORY,
+          entityId: id
+        }
+      });
+
+      await tx.userStory.delete({ where: { id } });
+    });
+
     await this.activityService.record({
       actorUserId: user.sub,
       productId: existing.productId,
@@ -269,7 +308,8 @@ export class StoriesService {
       action: "STORY_DELETED",
       metadataJson: {
         status: existing.status,
-        storyPoints: existing.storyPoints
+        storyPoints: existing.storyPoints,
+        deletedTaskCount: taskIds.length
       },
       beforeJson: existing
     });

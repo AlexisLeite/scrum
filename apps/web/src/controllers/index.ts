@@ -323,6 +323,11 @@ export class ProductController {
     return story;
   }
 
+  async deleteStory(storyId: string) {
+    await apiClient.del(`/stories/${storyId}`);
+    this.store.stories.remove(storyId);
+  }
+
   async closeStory(storyId: string) {
     return apiClient.post<any>(`/stories/${storyId}/close`);
   }

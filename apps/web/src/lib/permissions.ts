@@ -373,6 +373,21 @@ export function canEditStories(
   return hasAnyProductPermission(subject, productId, STORY_EDIT_PERMISSIONS);
 }
 
+export function canDeleteStories(
+  subject: Role | SessionAccess | null | undefined,
+  productId?: string
+): boolean {
+  if (!isSessionAccess(subject)) {
+    return canManageDeliveryByRole(subject);
+  }
+
+  if (!productId) {
+    return canManageDeliveryByRole(subject.role);
+  }
+
+  return hasAnyProductPermission(subject, productId, ["product.admin.story.delete"]);
+}
+
 export function canRankStories(role: Role | null | undefined): boolean {
   return role === "platform_admin" || role === "product_owner" || role === "scrum_master";
 }

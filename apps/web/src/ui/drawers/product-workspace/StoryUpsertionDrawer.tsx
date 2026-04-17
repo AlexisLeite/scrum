@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ProductController } from "../../../controllers";
 import { useProductAssignableUsers } from "../../../hooks/useProductAssignableUsers";
 import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
+import { canDeleteStories } from "../../../lib/permissions";
 import { productStoryDefinitionPath } from "../../../routes/product-routes";
 import { productCollectionScope, storyCollectionScope, useRootStore } from "../../../stores/root-store";
 import { Drawer, DrawerRenderContext } from "../Drawer";
@@ -114,8 +115,10 @@ export function StoryUpsertionForm(props: {
   const { assignableUsers } = useProductAssignableUsers(controller, [productId]);
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
   const [taskError, setTaskError] = React.useState("");
   const [tasksLoading, setTasksLoading] = React.useState(false);
+  const canDeleteStory = canDeleteStories(store.session.user, productId);
   const draft = useDraftPersistence({
     userId: store.session.user?.id,
     entityType: "STORY",
@@ -134,7 +137,7 @@ export function StoryUpsertionForm(props: {
   const description = typeof form.description === "string" ? form.description : "";
   const storyPoints = typeof form.storyPoints === "string" ? form.storyPoints : "3";
   const status = form.status === "READY" ? "READY" : "DRAFT";
-  const formDisabled = saving || isHydratingRemote;
+  const formDisabled = saving || deleting || isHydratingRemote;
   const editableManualStatus = !story || isManualStoryStatus(story.status);
   const [closeBaseline, setCloseBaseline] = React.useState(() => JSON.stringify({
     title: story?.title ?? "",
@@ -253,6 +256,39 @@ export function StoryUpsertionForm(props: {
       setError(submitError instanceof Error ? submitError.message : "No se pudo guardar la historia.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const removeStory = async () => {
+    if (!story || deleting) {
+      return;
+    }
+
+    const confirmed = await ModalsController.confirm({
+      title: "Eliminar historia",
+      message: `Eliminar "${story.title}" borrara tambien todas las tareas asociadas. Deseas continuar?`,
+      confirmLabel: "Eliminar historia",
+      cancelLabel: "Cancelar",
+      tone: "danger"
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleting(true);
+    setError("");
+    try {
+      await controller.deleteStory(story.id);
+      await clearDraft();
+      if (onDone) {
+        await onDone();
+      }
+      close();
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : "No se pudo eliminar la historia.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -456,6 +492,16 @@ export function StoryUpsertionForm(props: {
             disabled={formDisabled}
           >
             Ver definicion
+          </button>
+        ) : null}
+        {story && canDeleteStory ? (
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => void removeStory()}
+            disabled={formDisabled}
+          >
+            {deleting ? "Eliminando..." : "Eliminar"}
           </button>
         ) : null}
         <button
