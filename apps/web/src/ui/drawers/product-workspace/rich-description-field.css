@@ -28,6 +28,7 @@
   position: fixed;
   inset: 0;
   z-index: 1201;
+  grid-template-rows: auto minmax(0, 1fr);
   padding: 0;
   pointer-events: auto;
   border: none;
@@ -39,10 +40,19 @@
 .rich-description-field.is-maximized .rich-description-editor {
   border: none;
   border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .rich-description-field.is-maximized .rich-description-content {
   padding-top: 1px;
+}
+
+.rich-description-field.is-maximized .mdxeditor-diff-source-wrapper,
+.rich-description-field.is-maximized .mdxeditor-rich-text-editor {
+  flex: 1;
+  min-height: 0;
 }
 
 .rich-description-field.is-maximized .rich-description-label {
@@ -118,12 +128,19 @@
   --rich-heading-4-size: 1.40625rem;
   --rich-heading-5-size: 1.1875rem;
   --rich-heading-6-size: 1rem;
+}
 
-  &::after {
-    content: "";
-    display: block;
-    height: var(--rich-description-tail-space);
-  }
+.rich-description-editor .mdxeditor-root-contenteditable {
+  position: relative;
+}
+
+.rich-description-editor .mdxeditor-root-contenteditable::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: var(--rich-description-tail-space);
+  pointer-events: none;
 }
 
 .rich-description-content>* {
