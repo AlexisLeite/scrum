@@ -5,6 +5,7 @@ import { ProductController } from "../../controllers";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
 import { productCollectionScope, useRootStore } from "../../stores/root-store";
 import { SearchableSelect } from "../../ui/SearchableSelect";
+import { TaskCompletionDialog } from "../../ui/drawers/product-workspace/TaskCompletionDialog";
 import { StoryUpsertionDrawer } from "../../ui/drawers/product-workspace/StoryUpsertionDrawer";
 import { TaskUpsertionDrawer } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import {
@@ -29,6 +30,7 @@ import {
   StoryItem,
   storySortOptions,
   StorySortOption,
+  StoryTaskSummary,
   TaskDetail,
   toEditableTask
 } from "./ProductWorkspaceViewShared";
@@ -127,12 +129,14 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const user = store.session.user;
   const canManageStories = canEditStories(user, productId);
   const canManageTasks = canCreateTasks(user, productId);
+  const canEditTasks = canEditTaskFields(user, productId);
   const { assignableUsers } = useProductAssignableUsers(controller, productId ? [productId] : []);
   const [search, setSearch] = React.useState("");
   const [sortBy, setSortBy] = React.useState<StorySortOption>(() => loadBacklogSort(productId));
   const [expandedStoryIds, setExpandedStoryIds] = React.useState<Record<string, boolean>>({});
   const [expandedTaskIds, setExpandedTaskIds] = React.useState<Record<string, boolean>>({});
   const [openingTaskId, setOpeningTaskId] = React.useState("");
+  const [updatingTaskId, setUpdatingTaskId] = React.useState("");
   const [actionError, setActionError] = React.useState("");
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [showClosedStories, setShowClosedStories] = React.useState(false);
@@ -143,6 +147,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const [taskCreatedFrom, setTaskCreatedFrom] = React.useState("");
   const [taskCreatedTo, setTaskCreatedTo] = React.useState("");
   const [storyStatusActionId, setStoryStatusActionId] = React.useState("");
+  const [completionRequest, setCompletionRequest] = React.useState<{ taskId: string; title: string } | null>(null);
   const productScopeKey = productId ? productCollectionScope(productId) : null;
 
   React.useEffect(() => {
@@ -214,6 +219,13 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
     taskStatusFilter !== "" ||
     taskCreatedFrom !== "" ||
     taskCreatedTo !== "";
+  const backlogTaskById = React.useMemo(
+    () =>
+      new Map(
+        stories.flatMap((story) => (story.tasks ?? []).map((task) => [task.id, task] as const))
+      ),
+    [stories]
+  );
 
   const visibleStories = React.useMemo<StoryWithSearchState[]>(() => {
     return stories
@@ -297,6 +309,39 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
     await controller.loadStories(productId);
   };
 
+  const updateBacklogTaskStatus = async (task: StoryTaskSummary, nextStatus: string, actualHours?: number) => {
+    if (!canEditTasks || nextStatus === task.status) {
+      return;
+    }
+
+    setActionError("");
+    setUpdatingTaskId(task.id);
+    try {
+      await controller.updateTaskStatus(task.id, nextStatus, actualHours);
+      await reloadBacklog();
+    } catch (error) {
+      setActionError(getErrorMessage(error));
+    } finally {
+      setUpdatingTaskId("");
+    }
+  };
+
+  const requestBacklogTaskStatusChange = (task: StoryTaskSummary, nextStatus: string) => {
+    if (!canEditTasks || nextStatus === task.status) {
+      return;
+    }
+
+    if (nextStatus === "Done" && task.actualHours == null) {
+      setCompletionRequest({
+        taskId: task.id,
+        title: task.title?.trim() || "esta tarea"
+      });
+      return;
+    }
+
+    void updateBacklogTaskStatus(task, nextStatus, task.actualHours ?? undefined);
+  };
+
   const openStoryDrawer = (story?: StoryItem) => {
     store.drawers.add(
       new StoryUpsertionDrawer({
@@ -360,7 +405,6 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
         loadTaskDrawerContext()
       ]);
       const taskDetail = detail as TaskDetail;
-      const canEditTask = canEditTaskFields(user, productId);
 
       store.drawers.add(
         new TaskUpsertionDrawer({
@@ -370,8 +414,8 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
           sprints,
           assignees,
           statusOptions: buildStatusOptions(taskDetail.status),
-          readOnly: !canEditTask,
-          definitionReadOnly: !canEditTask,
+          readOnly: !canEditTasks,
+          definitionReadOnly: !canEditTasks,
           allowTaskCreation: canCreateTaskFromMessage(user, productId),
           allowMessageCreation: canCommentOnVisibleTask(user, taskDetail, user?.id, productId),
           task: toEditableTask(taskDetail),
@@ -579,7 +623,10 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
               expanded={Boolean(expandedStoryIds[story.id] || shouldAutoExpandStories)}
               canManageStories={canManageStories}
               canManageTasks={canManageTasks}
+              canEditTaskStatus={canEditTasks}
+              taskStatusOptions={taskFilterOptions.statuses}
               openingTaskId={openingTaskId}
+              updatingTaskId={updatingTaskId}
               expandedTaskIds={expandedTaskIds}
               canCloseStory={story.canCloseStory}
               onToggleStory={toggleStory}
@@ -596,6 +643,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
               onOpenTask={(taskId) => {
                 void openTaskDrawer(taskId);
               }}
+              onUpdateTaskStatus={requestBacklogTaskStatusChange}
               onToggleTask={toggleTask}
               statusActionPending={storyStatusActionId === story.id}
             />
@@ -606,6 +654,18 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
           ) : null}
         </div>
       </section>
+      <TaskCompletionDialog
+        open={Boolean(completionRequest)}
+        taskTitle={completionRequest?.title ?? "esta tarea"}
+        onCancel={() => setCompletionRequest(null)}
+        onConfirm={(hours) => {
+          const task = completionRequest ? backlogTaskById.get(completionRequest.taskId) : undefined;
+          setCompletionRequest(null);
+          if (task) {
+            void updateBacklogTaskStatus(task, "Done", hours);
+          }
+        }}
+      />
     </div>
   );
 });

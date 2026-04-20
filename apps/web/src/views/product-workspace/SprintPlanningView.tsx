@@ -58,20 +58,37 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
         <div className="sprint-grid sprint-planning-grid">
           {sprints.map((sprint) => (
             <article key={sprint.id} className="sprint-tile sprint-planning-tile">
-              <div className="section-head sprint-planning-tile-head">
-                <h4 className="sprint-planning-tile-title">{sprint.name}</h4>
-                <span className={statusClass(sprint.status)}>{sprint.status}</span>
+              <div className="sprint-planning-tile-top">
+                <div className="section-head sprint-planning-tile-head">
+                  <div className="sprint-planning-tile-copy">
+                    <p className="workspace-context sprint-planning-tile-eyebrow">Sprint</p>
+                    <h4 className="sprint-planning-tile-title">{sprint.name}</h4>
+                  </div>
+                  <span className={statusClass(sprint.status)}>{sprint.status}</span>
+                </div>
+                <div className="sprint-planning-tile-dates">
+                  <div className="sprint-planning-tile-date">
+                    <span>Inicio</span>
+                    <strong>{fmtDate(sprint.startDate)}</strong>
+                  </div>
+                  <div className="sprint-planning-tile-date">
+                    <span>Fin</span>
+                    <strong>{fmtDate(sprint.endDate)}</strong>
+                  </div>
+                </div>
               </div>
-              <MarkdownPreview
-                markdown={sprint.goal}
-                compact
-                emptyLabel="Sin objetivo definido"
-                className="sprint-planning-tile-goal"
-              />
-              <p className="muted sprint-planning-tile-meta">Inicio: {fmtDate(sprint.startDate)} | Fin: {fmtDate(sprint.endDate)}</p>
-              <p className="muted sprint-planning-tile-meta">Completar sprint: cierra el ciclo y evita nuevos cambios de planificacion.</p>
+              <div className="sprint-planning-tile-body">
+                <p className="sprint-planning-tile-kicker">Objetivo</p>
+                <MarkdownPreview
+                  markdown={sprint.goal}
+                  compact
+                  emptyLabel="Sin objetivo definido"
+                  className="sprint-planning-tile-goal"
+                />
+              </div>
+              <p className="muted sprint-planning-tile-note">Completar sprint: cierra el ciclo y evita nuevos cambios de planificacion.</p>
               <div className="row-actions compact sprint-planning-tile-actions">
-                {canManageSprintPlanning ? <button className="btn btn-secondary" onClick={() => openSprintDrawer(sprint)}>Editar</button> : null}
+                {canManageSprintPlanning ? <button type="button" className="btn btn-secondary" onClick={() => openSprintDrawer(sprint)}>Editar</button> : null}
                 {canManageSprintPlanning && sprint.status === "PLANNED" ? (
                   <NavLink to={productSprintDefinitionPath(productId, sprint.id)} className="btn btn-secondary">
                     Planificar
@@ -79,6 +96,7 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
                 ) : null}
                 {canManageSprintPlanning ? (
                   <button
+                    type="button"
                     className="btn btn-secondary"
                     onClick={async () => {
                       const message =
@@ -97,6 +115,7 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
                 ) : null}
                 {canManageSprintPlanning ? (
                   <button
+                    type="button"
                     className="btn btn-secondary"
                     disabled={sprint.status !== "PLANNED"}
                     onClick={async () => {
@@ -109,6 +128,7 @@ export const SprintPlanningView = observer(function SprintPlanningView() {
                 ) : null}
                 {canManageSprintPlanning ? (
                   <button
+                    type="button"
                     className="btn btn-secondary"
                     disabled={sprint.status !== "ACTIVE"}
                     onClick={async () => {

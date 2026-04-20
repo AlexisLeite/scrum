@@ -2,21 +2,14 @@ import { FiChevronRight } from "react-icons/fi";
 import { MarkdownPreview } from "../../../ui/drawers/product-workspace/MarkdownPreview";
 import { StoryTaskSummary } from "../ProductWorkspaceViewShared";
 
-type ExpandedTaskSummary = StoryTaskSummary & {
-  assigneeId?: string | null;
-  assignee?: { id: string; name: string } | null;
-  effortPoints?: number | null;
-  estimatedHours?: number | null;
-  actualHours?: number | null;
-  sprintId?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-};
-
 type BacklogTaskItemProps = {
   task: StoryTaskSummary;
   expanded: boolean;
   isOpening: boolean;
+  isUpdatingStatus: boolean;
+  canEditStatus: boolean;
+  statusOptions: string[];
+  onChangeStatus: (task: StoryTaskSummary, nextStatus: string) => void;
   onOpen: (taskId: string) => void;
   onToggle: (taskId: string) => void;
 };
@@ -29,13 +22,13 @@ function formatDate(value: string | null | undefined): string {
 }
 
 export function BacklogTaskItem(props: BacklogTaskItemProps) {
-  const { task, expanded, isOpening, onOpen, onToggle } = props;
-  const taskSummary = task as ExpandedTaskSummary;
+  const { task, expanded, isOpening, isUpdatingStatus, canEditStatus, statusOptions, onChangeStatus, onOpen, onToggle } = props;
+  const isBusy = isOpening || isUpdatingStatus;
   const statusClass = `status status-${task.status.toLowerCase().replace(/\s+/g, "-").replace(/_/g, "-")}`;
   const title = task.title?.trim() || "Sin titulo";
 
   return (
-    <article className="story-task-row" aria-busy={isOpening}>
+    <article className="story-task-row" aria-busy={isBusy}>
       <div className="story-task-row-main">
         <button
           type="button"
@@ -49,7 +42,25 @@ export function BacklogTaskItem(props: BacklogTaskItemProps) {
             {isOpening ? <span className="task-title-loading-indicator" aria-hidden="true" /> : null}
           </span>
         </button>
-        <span className={statusClass}>{task.status}</span>
+        <div className="story-task-row-status">
+          {canEditStatus ? (
+            <select
+              className="story-task-status-select"
+              value={task.status}
+              onChange={(event) => onChangeStatus(task, event.target.value)}
+              disabled={isUpdatingStatus}
+              aria-label={`Estado de ${title}`}
+            >
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className={statusClass}>{task.status}</span>
+          )}
+        </div>
         <button
           type="button"
           className="btn btn-secondary btn-icon story-list-icon-button story-task-expand-button"
@@ -80,31 +91,31 @@ export function BacklogTaskItem(props: BacklogTaskItemProps) {
               </div>
               <div className="story-task-meta-item">
                 <span className="story-task-meta-label">Asignado</span>
-                <strong>{taskSummary.assignee?.name ?? (taskSummary.assigneeId ? "Asignado" : "Sin asignado")}</strong>
+                <strong>{task.assignee?.name ?? (task.assigneeId ? "Asignado" : "Sin asignado")}</strong>
               </div>
               <div className="story-task-meta-item">
                 <span className="story-task-meta-label">Puntos</span>
-                <strong>{taskSummary.effortPoints ?? "-"}</strong>
+                <strong>{task.effortPoints ?? "-"}</strong>
               </div>
               <div className="story-task-meta-item">
                 <span className="story-task-meta-label">Estimadas</span>
-                <strong>{taskSummary.estimatedHours ?? "-"}</strong>
+                <strong>{task.estimatedHours ?? "-"}</strong>
               </div>
               <div className="story-task-meta-item">
                 <span className="story-task-meta-label">Reales</span>
-                <strong>{taskSummary.actualHours ?? "-"}</strong>
+                <strong>{task.actualHours ?? "-"}</strong>
               </div>
               <div className="story-task-meta-item">
                 <span className="story-task-meta-label">Creada</span>
-                <strong>{formatDate(taskSummary.createdAt)}</strong>
+                <strong>{formatDate(task.createdAt)}</strong>
               </div>
               <div className="story-task-meta-item">
                 <span className="story-task-meta-label">Actualizada</span>
-                <strong>{formatDate(taskSummary.updatedAt)}</strong>
+                <strong>{formatDate(task.updatedAt)}</strong>
               </div>
               <div className="story-task-meta-item">
                 <span className="story-task-meta-label">Sprint</span>
-                <strong>{taskSummary.sprintId ? "Comprometida" : "Backlog"}</strong>
+                <strong>{task.sprintId ? "Comprometida" : "Backlog"}</strong>
               </div>
             </div>
           </aside>

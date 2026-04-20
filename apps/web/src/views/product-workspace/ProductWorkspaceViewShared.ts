@@ -20,6 +20,11 @@ export type StoryTaskSummary = {
   assignee?: { id: string; name: string } | null;
   creatorId?: string | null;
   creator?: { id: string; name: string } | null;
+  sprintId?: string | null;
+  effortPoints?: number | null;
+  estimatedHours?: number | null;
+  actualHours?: number | null;
+  unfinishedSprintCount?: number;
   createdAt?: string | null;
   updatedAt?: string | null;
   completedAt?: string | null;

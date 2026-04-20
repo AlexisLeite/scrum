@@ -4,12 +4,17 @@ import { StoryInfoPopover } from "./StoryInfoPopover";
 import { BacklogTaskItem } from "./BacklogTaskItem";
 import { getStoryStatusLabel, isStoryClosedStatus, StoryItem, sortStoryTasks } from "../ProductWorkspaceViewShared";
 
+type StoryTask = NonNullable<StoryItem["tasks"]>[number];
+
 type BacklogStoryCardProps = {
   story: StoryItem;
   expanded: boolean;
   canManageStories: boolean;
   canManageTasks: boolean;
+  canEditTaskStatus: boolean;
+  taskStatusOptions: string[];
   openingTaskId: string;
+  updatingTaskId: string;
   expandedTaskIds: Record<string, boolean>;
   canCloseStory: boolean;
   onToggleStory: (storyId: string) => void;
@@ -18,6 +23,7 @@ type BacklogStoryCardProps = {
   onCloseStory: (story: StoryItem) => void;
   onReopenStory: (story: StoryItem) => void;
   onOpenTask: (taskId: string) => void;
+  onUpdateTaskStatus: (task: StoryTask, nextStatus: string) => void;
   onToggleTask: (taskId: string) => void;
   statusActionPending: boolean;
 };
@@ -28,7 +34,10 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
     expanded,
     canManageStories,
     canManageTasks,
+    canEditTaskStatus,
+    taskStatusOptions,
     openingTaskId,
+    updatingTaskId,
     expandedTaskIds,
     canCloseStory,
     onToggleStory,
@@ -37,6 +46,7 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
     onCloseStory,
     onReopenStory,
     onOpenTask,
+    onUpdateTaskStatus,
     onToggleTask,
     statusActionPending
   } = props;
@@ -123,6 +133,10 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
                 task={task}
                 expanded={Boolean(expandedTaskIds[task.id])}
                 isOpening={openingTaskId === task.id}
+                isUpdatingStatus={updatingTaskId === task.id}
+                canEditStatus={canEditTaskStatus}
+                statusOptions={taskStatusOptions}
+                onChangeStatus={onUpdateTaskStatus}
                 onOpen={onOpenTask}
                 onToggle={onToggleTask}
               />

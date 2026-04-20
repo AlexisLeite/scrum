@@ -1195,8 +1195,8 @@ a.btn-secondary,
 }
 
 .sprint-planning-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
-  align-items: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
 }
 
 .product-tile,
@@ -1217,8 +1217,31 @@ a.btn-secondary,
 
 .sprint-planning-tile {
   display: grid;
-  gap: 0.85rem;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 0.95rem;
   min-width: 0;
+  height: 100%;
+  padding: 1.05rem;
+  border-color: color-mix(in srgb, var(--border-soft) 82%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 99%, transparent), color-mix(in srgb, var(--bg-soft) 88%, transparent)),
+    var(--bg-card);
+  box-shadow: 0 12px 28px rgba(4, 12, 22, 0.05);
+}
+
+.sprint-planning-tile-top {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.sprint-planning-tile-copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.sprint-planning-tile-eyebrow {
+  margin: 0;
 }
 
 .sprint-planning-tile-head {
@@ -1230,6 +1253,53 @@ a.btn-secondary,
   margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.sprint-planning-tile-dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.sprint-planning-tile-date {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--border-soft) 84%, transparent);
+  background: color-mix(in srgb, var(--bg-soft) 84%, transparent);
+}
+
+.sprint-planning-tile-date span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sprint-planning-tile-date strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sprint-planning-tile-body {
+  display: grid;
+  gap: 0.55rem;
+  min-height: 0;
+  padding: 0.95rem;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--border-soft) 78%, transparent);
+  background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
+}
+
+.sprint-planning-tile-kicker {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .sprint-planning-tile-goal,
@@ -1245,10 +1315,15 @@ a.btn-secondary,
   margin: 0;
 }
 
+.sprint-planning-tile-note {
+  margin: 0;
+}
+
 .sprint-planning-tile-actions {
   flex-wrap: wrap;
   justify-content: flex-start;
   align-items: center;
+  margin-top: auto;
 }
 
 .sprint-planning-tile-actions .btn,
@@ -2025,6 +2100,13 @@ a.btn-secondary,
   gap: 0.7rem;
 }
 
+.story-task-row-status {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .story-task-title-button {
   min-width: 0;
   padding: 0;
@@ -2074,6 +2156,31 @@ a.btn-secondary,
 
 .story-task-expand-button {
   align-self: start;
+}
+
+.story-task-status-select {
+  width: min(100%, 12rem);
+  min-width: 10.75rem;
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--border-soft) 84%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 97%, transparent);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 650;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset;
+}
+
+.story-task-status-select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-c) 55%, white);
+  outline-offset: 2px;
+}
+
+.story-task-status-select:disabled {
+  cursor: progress;
+  opacity: 0.72;
 }
 
 .story-task-description {
@@ -2265,6 +2372,10 @@ a.btn-secondary,
 }
 
 @media (max-width: 1080px) {
+  .sprint-planning-grid {
+    grid-template-columns: 1fr;
+  }
+
   .story-task-detail-grid {
     grid-template-columns: 1fr;
   }
@@ -2287,6 +2398,14 @@ a.btn-secondary,
 
   .story-card-header {
     gap: 0.7rem;
+  }
+
+  .story-task-row-status {
+    justify-content: flex-start;
+  }
+
+  .story-task-status-select {
+    width: min(100%, 14rem);
   }
 
   .story-task-detail-grid {
