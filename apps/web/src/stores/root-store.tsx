@@ -171,6 +171,19 @@ export class CollectionStore<T extends NamedEntity> {
     this.items = this.items.filter((item) => item.id !== id);
   }
 
+  clearScope(scopeKey: string) {
+    delete this.scopedItems[scopeKey];
+    delete this.scopedErrors[scopeKey];
+    delete this.scopedLoading[scopeKey];
+
+    if (this.activeScopeKey === scopeKey) {
+      this.items = [];
+      this.loading = false;
+      this.error = null;
+      this.activeScopeKey = null;
+    }
+  }
+
   setLoading(value: boolean) {
     this.loading = value;
     if (this.activeScopeKey) {
@@ -264,6 +277,25 @@ export class RootStore {
     this.burndown = [];
     this.teamVelocity = [];
     this.userVelocity = [];
+  }
+
+  clearStoryScopedData(storyId: string) {
+    this.tasks.clearScope(storyCollectionScope(storyId));
+  }
+
+  clearProductScopedData(productId: string) {
+    const productScopeKey = productCollectionScope(productId);
+    const storyIds = this.stories.getItems(productScopeKey).map((story) => story.id);
+
+    this.stories.clearScope(productScopeKey);
+    this.sprints.clearScope(productScopeKey);
+
+    for (const storyId of storyIds) {
+      this.clearStoryScopedData(storyId);
+    }
+
+    this.board = null;
+    this.clearAnalytics();
   }
 
   resetScopedData() {

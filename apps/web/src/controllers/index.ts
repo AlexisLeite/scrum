@@ -287,6 +287,7 @@ export class ProductController {
   async deleteProduct(productId: string) {
     await apiClient.del(`/products/${productId}`);
     this.store.products.remove(productId);
+    this.store.clearProductScopedData(productId);
   }
 
   async loadStories(productId: string, options?: { syncStore?: boolean }) {
@@ -326,6 +327,7 @@ export class ProductController {
   async deleteStory(storyId: string) {
     await apiClient.del(`/stories/${storyId}`);
     this.store.stories.remove(storyId);
+    this.store.clearStoryScopedData(storyId);
   }
 
   async closeStory(storyId: string) {
