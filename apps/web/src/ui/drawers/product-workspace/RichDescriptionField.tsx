@@ -157,7 +157,9 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       ? viewportAllowance
       : Math.min(Math.round(window.innerHeight * 0.75), viewportAllowance);
     content.style.height = "auto";
-    const nextHeight = Math.min(Math.max(content.scrollHeight, minHeight), maxHeight);
+    const nextHeight = isMaximized
+      ? maxHeight
+      : Math.min(Math.max(content.scrollHeight, minHeight), maxHeight);
     content.style.height = `${nextHeight}px`;
   }, [isMaximized, minHeight]);
 
