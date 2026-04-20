@@ -39,7 +39,9 @@ import {
   createGenerationRegion,
   type EditorSelectionSnapshot,
   hasGenerationRegionPlaceholder,
+  replaceSelectionInMarkdown,
   replaceGenerationRegion,
+  resolveSelectionMarkdownContent,
   restoreEditorSelection,
   stripGenerationArtifacts
 } from "./markdown-generation";
@@ -461,31 +463,49 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     }
 
     const selectionSnapshot = generationSelectionRef.current ?? captureEditorSelection(resolveEditorContentElement(), editorRef.current);
-    const originalSelectionMarkdown = selectionSnapshot.selectionMarkdown;
+    const originalSelectionMarkdown = resolveSelectionMarkdownContent(selectionSnapshot);
     const generationRegion = createGenerationRegion();
 
     try {
       setGenerationError("");
+      setIsGeneratingMarkdown(true);
 
-      editorRef.current.focus(undefined, { preventScroll: true });
-      if (!restoreEditorSelection(resolveEditorContentElement(), selectionSnapshot)) {
-        editorRef.current.focus(undefined, { defaultSelection: "rootEnd", preventScroll: true });
+      const reservedSelectionMarkdown = selectionSnapshot.collapsed
+        ? null
+        : replaceSelectionInMarkdown(selectionSnapshot, generationRegion.block);
+
+      if (!selectionSnapshot.collapsed && !reservedSelectionMarkdown) {
+        throw new Error("No se pudo ubicar la seleccion actual dentro del markdown del editor.");
       }
 
-      setIsGeneratingMarkdown(true);
-      editorRef.current.insertMarkdown(generationRegion.block);
-      generationBaseMarkdownRef.current = await resolveGenerationBaseMarkdown(generationRegion);
+      if (reservedSelectionMarkdown) {
+        generationBaseMarkdownRef.current = stripGenerationArtifacts(reservedSelectionMarkdown, {
+          preserveGenerationRegionIds: [generationRegion.id]
+        });
+        updateEditorMarkdown(generationBaseMarkdownRef.current);
+      } else {
+        editorRef.current.focus(undefined, { preventScroll: true });
+        if (!restoreEditorSelection(resolveEditorContentElement(), selectionSnapshot)) {
+          editorRef.current.focus(undefined, { defaultSelection: "rootEnd", preventScroll: true });
+        }
+
+        editorRef.current.insertMarkdown(generationRegion.block);
+        generationBaseMarkdownRef.current = await resolveGenerationBaseMarkdown(generationRegion);
+      }
+
       if (!hasGenerationRegionPlaceholder(generationBaseMarkdownRef.current, generationRegion)) {
         throw new Error("No se pudo reservar la region del editor para mostrar el stream.");
       }
 
-      syncControlledValue();
+      if (!reservedSelectionMarkdown) {
+        syncControlledValue();
+      }
 
       const response = await apiClient.postStream("/ai/markdown/generate", {
         prompt,
         includeEditorContext,
         currentMarkdown: selectionSnapshot.currentMarkdown,
-        selectionMarkdown: selectionSnapshot.selectionMarkdown,
+        selectionMarkdown: originalSelectionMarkdown,
         selectionPlainText: selectionSnapshot.selectionPlainText,
         selectionStart: selectionSnapshot.startOffset ?? undefined,
         selectionEnd: selectionSnapshot.endOffset ?? undefined,
