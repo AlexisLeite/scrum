@@ -127,12 +127,34 @@ async function requestForm<T>(method: HttpMethod, path: string, formData: FormDa
   return parseResponse<T>(response);
 }
 
+async function requestStream(path: string, body?: unknown, allowRefresh: boolean = true): Promise<Response> {
+  const response = await rawRequest("POST", path, {
+    json: body,
+    headers: {
+      Accept: "application/x-ndjson"
+    }
+  });
+
+  if (response.status === 401 && allowRefresh && path !== "/auth/refresh" && path !== "/auth/login" && path !== "/auth/signup") {
+    await refreshSession();
+    return requestStream(path, body, false);
+  }
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(normalizeApiError(text, response.status), response.status);
+  }
+
+  return response;
+}
+
 export const apiClient = {
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   postForm: <T>(path: string, formData: FormData) => requestForm<T>("POST", path, formData),
+  postStream: (path: string, body?: unknown) => requestStream(path, body),
   del: <T>(path: string) => request<T>("DELETE", path),
   refreshSession
 };

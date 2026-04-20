@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+const { readFileSync, unlinkSync, writeFileSync } = require("node:fs");
 const net = require("node:net");
 const { spawn } = require("node:child_process");
 const { resolve } = require("node:path");
@@ -8,6 +9,7 @@ const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 7777;
 const DEFAULT_READ_LINES = 10;
 const HISTORY_LIMIT = 100;
+const CURRENT_PORT_FILE = resolve(__dirname, "..", "dev_current_port");
 
 function printUsage() {
   console.error(
@@ -17,8 +19,10 @@ function printUsage() {
       "  node scripts/run_bash.js [--port <number>] [--host <host>] [--cwd <path>] <command> [args...]",
       "",
       "TCP protocol:",
-      `  - TCP is enabled by default on ${DEFAULT_HOST}:${DEFAULT_PORT}.`,
-      `  - Connect to the configured port and send 'read()' or 'read(<n>)' followed by a newline.`,
+      `  - TCP starts by default on ${DEFAULT_HOST}:${DEFAULT_PORT}.`,
+      "  - If the requested TCP port is busy, the script tries the next port until it finds one.",
+      `  - The active TCP port is written to ${CURRENT_PORT_FILE}.`,
+      `  - Connect to the active port and send 'read()' or 'read(<n>)' followed by a newline.`,
       `  - 'read()' returns the last ${DEFAULT_READ_LINES} lines.`,
       `  - The in-memory history keeps at most the last ${HISTORY_LIMIT} lines.`,
       "",
@@ -112,9 +116,9 @@ function parseArgs(argv) {
   };
 }
 
-function sendJson(socket, payload) {
+function writeSocketText(socket, text) {
   try {
-    socket.write(`${JSON.stringify(payload)}\n`);
+    socket.write(text);
   } catch (error) {
     socket.destroy(error);
   }
@@ -219,6 +223,7 @@ function main() {
   };
   const configuredPort = parsed.options.port;
   const configuredHost = parsed.options.host;
+  const SERVER_STARTUP_CANCELLED = "SERVER_STARTUP_CANCELLED";
   const child = spawn(command, args, {
     cwd: parsed.options.cwd,
     env: process.env,
@@ -227,18 +232,51 @@ function main() {
   });
 
   let server = null;
+  let activePort = configuredPort;
+  let ownsCurrentPortFile = false;
+  let isServerStartupCancelled = false;
 
-  function broadcast(payload) {
-    for (const socket of tcpClients) {
-      sendJson(socket, payload);
+  function writeCurrentPortFile(port) {
+    writeFileSync(CURRENT_PORT_FILE, `${port}\n`, "utf8");
+    ownsCurrentPortFile = true;
+  }
+
+  function clearCurrentPortFile() {
+    if (!ownsCurrentPortFile) {
+      return;
+    }
+
+    try {
+      const currentPort = readFileSync(CURRENT_PORT_FILE, "utf8").trim();
+      if (currentPort === String(activePort)) {
+        unlinkSync(CURRENT_PORT_FILE);
+      }
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        console.error(`[run_bash] Failed to clear ${CURRENT_PORT_FILE}: ${error.message}`);
+      }
+    } finally {
+      ownsCurrentPortFile = false;
     }
   }
 
-  function rememberLine(source, line) {
-    history.push({
-      source,
-      line
-    });
+  function broadcast(payload) {
+    for (const socket of tcpClients) {
+      writeSocketText(socket, payload);
+    }
+  }
+
+  function rememberLine(line) {
+    history.push(line);
+  }
+
+  function writeHistory(socket, count) {
+    const lines = history.read(count);
+    if (lines.length === 0) {
+      return;
+    }
+
+    writeSocketText(socket, `${lines.join("\n")}\n`);
   }
 
   function handleChunk(source, chunk) {
@@ -247,13 +285,9 @@ function main() {
 
     target.write(text);
     streamBuffers[source] = consumeBufferedText(streamBuffers[source], text, (line) => {
-      rememberLine(source, line);
+      rememberLine(line);
     });
-    broadcast({
-      type: "chunk",
-      source,
-      data: text
-    });
+    broadcast(text);
   }
 
   function flushPartialLines() {
@@ -263,12 +297,15 @@ function main() {
         continue;
       }
 
-      rememberLine(source, remainder);
+      rememberLine(remainder);
       streamBuffers[source] = "";
     }
   }
 
   function closeServerAndClients() {
+    isServerStartupCancelled = true;
+    clearCurrentPortFile();
+
     for (const socket of tcpClients) {
       socket.end();
       socket.destroy();
@@ -279,6 +316,12 @@ function main() {
       server.close();
       server = null;
     }
+  }
+
+  function createServerStartupCancelledError() {
+    const error = new Error("TCP server startup cancelled");
+    error.code = SERVER_STARTUP_CANCELLED;
+    return error;
   }
 
   if (child.stdout) {
@@ -299,100 +342,140 @@ function main() {
     process.exit(1);
   });
 
-  server = net.createServer((socket) => {
-    tcpClients.add(socket);
-    socket.setEncoding("utf8");
+  function createTcpServer() {
+    return net.createServer((socket) => {
+      tcpClients.add(socket);
+      socket.setEncoding("utf8");
 
-    sendJson(socket, {
-      type: "ready",
-      pid: child.pid,
-      historyLimit: HISTORY_LIMIT,
-      defaultReadLines: DEFAULT_READ_LINES,
-      command,
-      args
-    });
+      let requestBuffer = "";
 
-    let requestBuffer = "";
+      socket.on("data", (chunk) => {
+        requestBuffer += chunk;
 
-    socket.on("data", (chunk) => {
-      requestBuffer += chunk;
+        let newlineIndex = requestBuffer.indexOf("\n");
+        while (newlineIndex >= 0) {
+          const rawRequest = requestBuffer.slice(0, newlineIndex);
+          requestBuffer = requestBuffer.slice(newlineIndex + 1);
 
-      let newlineIndex = requestBuffer.indexOf("\n");
-      while (newlineIndex >= 0) {
-        const rawRequest = requestBuffer.slice(0, newlineIndex);
-        requestBuffer = requestBuffer.slice(newlineIndex + 1);
+          try {
+            const amount = parseReadRequest(rawRequest);
+            if (amount === null) {
+              newlineIndex = requestBuffer.indexOf("\n");
+              continue;
+            }
 
-        try {
-          const amount = parseReadRequest(rawRequest);
-          if (amount === null) {
-            newlineIndex = requestBuffer.indexOf("\n");
-            continue;
+            writeHistory(socket, amount);
+          } catch (error) {
+            writeSocketText(socket, `[run_bash] ${error.message}\n`);
           }
 
-          sendJson(socket, {
-            type: "read",
-            requested: amount,
-            returned: Math.min(amount, history.size()),
-            lines: history.read(amount)
-          });
-        } catch (error) {
-          sendJson(socket, {
-            type: "error",
-            message: error.message
-          });
+          newlineIndex = requestBuffer.indexOf("\n");
         }
+      });
 
-        newlineIndex = requestBuffer.indexOf("\n");
-      }
-    });
-
-    socket.on("end", () => {
-      if (requestBuffer.trim()) {
-        try {
-          const amount = parseReadRequest(requestBuffer);
-          if (amount !== null) {
-            sendJson(socket, {
-              type: "read",
-              requested: amount,
-              returned: Math.min(amount, history.size()),
-              lines: history.read(amount)
-            });
+      socket.on("end", () => {
+        if (requestBuffer.trim()) {
+          try {
+            const amount = parseReadRequest(requestBuffer);
+            if (amount !== null) {
+              writeHistory(socket, amount);
+            }
+          } catch (error) {
+            writeSocketText(socket, `[run_bash] ${error.message}\n`);
           }
-        } catch (error) {
-          sendJson(socket, {
-            type: "error",
-            message: error.message
-          });
         }
-      }
-    });
+      });
 
-    socket.on("close", () => {
-      tcpClients.delete(socket);
-    });
+      socket.on("close", () => {
+        tcpClients.delete(socket);
+      });
 
-    socket.on("error", () => {
-      tcpClients.delete(socket);
+      socket.on("error", () => {
+        tcpClients.delete(socket);
+      });
     });
-  });
+  }
 
-  server.on("error", (error) => {
-    if (error?.code === "EADDRINUSE") {
-      console.error(`[run_bash] TCP port ${configuredPort} on ${configuredHost} is already in use`);
-    } else {
-      console.error(`[run_bash] TCP server error on ${configuredHost}:${configuredPort}: ${error.message}`);
-    }
+  function handleServerError(error) {
+    const address = server?.address();
+    const boundAddress = address && typeof address === "object" ? address : null;
+    const host = boundAddress?.address ?? configuredHost;
+    const port = boundAddress?.port ?? activePort;
+
+    console.error(`[run_bash] TCP server error on ${host}:${port}: ${error.message}`);
     child.kill("SIGTERM");
     closeServerAndClients();
     process.exit(1);
-  });
+  }
 
-  server.listen(configuredPort, configuredHost, () => {
-    const address = server.address();
-    if (address && typeof address === "object") {
-      console.error(`[run_bash] TCP listening on ${address.address}:${address.port} (configured ${configuredHost}:${configuredPort})`);
-    }
-  });
+  function listenTcpServer(startPort) {
+    return new Promise((resolve, reject) => {
+      function attemptListen(port) {
+        if (isServerStartupCancelled) {
+          reject(createServerStartupCancelledError());
+          return;
+        }
+
+        if (port > 65535) {
+          reject(new Error(`No available TCP port found on ${configuredHost} starting at ${startPort}`));
+          return;
+        }
+
+        const candidate = createTcpServer();
+
+        const handleInitialError = (error) => {
+          if (error?.code === "EADDRINUSE") {
+            console.error(`[run_bash] TCP port ${port} on ${configuredHost} is already in use, trying ${port + 1}`);
+            attemptListen(port + 1);
+            return;
+          }
+
+          reject(error);
+        };
+
+        candidate.once("error", handleInitialError);
+        candidate.listen(port, configuredHost, () => {
+          candidate.off("error", handleInitialError);
+
+          if (isServerStartupCancelled) {
+            candidate.close(() => {
+              reject(createServerStartupCancelledError());
+            });
+            return;
+          }
+
+          resolve(candidate);
+        });
+      }
+
+      attemptListen(startPort);
+    });
+  }
+
+  listenTcpServer(configuredPort)
+    .then((listeningServer) => {
+      server = listeningServer;
+      server.on("error", handleServerError);
+
+      const address = server.address();
+      if (address && typeof address === "object") {
+        activePort = address.port;
+        writeCurrentPortFile(activePort);
+        const configuredLabel =
+          address.port === configuredPort ? "" : ` (configured ${configuredHost}:${configuredPort})`;
+        console.error(`[run_bash] TCP listening on ${address.address}:${address.port}${configuredLabel}`);
+      }
+    })
+    .catch((error) => {
+      if (error?.code === SERVER_STARTUP_CANCELLED) {
+        return;
+      }
+
+      console.error(`[run_bash] ${error.message}`);
+      child.kill("SIGTERM");
+      closeServerAndClients();
+      process.exit(1);
+    });
 
   function forwardSignal(signal) {
     if (!child.killed) {
@@ -410,11 +493,6 @@ function main() {
 
   child.on("exit", (code, signal) => {
     flushPartialLines();
-    broadcast({
-      type: "exit",
-      code,
-      signal
-    });
     closeServerAndClients();
 
     if (signal) {

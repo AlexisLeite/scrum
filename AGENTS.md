@@ -7,10 +7,11 @@
 
 ## Watch y TypeScript
 
-- El watch de desarrollo expone su consola por TCP en `127.0.0.1:7777`.
+- El watch de desarrollo expone su consola por TCP en `127.0.0.1` y escribe el puerto activo en `dev_current_port`.
 - Siempre que estemos desarrollando y haya que validar errores de TypeScript, primero consulta ese stream remoto en lugar de ejecutar chequeos extra como `pnpm typecheck`, `turbo run typecheck` o `tsc`.
+- Antes de consultar la consola, lee `dev_current_port` para saber qué puerto está en uso en ese momento.
 - Usa `read()` para leer las ultimas 10 lineas y `read(n)` para pedir mas contexto cuando haga falta.
-- Ejemplo de consulta: `printf 'read(25)\n' | nc 127.0.0.1 7777`
+- Ejemplo de consulta: `PORT="$(tr -d '\n' < dev_current_port)" && printf 'read(25)\n' | nc 127.0.0.1 "$PORT"`
 - Solo ejecuta chequeos adicionales de TypeScript si el usuario los pide explicitamente o si el watch remoto no esta disponible.
 
 ## Credenciales locales

@@ -1,0 +1,59 @@
+.markdown-generation-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1220;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(6px);
+}
+
+.markdown-generation-dialog {
+  width: min(100%, 560px);
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--bg-card);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
+}
+
+.markdown-generation-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.markdown-generation-dialog-head :is(h3, p) {
+  margin: 0;
+}
+
+.markdown-generation-dialog-field {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.markdown-generation-dialog-field textarea {
+  min-height: 128px;
+  resize: vertical;
+}
+
+.markdown-generation-dialog-toggle {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.markdown-generation-dialog-toggle input {
+  margin-top: 3px;
+}
+
+.markdown-generation-dialog-selection,
+.markdown-generation-dialog-help {
+  margin: 0;
+}

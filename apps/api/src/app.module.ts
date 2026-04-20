@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AdminModule } from "./admin/admin.module";
 import { ActivityModule } from "./activity/activity.module";
+import { AiModule } from "./ai/ai.module";
 import { ApiKeysModule } from "./api-keys/api-keys.module";
 import { AuthModule } from "./auth/auth.module";
 import { DraftsModule } from "./drafts/drafts.module";
@@ -22,11 +23,12 @@ import { TeamsModule } from "./teams/teams.module";
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [".env", "../../.env"]
+      envFilePath: [".env", "../../../.env"]
     }),
     PrismaModule,
     PermissionsModule,
     ActivityModule,
+    AiModule,
     ApiKeysModule,
     AdminModule,
     AuthModule,

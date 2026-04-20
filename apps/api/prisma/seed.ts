@@ -27,7 +27,7 @@ function loadEnvFile(filePath: string) {
 }
 
 loadEnvFile(resolve(process.cwd(), ".env"));
-loadEnvFile(resolve(process.cwd(), "../../.env"));
+loadEnvFile(resolve(process.cwd(), "../../../.env"));
 
 const prisma = new PrismaClient();
 

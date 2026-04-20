@@ -1,6 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { FiMaximize2, FiMinimize2, FiPrinter, FiSave, FiVideo } from "react-icons/fi";
+import { LuWandSparkles } from "react-icons/lu";
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -32,6 +33,14 @@ import { apiClient } from "../../../api/client";
 import { buildInternalReferenceMarkdown, ReferenceSearchResult } from "../../../lib/internal-references";
 import { useOverlayEscape } from "../../useOverlayEscape";
 import { ImageLightbox } from "./ImageLightbox";
+import { MarkdownGenerationDialog } from "./MarkdownGenerationDialog";
+import {
+  captureEditorSelection,
+  createGenerationRegion,
+  type EditorSelectionSnapshot,
+  replaceGenerationRegion,
+  restoreEditorSelection
+} from "./markdown-generation";
 import "./rich-description-field.css";
 
 type RichDescriptionFieldProps = {
@@ -57,6 +66,7 @@ type ToolbarButtonProps = {
   label: string;
   pressed?: boolean;
   onClick: () => void;
+  onMouseDown?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
   children: React.ReactNode;
 };
@@ -133,8 +143,16 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const [uploadingImages, setUploadingImages] = React.useState<Array<{ id: string; alt: string }>>([]);
   const [uploadingVideos, setUploadingVideos] = React.useState<Array<{ id: string; title: string }>>([]);
   const [uploadError, setUploadError] = React.useState("");
+  const [generationError, setGenerationError] = React.useState("");
+  const [generationDialogOpen, setGenerationDialogOpen] = React.useState(false);
+  const [generationPrompt, setGenerationPrompt] = React.useState("");
+  const [generationIncludesContext, setGenerationIncludesContext] = React.useState(true);
+  const [generationSelectionSummary, setGenerationSelectionSummary] = React.useState("");
+  const [isGeneratingMarkdown, setIsGeneratingMarkdown] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<{ src: string; alt?: string } | null>(null);
   const [isMaximized, setIsMaximized] = React.useState(false);
+  const generationSelectionRef = React.useRef<EditorSelectionSnapshot | null>(null);
+  const editorDisabled = disabled || isGeneratingMarkdown;
   const fieldStyle = {
     "--rich-description-min-height": `${minHeight}px`,
     "--rich-description-max-height": isMaximized ? "calc(100vh - 1px)" : "75vh"
@@ -363,7 +381,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   }, [focusEditor, isMaximized, scheduleHeightSync]);
 
   React.useEffect(() => {
-    if (!autoFocus || disabled) {
+    if (!autoFocus || editorDisabled) {
       return;
     }
 
@@ -377,7 +395,139 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     }, 0);
 
     return () => window.clearTimeout(focusTimer);
-  }, [autoFocus, disabled, focusEditor, scheduleHeightSync]);
+  }, [autoFocus, editorDisabled, focusEditor, scheduleHeightSync]);
+
+  const resolveEditorContentElement = React.useCallback(() => {
+    return fieldRef.current?.querySelector<HTMLElement>("[contenteditable='true']") ?? null;
+  }, []);
+
+  const captureGenerationSelection = React.useCallback(() => {
+    const snapshot = captureEditorSelection(resolveEditorContentElement(), editorRef.current);
+    generationSelectionRef.current = snapshot;
+    setGenerationSelectionSummary(describeSelectionSnapshot(snapshot));
+  }, [resolveEditorContentElement]);
+
+  const updateGenerationRegion = React.useCallback((replacement: string, region: ReturnType<typeof createGenerationRegion>, finalize: boolean) => {
+    if (!editorRef.current) {
+      return;
+    }
+
+    const currentMarkdown = editorRef.current.getMarkdown();
+    const nextMarkdown = replaceGenerationRegion(currentMarkdown, region, replacement, finalize);
+    if (nextMarkdown === currentMarkdown) {
+      return;
+    }
+
+    updateEditorMarkdown(nextMarkdown);
+  }, [updateEditorMarkdown]);
+
+  const startMarkdownGeneration = React.useCallback(async (prompt: string, includeEditorContext: boolean) => {
+    if (!editorRef.current) {
+      return;
+    }
+
+    const selectionSnapshot = generationSelectionRef.current ?? captureEditorSelection(resolveEditorContentElement(), editorRef.current);
+    const originalSelectionMarkdown = selectionSnapshot.selectionMarkdown;
+    const generationRegion = createGenerationRegion();
+
+    try {
+      setGenerationError("");
+
+      editorRef.current.focus(undefined, { preventScroll: true });
+      if (!restoreEditorSelection(resolveEditorContentElement(), selectionSnapshot)) {
+        editorRef.current.focus(undefined, { defaultSelection: "rootEnd", preventScroll: true });
+      }
+
+      editorRef.current.insertMarkdown(generationRegion.block);
+      syncControlledValue();
+      setIsGeneratingMarkdown(true);
+
+      const response = await apiClient.postStream("/ai/markdown/generate", {
+        prompt,
+        includeEditorContext,
+        currentMarkdown: selectionSnapshot.currentMarkdown,
+        selectionMarkdown: selectionSnapshot.selectionMarkdown,
+        selectionPlainText: selectionSnapshot.selectionPlainText,
+        selectionStart: selectionSnapshot.startOffset ?? undefined,
+        selectionEnd: selectionSnapshot.endOffset ?? undefined,
+        selectionCollapsed: selectionSnapshot.collapsed
+      });
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("El navegador no pudo leer la respuesta en streaming.");
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let generatedMarkdown = "";
+
+      const handleStreamLine = (line: string) => {
+        const message = parseMarkdownGenerationMessage(line);
+        if (message.type === "chunk") {
+          generatedMarkdown += message.chunk;
+          updateGenerationRegion(generatedMarkdown, generationRegion, false);
+          return;
+        }
+
+        if (message.type === "done") {
+          if (!generatedMarkdown && message.content) {
+            generatedMarkdown = message.content;
+          }
+          return;
+        }
+
+        throw new Error(message.message || "La IA no pudo generar contenido.");
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        lines
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .forEach(handleStreamLine);
+
+        if (done) {
+          const pendingLine = buffer.trim();
+          if (pendingLine) {
+            handleStreamLine(pendingLine);
+          }
+          break;
+        }
+      }
+
+      if (!generatedMarkdown.trim()) {
+        throw new Error("La IA devolvio una respuesta vacia.");
+      }
+
+      updateGenerationRegion(generatedMarkdown, generationRegion, true);
+      setGenerationPrompt("");
+    } catch (error) {
+      updateGenerationRegion(originalSelectionMarkdown, generationRegion, true);
+      setGenerationError(error instanceof Error ? error.message : "No se pudo generar contenido con IA.");
+    } finally {
+      setIsGeneratingMarkdown(false);
+      setGenerationDialogOpen(false);
+      setGenerationSelectionSummary("");
+      generationSelectionRef.current = null;
+      scheduleHeightSync();
+    }
+  }, [resolveEditorContentElement, scheduleHeightSync, syncControlledValue, updateGenerationRegion]);
+
+  const confirmMarkdownGeneration = React.useCallback(() => {
+    const prompt = generationPrompt.trim();
+    if (!prompt) {
+      return;
+    }
+
+    setGenerationDialogOpen(false);
+    window.setTimeout(() => {
+      void startMarkdownGeneration(prompt, generationIncludesContext);
+    }, 0);
+  }, [generationIncludesContext, generationPrompt, startMarkdownGeneration]);
 
   const replaceActiveAnchor = React.useCallback((reference: ReferenceSearchResult) => {
     if (!activeAnchor || !editorRef.current) {
@@ -572,7 +722,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       syncAnchor();
     };
     const handlePaste = (event: ClipboardEvent) => {
-      if (disabled) {
+      if (editorDisabled) {
         return;
       }
       const files = extractClipboardImages(event);
@@ -642,7 +792,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     };
   }, [
     activeAnchor,
-    disabled,
+    editorDisabled,
     handleClipboardImage,
     referenceResults,
     replaceActiveAnchor,
@@ -732,7 +882,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         className="rich-description-editor"
         contentEditableClassName="rich-description-content"
         overlayContainer={isMaximized ? editorOverlayContainer : undefined}
-        readOnly={disabled}
+        readOnly={editorDisabled}
         plugins={[
           headingsPlugin({ allowedHeadingLevels: ALLOWED_HEADING_LEVELS }),
           quotePlugin(),
@@ -762,12 +912,38 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
                   <CreateLink />
                   <InsertImage />
                   <ToolbarButton
+                    label="Autogenerar markdown"
+                    onMouseDown={(event) => {
+                      if (editorDisabled) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      captureGenerationSelection();
+                    }}
+                    onClick={() => {
+                      if (editorDisabled) {
+                        return;
+                      }
+
+                      if (!generationSelectionRef.current) {
+                        captureGenerationSelection();
+                      }
+                      setGenerationError("");
+                      setGenerationDialogOpen(true);
+                    }}
+                    disabled={editorDisabled}
+                  >
+                    <LuWandSparkles aria-hidden="true" />
+                  </ToolbarButton>
+                  <ToolbarButton
                     label="Insertar video"
                     onClick={() => {
-                      if (!disabled) {
+                      if (!editorDisabled) {
                         videoInputRef.current?.click();
                       }
                     }}
+                    disabled={editorDisabled}
                   >
                     <FiVideo aria-hidden="true" />
                   </ToolbarButton>
@@ -780,7 +956,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
                       onClick={() => {
                         void onPrint();
                       }}
-                      disabled={printDisabled}
+                      disabled={printDisabled || isGeneratingMarkdown}
                     >
                       <FiPrinter aria-hidden="true" />
                     </ToolbarButton>
@@ -791,7 +967,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
                       onClick={() => {
                         void onSave();
                       }}
-                      disabled={saveDisabled}
+                      disabled={saveDisabled || isGeneratingMarkdown}
                     >
                       <FiSave aria-hidden="true" />
                     </ToolbarButton>
@@ -828,7 +1004,14 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
           <span>{uploadingVideos.map((entry) => entry.title).join(", ")}</span>
         </div>
       ) : null}
+      {isGeneratingMarkdown ? (
+        <div className="rich-description-upload-status" aria-live="polite">
+          <strong>Generando contenido...</strong>
+          <span>La respuesta de la IA se inserta directamente en el editor a medida que llega.</span>
+        </div>
+      ) : null}
       {uploadError ? <p className="error-text">{uploadError}</p> : null}
+      {generationError ? <p className="error-text">{generationError}</p> : null}
       {activeAnchor
         ? createPortal(
           <div
@@ -876,6 +1059,24 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         src={lightboxImage?.src ?? ""}
         alt={lightboxImage?.alt}
         onClose={() => setLightboxImage(null)}
+      />
+      <MarkdownGenerationDialog
+        open={generationDialogOpen}
+        prompt={generationPrompt}
+        includeEditorContext={generationIncludesContext}
+        selectionSummary={generationSelectionSummary}
+        submitting={isGeneratingMarkdown}
+        onPromptChange={setGenerationPrompt}
+        onIncludeEditorContextChange={setGenerationIncludesContext}
+        onConfirm={confirmMarkdownGeneration}
+        onCancel={() => {
+          if (isGeneratingMarkdown) {
+            return;
+          }
+          setGenerationDialogOpen(false);
+          setGenerationSelectionSummary("");
+          generationSelectionRef.current = null;
+        }}
       />
     </div>
   );
@@ -1112,14 +1313,69 @@ function escapeHtmlAttribute(value: string) {
     .replaceAll(">", "&gt;");
 }
 
+function describeSelectionSnapshot(snapshot: EditorSelectionSnapshot) {
+  if (snapshot.collapsed) {
+    if (snapshot.startOffset == null) {
+      return "Sin seleccion activa. El contenido se insertara en la posicion actual del cursor.";
+    }
+
+    return `Sin seleccion activa. El contenido se insertara cerca de la posicion ${snapshot.startOffset}.`;
+  }
+
+  const selectedText = snapshot.selectionPlainText.trim() || snapshot.selectionMarkdown.trim();
+  if (!selectedText) {
+    return "Hay contenido seleccionado y sera reemplazado por la respuesta generada.";
+  }
+
+  return `Se reemplazara la seleccion actual: "${truncateInlinePreview(selectedText)}".`;
+}
+
+function truncateInlinePreview(value: string, maxLength = 72) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}...`;
+}
+
+type MarkdownGenerationStreamMessage =
+  | { type: "chunk"; chunk: string }
+  | { type: "done"; content?: string }
+  | { type: "error"; message?: string };
+
+function parseMarkdownGenerationMessage(line: string): MarkdownGenerationStreamMessage {
+  const parsed = JSON.parse(line) as Partial<MarkdownGenerationStreamMessage>;
+  if (parsed.type === "chunk" && typeof parsed.chunk === "string") {
+    return { type: "chunk", chunk: parsed.chunk };
+  }
+
+  if (parsed.type === "done") {
+    return {
+      type: "done",
+      content: typeof parsed.content === "string" ? parsed.content : undefined
+    };
+  }
+
+  if (parsed.type === "error") {
+    return {
+      type: "error",
+      message: typeof parsed.message === "string" ? parsed.message : undefined
+    };
+  }
+
+  throw new Error("La respuesta del stream de IA no tiene un formato valido.");
+}
+
 function ToolbarButton(props: ToolbarButtonProps) {
-  const { label, pressed = false, onClick, disabled = false, children } = props;
+  const { label, pressed = false, onClick, onMouseDown, disabled = false, children } = props;
 
   return (
     <button
       type="button"
       className={`rich-description-toolbar-button${pressed ? " is-pressed" : ""}`}
       onClick={onClick}
+      onMouseDown={onMouseDown}
       disabled={disabled}
       aria-label={label}
       aria-pressed={pressed}
