@@ -38,8 +38,10 @@ import {
   captureEditorSelection,
   createGenerationRegion,
   type EditorSelectionSnapshot,
+  hasGenerationRegionPlaceholder,
   replaceGenerationRegion,
-  restoreEditorSelection
+  restoreEditorSelection,
+  stripGenerationArtifacts
 } from "./markdown-generation";
 import "./rich-description-field.css";
 
@@ -152,7 +154,8 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const [lightboxImage, setLightboxImage] = React.useState<{ src: string; alt?: string } | null>(null);
   const [isMaximized, setIsMaximized] = React.useState(false);
   const generationSelectionRef = React.useRef<EditorSelectionSnapshot | null>(null);
-  const editorDisabled = disabled || isGeneratingMarkdown;
+  const generationBaseMarkdownRef = React.useRef<string | null>(null);
+  const editorInteractionDisabled = disabled || isGeneratingMarkdown;
   const fieldStyle = {
     "--rich-description-min-height": `${minHeight}px`,
     "--rich-description-max-height": isMaximized ? "calc(100vh - 1px)" : "75vh"
@@ -381,7 +384,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   }, [focusEditor, isMaximized, scheduleHeightSync]);
 
   React.useEffect(() => {
-    if (!autoFocus || editorDisabled) {
+    if (!autoFocus || editorInteractionDisabled) {
       return;
     }
 
@@ -395,7 +398,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     }, 0);
 
     return () => window.clearTimeout(focusTimer);
-  }, [autoFocus, editorDisabled, focusEditor, scheduleHeightSync]);
+  }, [autoFocus, editorInteractionDisabled, focusEditor, scheduleHeightSync]);
 
   const resolveEditorContentElement = React.useCallback(() => {
     return fieldRef.current?.querySelector<HTMLElement>("[contenteditable='true']") ?? null;
@@ -407,14 +410,45 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     setGenerationSelectionSummary(describeSelectionSnapshot(snapshot));
   }, [resolveEditorContentElement]);
 
+  const resolveGenerationBaseMarkdown = React.useCallback(async (region: ReturnType<typeof createGenerationRegion>) => {
+    const preserveGenerationRegionOptions = {
+      preserveGenerationRegionIds: [region.id]
+    };
+
+    let nextMarkdown = stripGenerationArtifacts(editorRef.current?.getMarkdown() ?? "", preserveGenerationRegionOptions);
+
+    for (let attempts = 0; !hasGenerationRegionPlaceholder(nextMarkdown, region) && attempts < 8; attempts += 1) {
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => resolve());
+      });
+      nextMarkdown = stripGenerationArtifacts(editorRef.current?.getMarkdown() ?? "", preserveGenerationRegionOptions);
+    }
+
+    return nextMarkdown;
+  }, []);
+
   const updateGenerationRegion = React.useCallback((replacement: string, region: ReturnType<typeof createGenerationRegion>, finalize: boolean) => {
     if (!editorRef.current) {
       return;
     }
 
-    const currentMarkdown = editorRef.current.getMarkdown();
-    const nextMarkdown = replaceGenerationRegion(currentMarkdown, region, replacement, finalize);
-    if (nextMarkdown === currentMarkdown) {
+    void finalize;
+
+    let baseMarkdown = stripGenerationArtifacts(generationBaseMarkdownRef.current ?? editorRef.current.getMarkdown(), {
+      preserveGenerationRegionIds: [region.id]
+    });
+    if (!hasGenerationRegionPlaceholder(baseMarkdown, region)) {
+      const liveMarkdown = stripGenerationArtifacts(editorRef.current.getMarkdown(), {
+        preserveGenerationRegionIds: [region.id]
+      });
+      if (hasGenerationRegionPlaceholder(liveMarkdown, region)) {
+        baseMarkdown = liveMarkdown;
+        generationBaseMarkdownRef.current = liveMarkdown;
+      }
+    }
+
+    const nextMarkdown = stripGenerationArtifacts(replaceGenerationRegion(baseMarkdown, region, replacement));
+    if (nextMarkdown === baseMarkdown) {
       return;
     }
 
@@ -438,9 +472,14 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         editorRef.current.focus(undefined, { defaultSelection: "rootEnd", preventScroll: true });
       }
 
-      editorRef.current.insertMarkdown(generationRegion.block);
-      syncControlledValue();
       setIsGeneratingMarkdown(true);
+      editorRef.current.insertMarkdown(generationRegion.block);
+      generationBaseMarkdownRef.current = await resolveGenerationBaseMarkdown(generationRegion);
+      if (!hasGenerationRegionPlaceholder(generationBaseMarkdownRef.current, generationRegion)) {
+        throw new Error("No se pudo reservar la region del editor para mostrar el stream.");
+      }
+
+      syncControlledValue();
 
       const response = await apiClient.postStream("/ai/markdown/generate", {
         prompt,
@@ -513,9 +552,10 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       setGenerationDialogOpen(false);
       setGenerationSelectionSummary("");
       generationSelectionRef.current = null;
+      generationBaseMarkdownRef.current = null;
       scheduleHeightSync();
     }
-  }, [resolveEditorContentElement, scheduleHeightSync, syncControlledValue, updateGenerationRegion]);
+  }, [resolveEditorContentElement, resolveGenerationBaseMarkdown, scheduleHeightSync, syncControlledValue, updateGenerationRegion]);
 
   const confirmMarkdownGeneration = React.useCallback(() => {
     const prompt = generationPrompt.trim();
@@ -675,6 +715,13 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         scheduleHeightSync();
       }
     };
+    const handleBeforeInput = (event: InputEvent) => {
+      if (!isGeneratingMarkdown) {
+        return;
+      }
+
+      event.preventDefault();
+    };
     const syncAnchor = () => {
       setActiveAnchor(resolveActiveAnchor(content));
     };
@@ -722,7 +769,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       syncAnchor();
     };
     const handlePaste = (event: ClipboardEvent) => {
-      if (editorDisabled) {
+      if (editorInteractionDisabled) {
         return;
       }
       const files = extractClipboardImages(event);
@@ -758,6 +805,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       characterData: true
     });
     resizeObserver.observe(content);
+    content.addEventListener("beforeinput", handleBeforeInput);
     content.addEventListener("input", handleInput);
     content.addEventListener("keyup", handleKeyUp);
     content.addEventListener("keydown", handleKeyDown);
@@ -775,6 +823,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     return () => {
       mutationObserver.disconnect();
       resizeObserver.disconnect();
+      content.removeEventListener("beforeinput", handleBeforeInput);
       content.removeEventListener("input", handleInput);
       content.removeEventListener("keyup", handleKeyUp);
       content.removeEventListener("keydown", handleKeyDown);
@@ -792,8 +841,9 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     };
   }, [
     activeAnchor,
-    editorDisabled,
+    editorInteractionDisabled,
     handleClipboardImage,
+    isGeneratingMarkdown,
     referenceResults,
     replaceActiveAnchor,
     scheduleHeightSync,
@@ -882,7 +932,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         className="rich-description-editor"
         contentEditableClassName="rich-description-content"
         overlayContainer={isMaximized ? editorOverlayContainer : undefined}
-        readOnly={editorDisabled}
+        readOnly={disabled}
         plugins={[
           headingsPlugin({ allowedHeadingLevels: ALLOWED_HEADING_LEVELS }),
           quotePlugin(),
@@ -914,7 +964,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
                   <ToolbarButton
                     label="Autogenerar markdown"
                     onMouseDown={(event) => {
-                      if (editorDisabled) {
+                      if (editorInteractionDisabled) {
                         return;
                       }
 
@@ -922,7 +972,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
                       captureGenerationSelection();
                     }}
                     onClick={() => {
-                      if (editorDisabled) {
+                      if (editorInteractionDisabled) {
                         return;
                       }
 
@@ -932,18 +982,18 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
                       setGenerationError("");
                       setGenerationDialogOpen(true);
                     }}
-                    disabled={editorDisabled}
+                    disabled={editorInteractionDisabled}
                   >
                     <LuWandSparkles aria-hidden="true" />
                   </ToolbarButton>
                   <ToolbarButton
                     label="Insertar video"
                     onClick={() => {
-                      if (!editorDisabled) {
+                      if (!editorInteractionDisabled) {
                         videoInputRef.current?.click();
                       }
                     }}
-                    disabled={editorDisabled}
+                    disabled={editorInteractionDisabled}
                   >
                     <FiVideo aria-hidden="true" />
                   </ToolbarButton>

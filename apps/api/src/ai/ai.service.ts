@@ -104,7 +104,6 @@ function buildMarkdownGenerationRequest(
     )
     .addUserMessage(buildMarkdownGenerationPrompt(dto))
     .model(aiLibrary.AICompletionRequestModel.TEXT_CHEAP)
-    .temperature(0.4)
     .maxTokens(1800)
     .verbosity(aiLibrary.Verbosity.MID)
     .withReasoningEffort(aiLibrary.ReasoningEffort.LOW)

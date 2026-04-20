@@ -12,9 +12,14 @@ export type EditorSelectionSnapshot = {
 
 export type GenerationRegion = {
   block: string;
-  endMarker: string;
-  startMarker: string;
+  id: string;
 };
+
+type StripGenerationArtifactsOptions = {
+  preserveGenerationRegionIds?: string[];
+};
+
+const GENERATION_PLACEHOLDER_PATTERN = /<span\b[^>]*data-ai-generation-placeholder=(["'])([^"']+)\1[^>]*?(?:>\s*<\/span>|\s*\/>)/gi;
 
 export function captureEditorSelection(
   content: HTMLElement | null,
@@ -88,35 +93,49 @@ export function restoreEditorSelection(
 
 export function createGenerationRegion(): GenerationRegion {
   const id = `ai-${Date.now()}-${Math.round(Math.random() * 10000)}`;
-  const startMarker = `<!-- AI_GENERATION_START:${id} -->`;
-  const endMarker = `<!-- AI_GENERATION_END:${id} -->`;
   return {
-    block: `${startMarker}\n${endMarker}`,
-    startMarker,
-    endMarker
+    block: `<span data-ai-generation-placeholder="${id}"></span>`,
+    id
   };
 }
 
 export function replaceGenerationRegion(
   markdown: string,
   region: GenerationRegion,
-  replacement: string,
-  finalize: boolean
+  replacement: string
 ): string {
-  const startIndex = markdown.indexOf(region.startMarker);
-  if (startIndex < 0) {
+  const placeholderPattern = buildGenerationRegionPattern(region.id);
+  if (!placeholderPattern.test(markdown)) {
     return markdown;
   }
 
-  const endIndex = markdown.indexOf(region.endMarker, startIndex + region.startMarker.length);
-  if (endIndex < 0) {
-    return markdown;
-  }
+  return markdown.replace(placeholderPattern, replacement);
+}
 
-  const afterEndIndex = endIndex + region.endMarker.length;
-  const nextContent = finalize
-    ? replacement
-    : [region.startMarker, replacement, region.endMarker].filter((entry) => entry.length > 0).join("\n");
+export function stripGenerationArtifacts(markdown: string, options: StripGenerationArtifactsOptions = {}) {
+  const preservedGenerationRegionIds = new Set(options.preserveGenerationRegionIds ?? []);
+  return markdown
+    .replace(GENERATION_PLACEHOLDER_PATTERN, (match, _quote: string, id: string) => (
+      preservedGenerationRegionIds.has(id) ? match : ""
+    ))
+    .replace(/<span\b[^>]*data-ai-generation-start="[^"]+"[^>]*>(?:[\s\S]*?)<\/span>/gi, "")
+    .replace(/<span\b[^>]*data-ai-generation-end="[^"]+"[^>]*>(?:[\s\S]*?)<\/span>/gi, "")
+    .replace(/<!--\s*AI_GENERATION_START:[^>]+-->/gi, "")
+    .replace(/<!--\s*AI_GENERATION_END:[^>]+-->/gi, "")
+    .replace(/\[\[AI_GENERATION_[^\]]+\]\]/g, "");
+}
 
-  return `${markdown.slice(0, startIndex)}${nextContent}${markdown.slice(afterEndIndex)}`;
+export function hasGenerationRegionPlaceholder(markdown: string, region: GenerationRegion) {
+  return buildGenerationRegionPattern(region.id).test(markdown);
+}
+
+function buildGenerationRegionPattern(id: string) {
+  return new RegExp(
+    `<span\\b[^>]*data-ai-generation-placeholder=(["'])${escapeRegExp(id)}\\1[^>]*?(?:>\\s*<\\/span>|\\s*\\/>)`,
+    "i"
+  );
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
