@@ -455,7 +455,11 @@
 }
 
 [class^="_codeMirrorWrapper"] {
-  &:hover [class^="_codeMirrorToolbar"] {
+  &:is(:hover, :focus-within) [class^="_codeMirrorToolbar"] {
+    display: flex;
+  }
+
+  &:has([role="combobox"][data-state="open"]) [class^="_codeMirrorToolbar"] {
     display: flex;
   }
 }
