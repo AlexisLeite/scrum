@@ -6,6 +6,7 @@
 
 .mdxeditor-rich-text-editor {
   overflow: auto;
+  scrollbar-gutter: stable both-edges;
   scroll-padding-bottom: var(--rich-description-tail-space, 30vh);
 }
 
@@ -139,6 +140,10 @@
   --rich-heading-4-size: 1.40625rem;
   --rich-heading-5-size: 1.1875rem;
   --rich-heading-6-size: 1rem;
+}
+
+.rich-description-content :is(p, li, td, th, label) {
+  text-wrap: wrap;
 }
 
 .rich-description-editor .mdxeditor-root-contenteditable {
@@ -358,12 +363,12 @@
 }
 
 .mdxeditor-popup-container {
-  z-index: 1105 !important;
+  z-index: 1210 !important;
 }
 
 .reference-anchor-popover {
   position: fixed;
-  z-index: 1110;
+  z-index: 1211;
   min-width: 320px;
   max-width: min(480px, calc(100vw - 32px));
   padding: 12px;

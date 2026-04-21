@@ -86,6 +86,7 @@ type ActiveAnchor = {
   token: string;
   query: string;
   occurrenceIndex: number;
+  plainTextStartOffset: number;
   viewport: {
     top: number;
     left: number;
@@ -136,10 +137,12 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const fieldRef = React.useRef<HTMLDivElement | null>(null);
   const videoInputRef = React.useRef<HTMLInputElement | null>(null);
   const resizeFrameRef = React.useRef<number | null>(null);
+  const selectionScrollFrameRef = React.useRef<number | null>(null);
+  const caretRestoreFrameRef = React.useRef<number | null>(null);
   const searchTimeoutRef = React.useRef<number | null>(null);
+  const suppressAnchorDetectionRef = React.useRef(false);
   const pendingUploadsRef = React.useRef<Map<string, UploadingImage>>(new Map());
   const resolvedUploadsRef = React.useRef<Map<string, string>>(new Map());
-  const [editorOverlayContainer, setEditorOverlayContainer] = React.useState<HTMLElement | null>(null);
   const [activeAnchor, setActiveAnchor] = React.useState<ActiveAnchor | null>(null);
   const [referenceResults, setReferenceResults] = React.useState<ReferenceSearchResult[]>([]);
   const [referenceLoading, setReferenceLoading] = React.useState(false);
@@ -165,7 +168,14 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
 
   const handleFieldRef = React.useCallback((node: HTMLDivElement | null) => {
     fieldRef.current = node;
-    setEditorOverlayContainer(node);
+  }, []);
+
+  const resolveEditorContentElement = React.useCallback(() => {
+    return fieldRef.current?.querySelector<HTMLElement>("[contenteditable='true']") ?? null;
+  }, []);
+
+  const resolveEditorScrollElement = React.useCallback(() => {
+    return fieldRef.current?.querySelector<HTMLElement>(".mdxeditor-rich-text-editor") ?? null;
   }, []);
 
   const syncEditorHeight = React.useCallback(() => {
@@ -287,9 +297,82 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     if (!editorContent) {
       return;
     }
-    editorContent.focus();
+    focusElementWithoutScroll(editorContent);
     scheduleHeightSync();
   }, [scheduleHeightSync]);
+
+  const syncSelectionIntoView = React.useCallback((behavior: ScrollBehavior = "smooth") => {
+    const content = resolveEditorContentElement();
+    const scrollElement = resolveEditorScrollElement();
+    const selection = window.getSelection();
+    if (!content || !scrollElement || !selection || selection.rangeCount === 0) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0).cloneRange();
+    if (!content.contains(range.startContainer) || !content.contains(range.endContainer)) {
+      return;
+    }
+
+    const rects = Array.from(range.getClientRects());
+    const selectionRect = rects[rects.length - 1] ?? range.getBoundingClientRect();
+    if ((!selectionRect.width && !selectionRect.height) || Number.isNaN(selectionRect.top)) {
+      return;
+    }
+
+    const scrollRect = scrollElement.getBoundingClientRect();
+    const currentScrollTop = scrollElement.scrollTop;
+    const topRelativeToScroll = selectionRect.top - scrollRect.top + currentScrollTop;
+    const bottomRelativeToScroll = selectionRect.bottom - scrollRect.top + currentScrollTop;
+    const topComfort = currentScrollTop + Math.max(24, Math.round(scrollElement.clientHeight * 0.14));
+    const bottomComfort = currentScrollTop + scrollElement.clientHeight - Math.max(72, Math.round(scrollElement.clientHeight * 0.24));
+    let nextScrollTop = currentScrollTop;
+
+    if (topRelativeToScroll < topComfort) {
+      nextScrollTop = Math.max(0, topRelativeToScroll - Math.max(24, Math.round(scrollElement.clientHeight * 0.12)));
+    } else if (bottomRelativeToScroll > bottomComfort) {
+      nextScrollTop = Math.max(
+        0,
+        bottomRelativeToScroll - scrollElement.clientHeight + Math.max(72, Math.round(scrollElement.clientHeight * 0.22))
+      );
+    }
+
+    if (Math.abs(nextScrollTop - currentScrollTop) < 4) {
+      return;
+    }
+
+    scrollElement.scrollTo({
+      top: nextScrollTop,
+      behavior
+    });
+  }, [resolveEditorContentElement, resolveEditorScrollElement]);
+
+  const scheduleSelectionViewportSync = React.useCallback((behavior: ScrollBehavior = "smooth") => {
+    if (selectionScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(selectionScrollFrameRef.current);
+    }
+
+    selectionScrollFrameRef.current = window.requestAnimationFrame(() => {
+      selectionScrollFrameRef.current = null;
+      syncSelectionIntoView(behavior);
+    });
+  }, [syncSelectionIntoView]);
+
+  const restoreCaretAtPlainTextOffset = React.useCallback((plainTextOffset: number) => {
+    const content = resolveEditorContentElement();
+    const selection = window.getSelection();
+    if (!content || !selection) {
+      return false;
+    }
+
+    const range = createRangeAtTextOffsets(content, plainTextOffset);
+    focusElementWithoutScroll(content);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    scheduleSelectionViewportSync("smooth");
+    return true;
+  }, [resolveEditorContentElement, scheduleSelectionViewportSync]);
 
   const placeCaretAfterImage = React.useCallback((imageUrl: string, remainingAttempts = 8) => {
     const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
@@ -331,11 +414,12 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       range.collapse(false);
     }
 
-    content.focus();
+    focusElementWithoutScroll(content);
     selection.removeAllRanges();
     selection.addRange(range);
     scheduleHeightSync();
-  }, [scheduleHeightSync]);
+    scheduleSelectionViewportSync("smooth");
+  }, [scheduleHeightSync, scheduleSelectionViewportSync]);
 
   React.useImperativeHandle(
     ref,
@@ -392,19 +476,12 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
 
     const focusTimer = window.setTimeout(() => {
       focusEditor();
-      const currentMarkdown = editorRef.current?.getMarkdown();
-      if (currentMarkdown !== undefined) {
-        editorRef.current?.setMarkdown(currentMarkdown);
-      }
+      scheduleSelectionViewportSync("smooth");
       scheduleHeightSync();
     }, 0);
 
     return () => window.clearTimeout(focusTimer);
-  }, [autoFocus, editorInteractionDisabled, focusEditor, scheduleHeightSync]);
-
-  const resolveEditorContentElement = React.useCallback(() => {
-    return fieldRef.current?.querySelector<HTMLElement>("[contenteditable='true']") ?? null;
-  }, []);
+  }, [autoFocus, editorInteractionDisabled, focusEditor, scheduleHeightSync, scheduleSelectionViewportSync]);
 
   const captureGenerationSelection = React.useCallback(() => {
     const snapshot = captureEditorSelection(resolveEditorContentElement(), editorRef.current);
@@ -594,16 +671,40 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       return;
     }
 
+    const replacement = buildInternalReferenceMarkdown(reference);
     const currentMarkdown = editorRef.current.getMarkdown();
-    const nextMarkdown = replaceAnchorOccurrence(currentMarkdown, activeAnchor, buildInternalReferenceMarkdown(reference));
+    const nextMarkdown = replaceAnchorOccurrence(currentMarkdown, activeAnchor, replacement);
     if (nextMarkdown === currentMarkdown) {
       return;
     }
 
+    suppressAnchorDetectionRef.current = true;
     updateEditorMarkdown(nextMarkdown);
     setActiveAnchor(null);
     setReferenceResults([]);
-  }, [activeAnchor, updateEditorMarkdown]);
+    if (caretRestoreFrameRef.current !== null) {
+      window.cancelAnimationFrame(caretRestoreFrameRef.current);
+    }
+
+    const nextCaretOffset = activeAnchor.plainTextStartOffset + reference.title.length;
+    const attemptCaretRestore = (remainingAttempts: number) => {
+      restoreCaretAtPlainTextOffset(nextCaretOffset);
+
+      if (remainingAttempts <= 1) {
+        suppressAnchorDetectionRef.current = false;
+        caretRestoreFrameRef.current = null;
+        return;
+      }
+
+      caretRestoreFrameRef.current = window.requestAnimationFrame(() => {
+        attemptCaretRestore(remainingAttempts - 1);
+      });
+    };
+
+    caretRestoreFrameRef.current = window.requestAnimationFrame(() => {
+      attemptCaretRestore(6);
+    });
+  }, [activeAnchor, restoreCaretAtPlainTextOffset, updateEditorMarkdown]);
 
   const handleClipboardImage = React.useCallback(async (file: File) => {
     if (!editorRef.current) {
@@ -729,11 +830,15 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       scheduleHeightSync();
     });
 
-    const handleInput = () => scheduleHeightSync();
+    const handleInput = () => {
+      scheduleHeightSync();
+      scheduleSelectionViewportSync();
+    };
     const handleKeyUp = (event: KeyboardEvent) => {
       if (event.key === "Enter" || event.key === "Backspace" || event.key === "Delete") {
         scheduleHeightSync();
       }
+      scheduleSelectionViewportSync();
     };
     const handleBeforeInput = (event: InputEvent) => {
       if (!isGeneratingMarkdown) {
@@ -743,7 +848,14 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       event.preventDefault();
     };
     const syncAnchor = () => {
+      if (suppressAnchorDetectionRef.current) {
+        return;
+      }
       setActiveAnchor(resolveActiveAnchor(content));
+    };
+    const handleFocus = () => {
+      syncAnchor();
+      scheduleSelectionViewportSync();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!activeAnchor) {
@@ -787,6 +899,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         return;
       }
       syncAnchor();
+      scheduleSelectionViewportSync();
     };
     const handlePaste = (event: ClipboardEvent) => {
       if (editorInteractionDisabled) {
@@ -831,7 +944,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     content.addEventListener("keydown", handleKeyDown);
     content.addEventListener("keyup", syncAnchor);
     content.addEventListener("mouseup", syncAnchor);
-    content.addEventListener("focus", syncAnchor);
+    content.addEventListener("focus", handleFocus);
     content.addEventListener("paste", handlePaste);
     content.addEventListener("click", handleClick);
     document.addEventListener("selectionchange", handleSelectionChange);
@@ -849,7 +962,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       content.removeEventListener("keydown", handleKeyDown);
       content.removeEventListener("keyup", syncAnchor);
       content.removeEventListener("mouseup", syncAnchor);
-      content.removeEventListener("focus", syncAnchor);
+      content.removeEventListener("focus", handleFocus);
       content.removeEventListener("paste", handlePaste);
       content.removeEventListener("click", handleClick);
       document.removeEventListener("selectionchange", handleSelectionChange);
@@ -857,6 +970,10 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       if (resizeFrameRef.current !== null) {
         window.cancelAnimationFrame(resizeFrameRef.current);
         resizeFrameRef.current = null;
+      }
+      if (selectionScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(selectionScrollFrameRef.current);
+        selectionScrollFrameRef.current = null;
       }
     };
   }, [
@@ -866,6 +983,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     isGeneratingMarkdown,
     referenceResults,
     replaceActiveAnchor,
+    scheduleSelectionViewportSync,
     scheduleHeightSync,
     selectedReferenceIndex
   ]);
@@ -927,6 +1045,10 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         URL.revokeObjectURL(previewUrl);
       });
       resolvedUploadsRef.current.clear();
+      if (caretRestoreFrameRef.current !== null) {
+        window.cancelAnimationFrame(caretRestoreFrameRef.current);
+        caretRestoreFrameRef.current = null;
+      }
     };
   }, []);
 
@@ -948,10 +1070,10 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
           onChange(materializeUploadedImageMarkdown(nextValue));
           scheduleHeightSync();
           releaseResolvedPreviewUrls(nextValue);
+          scheduleSelectionViewportSync();
         }}
         className="rich-description-editor"
         contentEditableClassName="rich-description-content"
-        overlayContainer={isMaximized ? editorOverlayContainer : undefined}
         readOnly={disabled}
         plugins={[
           headingsPlugin({ allowedHeadingLevels: ALLOWED_HEADING_LEVELS }),
@@ -1232,6 +1354,7 @@ function resolveActiveAnchor(root: HTMLElement): ActiveAnchor | null {
   const rootRange = document.createRange();
   rootRange.selectNodeContents(root);
   rootRange.setEnd(textNode.node, match.start);
+  const plainTextStartOffset = rootRange.toString().length;
 
   const rect = anchorRange.getBoundingClientRect();
   const top = rect.bottom + 8;
@@ -1243,6 +1366,7 @@ function resolveActiveAnchor(root: HTMLElement): ActiveAnchor | null {
     token: match.token,
     query: match.token.slice(1),
     occurrenceIndex,
+    plainTextStartOffset,
     viewport: {
       top,
       left,
@@ -1314,6 +1438,57 @@ function collapseRangeToStart(range: Range, node: Node) {
   range.collapse(true);
 }
 
+function resolveTextPointAtOffset(root: HTMLElement, plainTextOffset: number) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      return (node.textContent ?? "").length > 0 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    }
+  });
+
+  let remaining = Math.max(0, plainTextOffset);
+  let lastTextNode: Text | null = null;
+  let currentNode = walker.nextNode();
+  while (currentNode) {
+    const textNode = currentNode as Text;
+    const textLength = textNode.textContent?.length ?? 0;
+    if (remaining <= textLength) {
+      return {
+        node: textNode,
+        offset: remaining
+      };
+    }
+
+    remaining -= textLength;
+    lastTextNode = textNode;
+    currentNode = walker.nextNode();
+  }
+
+  if (lastTextNode) {
+    return {
+      node: lastTextNode,
+      offset: lastTextNode.textContent?.length ?? 0
+    };
+  }
+
+  return null;
+}
+
+function createRangeAtTextOffsets(root: HTMLElement, startOffset: number, endOffset = startOffset) {
+  const range = document.createRange();
+  const startPoint = resolveTextPointAtOffset(root, startOffset);
+  const endPoint = resolveTextPointAtOffset(root, Math.max(startOffset, endOffset));
+
+  if (startPoint && endPoint) {
+    range.setStart(startPoint.node, startPoint.offset);
+    range.setEnd(endPoint.node, endPoint.offset);
+    return range;
+  }
+
+  range.selectNodeContents(root);
+  range.collapse(false);
+  return range;
+}
+
 function findAnchorMatch(value: string, offset: number) {
   const anchorPattern = /@[A-Za-z0-9_ ]*/g;
   let match: RegExpExecArray | null = null;
@@ -1369,6 +1544,14 @@ function iconLabel(icon: ReferenceSearchResult["icon"]) {
   if (icon === "user") return "U";
   if (icon === "story") return "H";
   return "T";
+}
+
+function focusElementWithoutScroll(element: HTMLElement) {
+  try {
+    element.focus({ preventScroll: true });
+  } catch {
+    element.focus();
+  }
 }
 
 function escapeMarkdownLabel(value: string): string {
