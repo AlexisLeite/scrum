@@ -45,6 +45,7 @@ import { downloadProductDocument, printProductDocument } from "../../../util/pro
 import { normalizeSearchValue, type ProductItem, type StoryItem } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 import { Drawer, type DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
+import type { ProductPrintDrawerRouteDescriptor } from "../drawer-route-state";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { RichDescriptionField } from "./RichDescriptionField";
@@ -594,6 +595,7 @@ function SortablePrintItemRow(props: {
                 rows={12}
                 productId={productId}
                 disabled={contentState?.saving}
+                uriStateKey={`product-print-content:${productId}:${item.id}`}
               />
 
               <div className="row-actions compact product-print-editor-actions">
@@ -625,7 +627,15 @@ function SortablePrintItemRow(props: {
 
 export class ProductPrintDrawer extends Drawer {
   constructor(private readonly options: ProductPrintDrawerOptions) {
-    super("Imprimir producto", { size: "lg" });
+    const routeDescriptor: ProductPrintDrawerRouteDescriptor = {
+      type: "product_print",
+      productId: options.product.id
+    };
+
+    super("Imprimir producto", {
+      size: "lg",
+      routeDescriptor
+    });
   }
 
   render(context: DrawerRenderContext): React.ReactNode {

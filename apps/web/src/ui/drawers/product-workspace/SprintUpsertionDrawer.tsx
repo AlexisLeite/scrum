@@ -7,6 +7,7 @@ import { useRootStore } from "../../../stores/root-store";
 import { TaskSearchPicker, type TaskSearchPlacement } from "../../../components/TaskSearchPicker";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
+import type { SprintDrawerRouteDescriptor } from "../drawer-route-state";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { RichDescriptionField } from "./RichDescriptionField";
@@ -61,7 +62,16 @@ function taskMatchesQuery(task: PendingTask, query: string): boolean {
 
 export class SprintUpsertionDrawer extends Drawer {
   constructor(private readonly options: SprintUpsertionDrawerOptions) {
-    super(options.sprint ? "Editar sprint" : "Nuevo sprint", { size: "lg" });
+    const routeDescriptor: SprintDrawerRouteDescriptor = {
+      type: "sprint",
+      productId: options.productId,
+      sprintId: options.sprint?.id
+    };
+
+    super(options.sprint ? "Editar sprint" : "Nuevo sprint", {
+      size: "lg",
+      routeDescriptor
+    });
   }
 
   render(context: DrawerRenderContext): React.ReactNode {
@@ -119,6 +129,9 @@ export function SprintUpsertionForm(props: {
   const [startDate, setStartDate] = React.useState(asDateInput(sprint?.startDate));
   const [endDate, setEndDate] = React.useState(asDateInput(sprint?.endDate));
   const [error, setError] = React.useState("");
+  const goalUriStateKey = sprint?.id
+    ? `sprint-goal:${sprint.id}`
+    : `sprint-goal:new:${productId}`;
   const [saving, setSaving] = React.useState(false);
   const [suggestingDefinition, setSuggestingDefinition] = React.useState(false);
   const [pendingTasks, setPendingTasks] = React.useState<PendingTask[]>([]);
@@ -369,7 +382,13 @@ export function SprintUpsertionForm(props: {
         </div>
       </div>
 
-      <RichDescriptionField label="Objetivo" value={goal} onChange={setGoal} rows={4} />
+      <RichDescriptionField
+        label="Objetivo"
+        value={goal}
+        onChange={setGoal}
+        rows={4}
+        uriStateKey={goalUriStateKey}
+      />
 
       <div className="form-grid two-columns">
         <label>

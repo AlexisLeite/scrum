@@ -1,5 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
+import { useBodyScrollLock } from "../../useBodyScrollLock";
 import { useOverlayEscape } from "../../useOverlayEscape";
 import "./image-lightbox.css";
 
@@ -37,19 +38,7 @@ export function ImageLightbox(props: ImageLightboxProps) {
     setDragOrigin(null);
   }, [open, src]);
 
-  React.useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const { body } = document;
-    const previousOverflow = body.style.overflow;
-    body.style.overflow = "hidden";
-
-    return () => {
-      body.style.overflow = previousOverflow;
-    };
-  }, [open]);
+  useBodyScrollLock(open);
 
   useOverlayEscape(onClose, open);
 

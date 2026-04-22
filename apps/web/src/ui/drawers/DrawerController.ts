@@ -1,24 +1,61 @@
 import { makeAutoObservable } from "mobx";
 import { Drawer } from "./Drawer";
+import type { DrawerRouteDescriptor } from "./drawer-route-state";
 
 export type DrawerCloseGuard = () => boolean | Promise<boolean>;
+export type DrawerRouteSyncMode = "push" | "replace";
 
 export class DrawerController {
   stack: Drawer[] = [];
   private readonly closeGuards = new Map<string, DrawerCloseGuard>();
+  private routeSyncListener: ((descriptors: DrawerRouteDescriptor[], mode: DrawerRouteSyncMode) => void) | null = null;
+  private routeSyncPauseCount = 0;
 
   constructor() {
-    makeAutoObservable(this, {}, { autoBind: true });
+    makeAutoObservable<this, "closeGuards" | "routeSyncListener" | "routeSyncPauseCount">(this, {
+      closeGuards: false,
+      routeSyncListener: false,
+      routeSyncPauseCount: false
+    }, { autoBind: true });
+  }
+
+  setRouteSyncListener(listener: ((descriptors: DrawerRouteDescriptor[], mode: DrawerRouteSyncMode) => void) | null) {
+    this.routeSyncListener = listener;
+  }
+
+  getRouteDescriptors(): DrawerRouteDescriptor[] {
+    return this.stack.flatMap((drawer) => drawer.routeDescriptor ? [drawer.routeDescriptor] : []);
+  }
+
+  pauseRouteSync() {
+    this.routeSyncPauseCount += 1;
+  }
+
+  resumeRouteSync() {
+    this.routeSyncPauseCount = Math.max(0, this.routeSyncPauseCount - 1);
+    if (this.routeSyncPauseCount === 0) {
+      this.notifyRouteSync("replace");
+    }
+  }
+
+  private notifyRouteSync(mode: DrawerRouteSyncMode = "replace") {
+    if (this.routeSyncPauseCount > 0) {
+      return;
+    }
+
+    this.routeSyncListener?.(this.getRouteDescriptors(), mode);
   }
 
   add(drawer: Drawer): string {
     this.stack.push(drawer);
+    this.notifyRouteSync("push");
     return drawer.id;
   }
 
   close(drawerId: string) {
     this.closeGuards.delete(drawerId);
     this.stack = this.stack.filter((entry) => entry.id !== drawerId);
+    this.notifyRouteSync("replace");
   }
 
   registerCloseGuard(drawerId: string, guard: DrawerCloseGuard | null) {
@@ -60,5 +97,6 @@ export class DrawerController {
   closeAll() {
     this.closeGuards.clear();
     this.stack = [];
+    this.notifyRouteSync("replace");
   }
 }

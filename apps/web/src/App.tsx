@@ -22,6 +22,7 @@ import {
 } from "./routes/product-routes";
 import { useRootStore } from "./stores/root-store";
 import { DrawerHost } from "./ui/drawers/DrawerHost";
+import { useDrawerRoutePersistence } from "./ui/drawers/useDrawerRoutePersistence";
 import { ModalsController } from "./ui/modals/ModalsController";
 import { FocusedView } from "./views/FocusedView";
 import {
@@ -72,6 +73,7 @@ export const App = observer(function App() {
   const store = useRootStore();
   const auth = React.useMemo(() => new AuthController(store), [store]);
   const location = useLocation();
+  useDrawerRoutePersistence(store);
 
   React.useEffect(() => {
     store.session.setLoading(true);

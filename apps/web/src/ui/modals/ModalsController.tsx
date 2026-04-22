@@ -1,6 +1,7 @@
 import React from "react";
 import { makeAutoObservable } from "mobx";
 import { observer } from "mobx-react-lite";
+import { useBodyScrollLock } from "../useBodyScrollLock";
 import { ConfirmModal, Modal } from "./Modal";
 
 const FOCUSABLE_SELECTOR = [
@@ -45,9 +46,7 @@ class ModalsState {
       return false;
     }
 
-    this.close(modalId); 
-    document.body.style.overflow = "";
-
+    this.close(modalId);
     return true;
   }
 
@@ -67,6 +66,8 @@ const ModalsHost = observer(function ModalsHost() {
   const panelRefs = React.useRef(new Map<string, HTMLElement>());
   const previousFocusedElementRef = React.useRef<HTMLElement | null>(null);
   const previousModalCountRef = React.useRef(0);
+
+  useBodyScrollLock(modals.length > 0);
 
   const focusTopModal = React.useCallback((modalId?: string) => {
     const top = modalId ? modalsState.stack.find((entry) => entry.id === modalId) : modalsState.stack[modalsState.stack.length - 1];
@@ -191,16 +192,6 @@ const ModalsHost = observer(function ModalsHost() {
 
     focusTopModal();
   }, [focusTopModal, modals.length]);
-
-  React.useEffect(() => {
-    if (modals.length > 0) {
-      document.body.style.overflow = "hidden";
-      return undefined;
-    }
-
-    document.body.style.overflow = "";
-    return undefined;
-  }, [modals.length]);
 
   if (modals.length === 0) {
     return null;

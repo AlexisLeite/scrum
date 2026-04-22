@@ -563,6 +563,7 @@ export function TaskCollaborationPanel(props: {
             rows={7}
             disabled={submittingMessage || isHydratingRemote}
             productId={productId}
+            uriStateKey={detail ? `task-collaboration-message:${detail.id}` : `task-collaboration-message:${taskId}`}
           />
           {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
           <div className="row-actions compact">

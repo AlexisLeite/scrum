@@ -7,6 +7,7 @@ import { canDeleteProductsAdministration } from "../../../lib/permissions";
 import { productRootDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
+import type { ProductDrawerRouteDescriptor } from "../drawer-route-state";
 import { RichDescriptionField } from "../product-workspace/RichDescriptionField";
 import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { Drawer, DrawerRenderContext } from "../Drawer";
@@ -61,7 +62,15 @@ export class ProductUpsertionDrawer extends Drawer {
     private readonly controller: ProductController,
     private readonly options: { product?: ProductItem; onSaved?: SaveHook }
   ) {
-    super(options.product ? "Editar producto" : "Nuevo producto", { size: "md" });
+    const routeDescriptor: ProductDrawerRouteDescriptor = {
+      type: "product",
+      productId: options.product?.id
+    };
+
+    super(options.product ? "Editar producto" : "Nuevo producto", {
+      size: "md",
+      routeDescriptor
+    });
   }
 
   render(context: DrawerRenderContext): React.ReactNode {
@@ -136,6 +145,7 @@ export function ProductUpsertionForm(props: {
   const key = typeof form.key === "string" ? form.key : "";
   const description = typeof form.description === "string" ? form.description : "";
   const formDisabled = saving || deleting || isHydratingRemote;
+  const descriptionUriStateKey = product?.id ? `product-description:${product.id}` : "product-description:new";
   const currentCloseSnapshot = React.useMemo(
     () => normalizeProductCloseSnapshot({
       name,
@@ -301,6 +311,7 @@ export function ProductUpsertionForm(props: {
         onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
         rows={4}
         disabled={formDisabled}
+        uriStateKey={descriptionUriStateKey}
       />
       {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
       {isEditing && product ? (

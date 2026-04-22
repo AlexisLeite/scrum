@@ -66,6 +66,7 @@ const TaskInlineMessageEditor = React.memo(function TaskInlineMessageEditor(prop
   submitLabel: string;
   onEditorSave?: () => void;
   hasPendingChanges?: boolean;
+  uriStateKey?: string;
 }) {
   const {
     label,
@@ -77,7 +78,8 @@ const TaskInlineMessageEditor = React.memo(function TaskInlineMessageEditor(prop
     submitting,
     submitLabel,
     onEditorSave,
-    hasPendingChanges = Boolean(body.trim())
+    hasPendingChanges = Boolean(body.trim()),
+    uriStateKey
   } = props;
   const editorRef = React.useRef<RichDescriptionFieldHandle | null>(null);
   const submitDisabled = submitting || !body.trim() || !hasPendingChanges;
@@ -100,6 +102,7 @@ const TaskInlineMessageEditor = React.memo(function TaskInlineMessageEditor(prop
         autoFocus
         onSave={onEditorSave}
         saveDisabled={submitDisabled}
+        uriStateKey={uriStateKey}
       />
       <div className="row-actions compact">
         <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={submitting}>
@@ -206,6 +209,7 @@ export function TaskMessageThread(props: TaskMessageThreadProps) {
                 submitLabel="Guardar edicion"
                 onEditorSave={() => void rest.onSubmitEdit()}
                 hasPendingChanges={rest.editingBody.trim() !== message.body.trim()}
+                uriStateKey={`task-message-edit:${message.id}`}
               />
             ) : (
               <MarkdownPreview markdown={message.body} className="task-message-body markdown-preview-card" />
@@ -276,6 +280,7 @@ export function TaskMessageThread(props: TaskMessageThreadProps) {
                 productId={rest.productId}
                 submitting={rest.submittingReply}
                 submitLabel="Responder"
+                uriStateKey={`task-message-reply:${message.id}`}
               />
             ) : null}
 

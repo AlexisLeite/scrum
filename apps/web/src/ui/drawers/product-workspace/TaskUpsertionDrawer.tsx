@@ -9,6 +9,7 @@ import { filterAssignableUsersBySprintScope } from "../../../lib/assignable-user
 import { downloadTaskDocument } from "../../../util/product-print-pdf";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
+import type { TaskDrawerRouteDescriptor } from "../drawer-route-state";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { SearchableSelect, buildSearchableSelectOptions } from "../../SearchableSelect";
 import { ActivityTimeline, type ActivityEntry, type ActivityListResult } from "./ActivityTimeline";
@@ -87,13 +88,30 @@ type TaskUpsertionDrawerOptions = {
 
 export class TaskUpsertionDrawer extends Drawer {
   constructor(private readonly options: TaskUpsertionDrawerOptions) {
+    const routeDescriptor: TaskDrawerRouteDescriptor = {
+      type: "task",
+      productId: options.productId,
+      taskId: options.task?.id,
+      storyId: options.task ? undefined : options.defaultStoryId,
+      sprintId: options.task ? undefined : options.fixedSprintId,
+      defaultStatus: options.defaultStatus,
+      parentTaskId: options.defaultParentTaskId,
+      sourceMessageId: options.defaultSourceMessageId,
+      statusOptions: options.statusOptions,
+      allowSprintChange: options.allowSprintChange,
+      showCreationPlacementSelector: options.showCreationPlacementSelector
+    };
+
     super(
       options.task
         ? options.readOnly
           ? "Detalle de tarea"
           : "Editar tarea"
         : "Nueva tarea",
-      { size: "lg" }
+      {
+        size: "lg",
+        routeDescriptor
+      }
     );
   }
 
@@ -502,6 +520,17 @@ export function TaskUpsertionForm(props: {
   }, [openCreateStoryDrawer, setForm]);
 
   const showActualHoursField = status === "Done" || task?.actualHours != null;
+  const descriptionUriStateKey = task?.id
+    ? `task-description:${task.id}`
+    : [
+      "task-description",
+      options.productId,
+      defaultStoryId ?? "",
+      fixedSprintId ?? "",
+      defaultParentTaskId ?? "",
+      defaultSourceMessageId ?? "",
+      defaultStatus ?? ""
+    ].join(":");
   const currentCloseSnapshot = React.useMemo(
     () => normalizeTaskCloseSnapshot({
       title,
@@ -636,6 +665,7 @@ export function TaskUpsertionForm(props: {
           printDisabled={!canPrintTask}
           onSave={!readOnly ? () => void persistTask() : undefined}
           saveDisabled={saveActionDisabled}
+          uriStateKey={descriptionUriStateKey}
         />
         {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
 

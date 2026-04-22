@@ -2,6 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { FiMaximize2, FiMinimize2, FiPrinter, FiSave, FiVideo } from "react-icons/fi";
 import { LuWandSparkles } from "react-icons/lu";
+import { useSearchParams } from "react-router-dom";
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -31,7 +32,9 @@ import {
 import "@mdxeditor/editor/style.css";
 import { apiClient } from "../../../api/client";
 import { buildInternalReferenceMarkdown, ReferenceSearchResult } from "../../../lib/internal-references";
+import { useBodyScrollLock } from "../../useBodyScrollLock";
 import { useOverlayEscape } from "../../useOverlayEscape";
+import { MAXIMIZED_EDITOR_PARAM } from "../drawer-route-state";
 import { ImageLightbox } from "./ImageLightbox";
 import { MarkdownGenerationDialog } from "./MarkdownGenerationDialog";
 import {
@@ -59,6 +62,7 @@ type RichDescriptionFieldProps = {
   printDisabled?: boolean;
   onSave?: (() => Promise<void> | void) | undefined;
   saveDisabled?: boolean;
+  uriStateKey?: string;
 };
 
 export type RichDescriptionFieldHandle = {
@@ -130,8 +134,10 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     onPrint,
     printDisabled = false,
     onSave,
-    saveDisabled = false
+    saveDisabled = false,
+    uriStateKey
   } = props;
+  const [searchParams, setSearchParams] = useSearchParams();
   const minHeight = Math.max(rows, 4) * 24;
   const editorRef = React.useRef<MDXEditorMethods | null>(null);
   const fieldRef = React.useRef<HTMLDivElement | null>(null);
@@ -157,18 +163,57 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const [generationSelectionSummary, setGenerationSelectionSummary] = React.useState("");
   const [isGeneratingMarkdown, setIsGeneratingMarkdown] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<{ src: string; alt?: string } | null>(null);
-  const [isMaximized, setIsMaximized] = React.useState(false);
+  const [localIsMaximized, setLocalIsMaximized] = React.useState(false);
   const generationSelectionRef = React.useRef<EditorSelectionSnapshot | null>(null);
   const generationBaseMarkdownRef = React.useRef<string | null>(null);
   const editorInteractionDisabled = disabled || isGeneratingMarkdown;
+  const maximizedEditorKey = searchParams.get(MAXIMIZED_EDITOR_PARAM);
+  const isUrlDriven = Boolean(uriStateKey);
+  const isMaximized = isUrlDriven ? maximizedEditorKey === uriStateKey : localIsMaximized;
   const fieldStyle = {
     "--rich-description-min-height": `${minHeight}px`,
     "--rich-description-max-height": isMaximized ? "calc(100vh - 1px)" : "75vh"
   } as React.CSSProperties;
 
+  const setMaximized = React.useCallback((nextValue: boolean | ((current: boolean) => boolean)) => {
+    const resolvedValue = typeof nextValue === "function" ? nextValue(isMaximized) : nextValue;
+
+    if (!uriStateKey) {
+      setLocalIsMaximized(resolvedValue);
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    if (resolvedValue) {
+      nextParams.set(MAXIMIZED_EDITOR_PARAM, uriStateKey);
+    } else if (nextParams.get(MAXIMIZED_EDITOR_PARAM) === uriStateKey) {
+      nextParams.delete(MAXIMIZED_EDITOR_PARAM);
+    }
+
+    setSearchParams(nextParams, { replace: true });
+  }, [isMaximized, searchParams, setSearchParams, uriStateKey]);
+
   const handleFieldRef = React.useCallback((node: HTMLDivElement | null) => {
     fieldRef.current = node;
   }, []);
+
+  const handleFieldKeyDownCapture = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const pressedKey = event.key.toLowerCase();
+    const isSaveShortcut = (event.ctrlKey || event.metaKey) && !event.altKey && pressedKey === "s";
+
+    if (!isSaveShortcut) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!onSave || saveDisabled || editorInteractionDisabled) {
+      return;
+    }
+
+    void onSave();
+  }, [editorInteractionDisabled, onSave, saveDisabled]);
 
   const resolveEditorContentElement = React.useCallback(() => {
     return fieldRef.current?.querySelector<HTMLElement>("[contenteditable='true']") ?? null;
@@ -437,22 +482,10 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   }, [scheduleHeightSync]);
 
   useOverlayEscape(() => {
-    setIsMaximized(false);
+    setMaximized(false);
   }, isMaximized);
 
-  React.useEffect(() => {
-    if (!isMaximized) {
-      return;
-    }
-
-    const { body } = document;
-    const previousOverflow = body.style.overflow;
-    body.style.overflow = "hidden";
-
-    return () => {
-      body.style.overflow = previousOverflow;
-    };
-  }, [isMaximized]);
+  useBodyScrollLock(isMaximized);
 
   React.useEffect(() => {
     scheduleHeightSync();
@@ -1060,6 +1093,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       role={isMaximized ? "dialog" : undefined}
       aria-modal={isMaximized ? "true" : undefined}
       aria-label={isMaximized ? `${label} en pantalla completa` : undefined}
+      onKeyDownCapture={handleFieldKeyDownCapture}
       onMouseDown={isMaximized ? (event) => event.stopPropagation() : undefined}
     >
       <span className="rich-description-label">{label}</span>
@@ -1167,7 +1201,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
                   <ToolbarButton
                     label={isMaximized ? "Salir de pantalla completa" : "Pantalla completa"}
                     pressed={isMaximized}
-                    onClick={() => setIsMaximized((current) => !current)}
+                    onClick={() => setMaximized((current) => !current)}
                   >
                     {isMaximized ? <FiMinimize2 aria-hidden="true" /> : <FiMaximize2 aria-hidden="true" />}
                   </ToolbarButton>
@@ -1279,7 +1313,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
 
   return createPortal(
     <div className="rich-description-maximized-shell">
-      <div className="rich-description-maximized-backdrop" onMouseDown={() => setIsMaximized(false)} />
+      <div className="rich-description-maximized-backdrop" onMouseDown={() => setMaximized(false)} />
       {editorField}
     </div>,
     document.body

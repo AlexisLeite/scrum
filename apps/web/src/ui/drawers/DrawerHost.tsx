@@ -1,5 +1,6 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
+import { useBodyScrollLock } from "../useBodyScrollLock";
 import { useOverlayEscape } from "../useOverlayEscape";
 import { DrawerController } from "./DrawerController";
 
@@ -7,15 +8,7 @@ export const DrawerHost = observer(function DrawerHost(props: { controller: Draw
   const { controller } = props;
   const drawers = controller.stack;
 
-  React.useEffect(() => {
-    if (drawers.length === 0) return;
-    const { body } = document;
-    const previous = body.style.overflow;
-    body.style.overflow = "hidden";
-    return () => {
-      body.style.overflow = previous;
-    };
-  }, [drawers.length]);
+  useBodyScrollLock(drawers.length > 0);
 
   useOverlayEscape(() => {
     void controller.requestCloseTop();

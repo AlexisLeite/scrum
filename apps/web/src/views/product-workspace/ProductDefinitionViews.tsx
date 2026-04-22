@@ -1617,6 +1617,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
                   onChange={setMessageBody}
                   rows={8}
                   productId={productId}
+                  uriStateKey={`task-definition-message:${taskDetail.id}`}
                 />
                 <div className="row-actions compact">
                   <button
