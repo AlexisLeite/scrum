@@ -58,6 +58,19 @@
   min-height: 0;
 }
 
+.rich-description-field.is-maximized .mdxeditor-source-editor,
+.rich-description-field.is-maximized .mdxeditor-source-editor .cm-editor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rich-description-field.is-maximized .mdxeditor-source-editor .cm-scroller {
+  min-height: 0;
+  overflow: auto;
+}
+
 .rich-description-field.is-maximized .mdxeditor-rich-text-editor,
 .rich-description-field.is-maximized .mdxeditor-root-contenteditable,
 .rich-description-field.is-maximized .mdxeditor-root-contenteditable>div {
