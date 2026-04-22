@@ -15,6 +15,24 @@ type MarkdownGenerationSession = {
 
 type ChunkListener = (chunk: string) => void;
 
+export type SprintDefinitionSuggestionInput = {
+  productName: string;
+  sprintName: string;
+  startDate: string | null;
+  endDate: string | null;
+  previousSprintNames: string[];
+  tasks: Array<{
+    title: string;
+    storyTitle: string | null;
+    status: string;
+  }>;
+};
+
+type SprintDefinitionSuggestion = {
+  name: string;
+  goal: string;
+};
+
 let aiLibraryPromise: Promise<AILibrary> | null = null;
 let utilLibraryPromise: Promise<UtilLibrary> | null = null;
 let openAiEnvironmentLoaded = false;
@@ -84,6 +102,46 @@ export class AiService {
       }
     };
   }
+
+  async suggestSprintDefinition(
+    user: AuthUser,
+    input: SprintDefinitionSuggestionInput
+  ): Promise<SprintDefinitionSuggestion> {
+    const [aiLibrary, utilLibrary] = await Promise.all([loadAiLibrary(), loadUtilLibrary()]);
+    const apiKey = resolveOpenAiApiKey();
+    const log = new utilLibrary.TreeLogger(
+      process.stdout,
+      "AiSprintDefinitionSuggestion",
+      `user=${user.sub}`,
+      utilLibrary.Level.WARNING
+    );
+    const requestLog = log.getSublogger("request", "Suggests sprint title and goal.");
+    const connector = new aiLibrary.OpenAIConnector({
+      apiKey,
+      retryCount: 2,
+      log: requestLog
+    });
+
+    const responses = await connector.completion(
+      buildSprintDefinitionSuggestionRequest(aiLibrary, input, requestLog)
+    );
+
+    const response = responses[0];
+    if (!response) {
+      throw new Error("La IA no devolvio ninguna respuesta.");
+    }
+
+    if (response.getStatus() === aiLibrary.AIResponseStatus.ERROR) {
+      throw new Error(response.getErrorMessage() || "La IA no pudo sugerir el sprint.");
+    }
+
+    const finalText = (response.getTextAnswers()?.join("\n") ?? "").trim();
+    if (!finalText) {
+      throw new Error("La IA devolvio una sugerencia vacia.");
+    }
+
+    return parseSprintDefinitionSuggestion(finalText);
+  }
 }
 
 function buildMarkdownGenerationRequest(
@@ -147,9 +205,139 @@ function buildMarkdownGenerationPrompt(dto: GenerateMarkdownDto): string {
   return promptSections.join("\n\n");
 }
 
+function buildSprintDefinitionSuggestionRequest(
+  aiLibrary: AILibrary,
+  input: SprintDefinitionSuggestionInput,
+  log: InstanceType<UtilLibrary["TreeLogger"]>
+) {
+  return aiLibrary.AICompletionRequest
+    .builder()
+    .addSystemMessage(
+      [
+        "Eres un asistente que propone nombres y objetivos para sprints de Scrum.",
+        "Responde exclusivamente JSON valido con la forma {\"name\":\"...\",\"goal\":\"...\"}.",
+        "El campo name debe ser texto plano, corto, en espanol y sin markdown.",
+        "El campo goal debe ser markdown breve, sin encabezados y listo para mostrarse en la descripcion del sprint.",
+        "Usa las tareas planificadas como fuente principal y toma los nombres de sprints previos solo como referencia de estilo.",
+        "No copies exactamente un nombre anterior salvo que sea estrictamente necesario.",
+        "No agregues comentarios, explicaciones ni fences de codigo."
+      ].join("\n")
+    )
+    .addUserMessage(buildSprintDefinitionSuggestionPrompt(input))
+    .model(aiLibrary.AICompletionRequestModel.TEXT_CHEAP)
+    .maxTokens(700)
+    .verbosity(aiLibrary.Verbosity.LOW)
+    .withReasoningEffort(aiLibrary.ReasoningEffort.LOW)
+    .addCharacteristic(new aiLibrary.OpenAICharacteristics().setGptFamily(aiLibrary.GPTFamily.GPT5_4))
+    .logger(log.getSublogger("connector", "OpenAIConnector sprint definition suggestion"))
+    .build();
+}
+
+function buildSprintDefinitionSuggestionPrompt(input: SprintDefinitionSuggestionInput): string {
+  const visibleTasks = input.tasks.slice(0, 40);
+  const omittedTaskCount = Math.max(0, input.tasks.length - visibleTasks.length);
+  const previousSprintNames = input.previousSprintNames.length > 0
+    ? input.previousSprintNames.map((name, index) => `${index + 1}. ${name}`).join("\n")
+    : "(sin sprints previos disponibles)";
+  const plannedTasks = visibleTasks
+    .map((task, index) => `${index + 1}. Historia: ${task.storyTitle ?? "Sin historia"} | Tarea: ${task.title} | Estado actual: ${task.status}`)
+    .join("\n");
+
+  return [
+    `Producto: ${input.productName}`,
+    `Sprint actual: ${input.sprintName}`,
+    `Rango tentativo: ${formatSprintDateRange(input.startDate, input.endDate)}`,
+    "",
+    "Titulos de sprints previos:",
+    previousSprintNames,
+    "",
+    "Tareas incluidas en la planificacion:",
+    plannedTasks,
+    omittedTaskCount > 0 ? `... y ${omittedTaskCount} tareas adicionales.` : "",
+    "",
+    "Necesito una sugerencia de nombre y un objetivo en markdown para este sprint.",
+    "El nombre debe ser claro y consistente con el historial.",
+    "El objetivo debe resumir el valor esperado y los frentes principales del sprint en 1 a 3 parrafos o bullets breves."
+  ].join("\n");
+}
+
 function safeBlockValue(value: string | undefined, fallback: string): string {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : fallback;
+}
+
+function formatSprintDateRange(startDate: string | null, endDate: string | null): string {
+  if (startDate && endDate) {
+    return `${startDate} -> ${endDate}`;
+  }
+  if (startDate) {
+    return `inicio ${startDate}`;
+  }
+  if (endDate) {
+    return `fin ${endDate}`;
+  }
+  return "(sin fechas definidas)";
+}
+
+function parseSprintDefinitionSuggestion(rawText: string): SprintDefinitionSuggestion {
+  const normalizedText = unwrapJsonFence(rawText);
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(normalizedText);
+  } catch {
+    throw new Error("La IA devolvio una respuesta invalida al sugerir el sprint.");
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("La IA devolvio una sugerencia sin formato valido.");
+  }
+
+  const candidate = parsed as Record<string, unknown>;
+  const name = normalizeSprintSuggestionName(candidate.name);
+  const goal = normalizeSprintSuggestionGoal(candidate.goal);
+
+  if (name.length < 3) {
+    throw new Error("La IA no devolvio un nombre valido para el sprint.");
+  }
+
+  if (!goal) {
+    throw new Error("La IA no devolvio un objetivo valido para el sprint.");
+  }
+
+  return { name, goal };
+}
+
+function unwrapJsonFence(rawText: string): string {
+  const trimmed = rawText.trim();
+  if (!trimmed.startsWith("```")) {
+    return trimmed;
+  }
+
+  return trimmed
+    .replace(/^```[a-zA-Z0-9_-]*\s*/, "")
+    .replace(/\s*```$/, "")
+    .trim();
+}
+
+function normalizeSprintSuggestionName(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value
+    .replace(/^#+\s*/, "")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeSprintSuggestionGoal(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim();
 }
 
 function resolveOpenAiApiKey(): string {

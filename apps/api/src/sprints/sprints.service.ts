@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import { ActivityEntityType, SprintStatus } from "@prisma/client";
 import { ActivityService } from "../activity/activity.service";
+import { AiService } from "../ai/ai.service";
 import { AuthUser } from "../common/current-user.decorator";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -16,7 +17,8 @@ export class SprintsService {
     private readonly prisma: PrismaService,
     private readonly tasksService: TasksService,
     private readonly permissionsService: PermissionsService,
-    private readonly activityService: ActivityService
+    private readonly activityService: ActivityService,
+    private readonly aiService: AiService
   ) {}
 
   async listByProduct(productId: string, user: AuthUser) {
@@ -219,6 +221,73 @@ export class SprintsService {
       afterJson: updated
     });
     return updated;
+  }
+
+  async suggestDefinition(id: string, user: AuthUser) {
+    const sprint = await this.getSprintOrThrow(id);
+    await this.assertSprintAccess(user, sprint);
+    this.permissionsService.assertProductPermission(
+      user,
+      sprint.productId,
+      "product.admin.sprint.update",
+      "Insufficient product permission"
+    );
+    this.assertSprintIsMutable(sprint.status, sprint.productId, user);
+
+    const [plannedTasks, previousSprints, product] = await Promise.all([
+      this.prisma.task.findMany({
+        where: { sprintId: id },
+        select: {
+          title: true,
+          status: true,
+          boardOrder: true,
+          createdAt: true,
+          story: {
+            select: {
+              title: true
+            }
+          }
+        },
+        orderBy: [{ boardOrder: "asc" }, { createdAt: "asc" }]
+      }),
+      this.prisma.sprint.findMany({
+        where: {
+          productId: sprint.productId,
+          id: { not: id },
+          name: { not: "" }
+        },
+        select: {
+          name: true
+        },
+        orderBy: [{ createdAt: "desc" }],
+        take: 12
+      }),
+      this.prisma.product.findUnique({
+        where: { id: sprint.productId },
+        select: { name: true }
+      })
+    ]);
+
+    if (!product) {
+      throw new BadRequestException("Product not found");
+    }
+
+    if (plannedTasks.length === 0) {
+      throw new BadRequestException("Agrega al menos una tarea al sprint antes de pedir sugerencias con IA.");
+    }
+
+    return this.aiService.suggestSprintDefinition(user, {
+      productName: product.name,
+      sprintName: sprint.name,
+      startDate: sprint.startDate ? sprint.startDate.toISOString().slice(0, 10) : null,
+      endDate: sprint.endDate ? sprint.endDate.toISOString().slice(0, 10) : null,
+      previousSprintNames: previousSprints.map((entry) => entry.name.trim()).filter(Boolean),
+      tasks: plannedTasks.map((task) => ({
+        title: task.title,
+        storyTitle: task.story?.title ?? null,
+        status: task.status
+      }))
+    });
   }
 
   async remove(id: string, user: AuthUser) {

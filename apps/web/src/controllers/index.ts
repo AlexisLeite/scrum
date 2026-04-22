@@ -483,6 +483,10 @@ export class ProductController {
     return sprint;
   }
 
+  async suggestSprintDefinition(sprintId: string) {
+    return apiClient.post<{ name: string; goal: string }>(`/sprints/${sprintId}/suggest-definition`);
+  }
+
   async deleteSprint(sprintId: string) {
     const sprint = await apiClient.del<any>(`/sprints/${sprintId}`);
     this.store.sprints.remove(sprintId);

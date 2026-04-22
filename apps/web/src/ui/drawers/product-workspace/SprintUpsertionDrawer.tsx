@@ -112,6 +112,7 @@ export function SprintUpsertionForm(props: {
   const store = useRootStore();
   const navigate = useNavigate();
   const user = store.session.user;
+  const nameInputId = React.useId();
 
   const [name, setName] = React.useState(sprint?.name ?? "");
   const [goal, setGoal] = React.useState(sprint?.goal ?? "");
@@ -119,6 +120,7 @@ export function SprintUpsertionForm(props: {
   const [endDate, setEndDate] = React.useState(asDateInput(sprint?.endDate));
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const [suggestingDefinition, setSuggestingDefinition] = React.useState(false);
   const [pendingTasks, setPendingTasks] = React.useState<PendingTask[]>([]);
   const [sprintTasks, setSprintTasks] = React.useState<PendingTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(false);
@@ -177,6 +179,34 @@ export function SprintUpsertionForm(props: {
   }, [loadTaskPools, sprint]);
 
   const isDateRangeInvalid = Boolean(startDate && endDate && startDate > endDate);
+
+  const suggestSprintDefinition = async () => {
+    if (!sprint) return;
+    if (sprintTasks.length === 0) {
+      setError("Agrega al menos una tarea al sprint antes de pedir sugerencias con IA.");
+      return;
+    }
+
+    if (
+      hasUnsavedChanges &&
+      !window.confirm("La sugerencia de IA reemplazara el nombre y el objetivo actuales del sprint. Deseas continuar?")
+    ) {
+      return;
+    }
+
+    setSuggestingDefinition(true);
+    setError("");
+
+    try {
+      const suggestion = await controller.suggestSprintDefinition(sprint.id);
+      setName(suggestion.name);
+      setGoal(suggestion.goal);
+    } catch (suggestionError) {
+      setError(suggestionError instanceof Error ? suggestionError.message : "No se pudo sugerir el sprint con IA.");
+    } finally {
+      setSuggestingDefinition(false);
+    }
+  };
 
   const submit = async (event?: React.FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
@@ -313,10 +343,30 @@ export function SprintUpsertionForm(props: {
   return (
     <form className="form-grid" onSubmit={(event) => void submit(event)}>
       <div className="form-grid two-columns">
-        <label>
-          Nombre
-          <input value={name} onChange={(event) => setName(event.target.value)} required />
-        </label>
+        <div className="sprint-title-field">
+          <label htmlFor={nameInputId}>Nombre</label>
+          <div className="sprint-title-input-row">
+            <input id={nameInputId} value={name} onChange={(event) => setName(event.target.value)} required />
+            {sprint && canManageTasks ? (
+              <button
+                type="button"
+                className="btn btn-secondary sprint-ai-trigger"
+                onClick={() => void suggestSprintDefinition()}
+                disabled={saving || suggestingDefinition || tasksLoading}
+                aria-busy={suggestingDefinition}
+                title={sprintTasks.length === 0 ? "Agrega tareas al sprint para habilitar la sugerencia." : undefined}
+              >
+                {suggestingDefinition ? <span className="submit-loading-indicator" aria-hidden="true" /> : null}
+                {suggestingDefinition ? "Sugiriendo..." : "Sugerir con IA"}
+              </button>
+            ) : null}
+          </div>
+          {sprint && canManageTasks ? (
+            <span className="muted sprint-title-help">
+              Usa las tareas ya planificadas en este sprint para proponer un nombre y un objetivo consistentes.
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <RichDescriptionField label="Objetivo" value={goal} onChange={setGoal} rows={4} />

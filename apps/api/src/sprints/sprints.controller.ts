@@ -24,6 +24,11 @@ export class SprintsController {
     return this.sprintsService.update(id, dto, user);
   }
 
+  @Post("sprints/:id/suggest-definition")
+  suggestDefinition(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.sprintsService.suggestDefinition(id, user);
+  }
+
   @Delete("sprints/:id")
   remove(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.sprintsService.remove(id, user);
