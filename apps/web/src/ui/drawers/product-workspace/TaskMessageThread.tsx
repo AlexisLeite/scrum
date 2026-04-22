@@ -85,7 +85,6 @@ const TaskInlineMessageEditor = React.memo(function TaskInlineMessageEditor(prop
   const submitDisabled = submitting || !body.trim() || !hasPendingChanges;
 
   React.useEffect(() => {
-    editorRef.current?.focus();
     editorRef.current?.refreshLayout();
   }, []);
 
@@ -99,7 +98,6 @@ const TaskInlineMessageEditor = React.memo(function TaskInlineMessageEditor(prop
         rows={6}
         disabled={submitting}
         productId={productId}
-        autoFocus
         onSave={onEditorSave}
         saveDisabled={submitDisabled}
         uriStateKey={uriStateKey}

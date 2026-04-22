@@ -39,6 +39,7 @@
 }
 
 .rich-description-field.is-maximized .rich-description-editor {
+  --rich-description-tail-space: 30vh;
   border: none;
   border-radius: 0;
   display: flex;
@@ -90,7 +91,7 @@
 }
 
 .rich-description-editor {
-  --rich-description-tail-space: 30vh;
+  --rich-description-tail-space: 0px;
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;

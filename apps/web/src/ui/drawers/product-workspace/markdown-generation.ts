@@ -70,12 +70,14 @@ export function captureEditorSelection(
   const selectionPlainText = range.toString();
   const startOffset = startProbe.toString().length;
   const endOffset = endProbe.toString().length;
-  const markdownRange = resolveSelectionMarkdownRange({
+  const selectionSnapshot = {
     currentMarkdown,
     selectionMarkdown,
     selectionPlainText,
     startOffset
-  });
+  };
+  const markdownRange = resolveSelectionMarkdownRange(selectionSnapshot)
+    ?? (selection.isCollapsed ? resolveCollapsedSelectionMarkdownRange(currentMarkdown, startOffset) : null);
 
   return {
     currentMarkdown,
@@ -88,25 +90,6 @@ export function captureEditorSelection(
     collapsed: selection.isCollapsed,
     range: range.cloneRange()
   };
-}
-
-export function restoreEditorSelection(
-  content: HTMLElement | null,
-  snapshot: EditorSelectionSnapshot | null | undefined
-): boolean {
-  if (!content || !snapshot?.range) {
-    return false;
-  }
-
-  const selection = window.getSelection();
-  if (!selection) {
-    return false;
-  }
-
-  content.focus();
-  selection.removeAllRanges();
-  selection.addRange(snapshot.range);
-  return true;
 }
 
 export function createGenerationRegion(): GenerationRegion {
@@ -231,7 +214,26 @@ function resolveCachedSelectionMarkdownRange(
     };
   }
 
+  if (!snapshot.selectionMarkdown && !snapshot.selectionPlainText && snapshot.markdownStartIndex === snapshot.markdownEndIndex) {
+    return {
+      start: snapshot.markdownStartIndex,
+      end: snapshot.markdownEndIndex
+    };
+  }
+
   return null;
+}
+
+function resolveCollapsedSelectionMarkdownRange(markdown: string, plainTextOffset: number | null) {
+  const markdownIndex = resolveMarkdownIndexFromPlainTextOffset(markdown, plainTextOffset);
+  if (markdownIndex == null) {
+    return null;
+  }
+
+  return {
+    start: markdownIndex,
+    end: markdownIndex
+  };
 }
 
 function findSnippetRange(markdown: string, snippet: string, plainTextOffset: number | null) {
@@ -288,6 +290,35 @@ function collectSnippetOccurrences(markdown: string, snippet: string) {
 
 function estimateRenderedTextLength(markdown: string) {
   return markdownToApproximatePlainText(markdown).length;
+}
+
+function resolveMarkdownIndexFromPlainTextOffset(markdown: string, plainTextOffset: number | null) {
+  if (plainTextOffset == null) {
+    return null;
+  }
+
+  if (plainTextOffset <= 0) {
+    return 0;
+  }
+
+  let low = 0;
+  let high = markdown.length;
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const renderedLength = estimateRenderedTextLength(markdown.slice(0, mid));
+    if (renderedLength < plainTextOffset) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+
+  const currentIndex = Math.min(low, markdown.length);
+  const previousIndex = Math.max(0, currentIndex - 1);
+  const currentDistance = Math.abs(estimateRenderedTextLength(markdown.slice(0, currentIndex)) - plainTextOffset);
+  const previousDistance = Math.abs(estimateRenderedTextLength(markdown.slice(0, previousIndex)) - plainTextOffset);
+  return previousDistance <= currentDistance ? previousIndex : currentIndex;
 }
 
 function markdownToApproximatePlainText(markdown: string) {
