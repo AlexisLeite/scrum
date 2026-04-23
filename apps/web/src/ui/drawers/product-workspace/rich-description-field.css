@@ -164,15 +164,6 @@
   position: relative;
 }
 
-.rich-description-editor .mdxeditor-root-contenteditable::after {
-  content: "";
-  position: absolute;
-  inset-inline: 0;
-  top: 100%;
-  height: var(--rich-description-tail-space);
-  pointer-events: none;
-}
-
 .rich-description-content>* {
   scroll-margin-bottom: var(--rich-description-tail-space);
 }
