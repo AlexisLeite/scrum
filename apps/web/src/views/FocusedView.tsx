@@ -204,6 +204,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
   canChangeStatus: (task: FocusedTask) => boolean;
   canMoveTask: (task: FocusedTask) => boolean;
   getTaskAssignees: (task: FocusedTask, assignees: DrawerOption[]) => DrawerOption[];
+  getTaskCopyText: (task: FocusedTask) => string;
   toolbarActions?: React.ReactNode;
   isTaskPending: (taskId: string) => boolean;
   isTaskOpening: (taskId: string) => boolean;
@@ -228,6 +229,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
     canChangeStatus,
     canMoveTask,
     getTaskAssignees,
+    getTaskCopyText,
     toolbarActions,
     isTaskPending,
     isTaskOpening,
@@ -264,6 +266,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
         canChangeStatus={(task) => canChangeStatus(task as FocusedTask)}
         canMoveTask={(task) => canMoveTask(task as FocusedTask)}
         getTaskAssignees={(task, nextAssignees) => getTaskAssignees(task as FocusedTask, nextAssignees as DrawerOption[])}
+        getTaskCopyText={(task) => getTaskCopyText(task as FocusedTask)}
         toolbarActions={toolbarActions}
         isTaskPending={isTaskPending}
         isTaskOpening={isTaskOpening}
@@ -974,6 +977,10 @@ export const FocusedView = observer(function FocusedView() {
   );
   const isFocusedTaskPending = React.useCallback((taskId: string) => Boolean(pendingTaskIds[taskId]), [pendingTaskIds]);
   const isFocusedTaskOpening = React.useCallback((taskId: string) => Boolean(openingTaskIds[taskId]), [openingTaskIds]);
+  const getFocusedTaskCopyText = React.useCallback(
+    (task: FocusedTask) => `Usa el skill Scrum Task Implementation y trabaja la tarea "${task.title}" con id ${task.id} `,
+    []
+  );
   const hasPendingFocusedMutations = React.useMemo(
     () => Object.keys(pendingTaskIds).length > 0,
     [pendingTaskIds]
@@ -1185,6 +1192,7 @@ export const FocusedView = observer(function FocusedView() {
           canChangeStatus={canChangeFocusedStatus}
           canMoveTask={canMoveFocusedBoardTask}
           getTaskAssignees={getFocusedTaskAssignees}
+          getTaskCopyText={getFocusedTaskCopyText}
           toolbarActions={focusedToolbarActions}
           isTaskPending={isFocusedTaskPending}
           isTaskOpening={isFocusedTaskOpening}

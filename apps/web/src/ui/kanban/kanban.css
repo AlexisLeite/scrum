@@ -269,6 +269,25 @@
   outline-offset: 2px;
 }
 
+.kb-copy-button {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  color: var(--text-muted);
+}
+
+.kb-copy-button svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.kb-copy-button.is-copied {
+  color: var(--ok-text);
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
+}
+
 .kb-task-title-label {
   display: inline-flex;
   align-items: center;

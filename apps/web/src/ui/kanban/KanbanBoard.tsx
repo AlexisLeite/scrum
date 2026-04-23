@@ -1,5 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
+import { FiCheck, FiCopy } from "react-icons/fi";
 import {
   pointerWithin,
   DndContext,
@@ -57,6 +58,8 @@ type ColumnPreferences = {
   widths: Record<string, number>;
 };
 
+type TaskCopyState = "idle" | "copied";
+
 type KanbanBoardProps = {
   columns: KanbanColumn[];
   assignees: KanbanAssignee[];
@@ -74,6 +77,7 @@ type KanbanBoardProps = {
   canChangeStatus?: (task: KanbanTask) => boolean;
   canMoveTask?: (task: KanbanTask) => boolean;
   getTaskAssignees?: (task: KanbanTask, assignees: KanbanAssignee[]) => KanbanAssignee[];
+  getTaskCopyText?: (task: KanbanTask) => string | null | undefined;
   editActionLabel?: string | ((task: KanbanTask) => string);
   isTaskPending?: (taskId: string) => boolean;
   isTaskOpening?: (taskId: string) => boolean;
@@ -234,6 +238,7 @@ function parseCssPixels(value: string | null | undefined) {
 }
 
 const GHOST_ID_PREFIX = "kanban:ghost:";
+const TASK_COPY_RESET_DELAY_MS = 1000;
 
 function buildGhostId(columnName: string, index: number) {
   return `${GHOST_ID_PREFIX}${encodeURIComponent(columnName)}:${index}`;
@@ -284,6 +289,34 @@ function getEventClientY(event: Event) {
   }
 
   return null;
+}
+
+async function writeToClipboard(value: string) {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  if (typeof document === "undefined") {
+    throw new Error("Clipboard API unavailable");
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+
+  if (!copied) {
+    throw new Error("Clipboard copy failed");
+  }
 }
 
 function resolvePreviewIndexFromRenderedTasks(
@@ -384,6 +417,7 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
   allowEditTask: boolean;
   allowStatusChange: boolean;
   editActionLabel: string;
+  copyText?: string | null;
   descriptionExpanded: boolean;
   onExpandDescription?: (taskId: string) => void;
   dragHandleProps?: Record<string, unknown>;
@@ -402,6 +436,7 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
     allowEditTask,
     allowStatusChange,
     editActionLabel,
+    copyText,
     descriptionExpanded,
     onExpandDescription,
     dragHandleProps,
@@ -412,6 +447,29 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
   const description = previewText(task.description);
   const truncatedDescription = React.useMemo(() => truncateDescription(description, 255), [description]);
   const taskStatusOptions = statusOptions.includes(task.status) ? statusOptions : [task.status, ...statusOptions];
+  const [copyState, setCopyState] = React.useState<TaskCopyState>("idle");
+
+  React.useEffect(() => {
+    if (copyState === "idle") {
+      return undefined;
+    }
+
+    const resetTimeout = window.setTimeout(() => setCopyState("idle"), TASK_COPY_RESET_DELAY_MS);
+    return () => window.clearTimeout(resetTimeout);
+  }, [copyState]);
+
+  const handleCopyTask = React.useCallback(async () => {
+    if (!copyText) {
+      return;
+    }
+
+    try {
+      await writeToClipboard(copyText);
+      setCopyState("copied");
+    } catch {
+      // Keep the button in its default state if the browser blocks clipboard access.
+    }
+  }, [copyText]);
 
   return (
     <>
@@ -439,6 +497,19 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
             </span>
           </button>
         </div>
+        {copyText ? (
+          <button
+            type="button"
+            className={`btn btn-secondary btn-icon kb-copy-button${copyState === "copied" ? " is-copied" : ""}`}
+            onClick={() => void handleCopyTask()}
+            aria-label={copyState === "copied" ? `Prompt copiado para ${task.title}` : `Copiar prompt para ${task.title}`}
+            title={copyState === "copied" ? "Copiado" : "Copiar prompt de tarea"}
+          >
+            {copyState === "copied"
+              ? <FiCheck aria-hidden="true" focusable="false" />
+              : <FiCopy aria-hidden="true" focusable="false" />}
+          </button>
+        ) : null}
       </div>
 
       <div className="kb-control-row">
@@ -506,6 +577,7 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
   allowEditTask: boolean;
   allowStatusChange: boolean;
   editActionLabel: string;
+  copyText?: string | null;
   descriptionExpanded: boolean;
   onExpandDescription?: (taskId: string) => void;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
@@ -523,6 +595,7 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
     allowEditTask,
     allowStatusChange,
     editActionLabel,
+    copyText,
     descriptionExpanded,
     onExpandDescription,
     onAssigneeChange,
@@ -558,6 +631,7 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
         allowEditTask={allowEditTask}
         allowStatusChange={allowStatusChange}
         editActionLabel={editActionLabel}
+        copyText={copyText}
         descriptionExpanded={descriptionExpanded}
         onExpandDescription={onExpandDescription}
         dragHandleProps={{ ...attributes, ...listeners }}
@@ -578,6 +652,7 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
   && prev.allowEditTask === next.allowEditTask
   && prev.allowStatusChange === next.allowStatusChange
   && prev.editActionLabel === next.editActionLabel
+  && prev.copyText === next.copyText
   && prev.descriptionExpanded === next.descriptionExpanded
   && prev.onExpandDescription === next.onExpandDescription
   && prev.onAssigneeChange === next.onAssigneeChange
@@ -608,6 +683,7 @@ function GhostTaskCard(props: { ghostId: string; task: KanbanTask; height?: numb
         allowEditTask={false}
         allowStatusChange={false}
         editActionLabel=""
+        copyText={null}
         descriptionExpanded={false}
         onAssigneeChange={async () => undefined}
         onStatusChange={async () => undefined}
@@ -633,6 +709,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
   canEditTask: (task: KanbanTask) => boolean;
   canChangeStatus: (task: KanbanTask) => boolean;
   getTaskAssignees: (task: KanbanTask, assignees: KanbanAssignee[]) => KanbanAssignee[];
+  getTaskCopyText?: (task: KanbanTask) => string | null | undefined;
   expandedTaskIds: Set<string>;
   onExpandDescription: (taskId: string) => void;
   setColumnElement: (columnName: string, node: HTMLElement | null) => void;
@@ -659,6 +736,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
     canEditTask,
     canChangeStatus,
     getTaskAssignees,
+    getTaskCopyText,
     expandedTaskIds,
     onExpandDescription,
     setColumnElement,
@@ -741,6 +819,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
                 allowEditTask={canEditTask(task)}
                 allowStatusChange={taskAllowsStatus}
                 editActionLabel={getEditActionLabel(task)}
+                copyText={getTaskCopyText?.(task) ?? null}
                 descriptionExpanded={expandedTaskIds.has(task.id)}
                 onExpandDescription={onExpandDescription}
                 onAssigneeChange={onAssigneeChange}
@@ -775,6 +854,7 @@ function KanbanDragOverlay(props: { task: KanbanTask | null; width?: number | nu
         allowEditTask={false}
         allowStatusChange={false}
         editActionLabel=""
+        copyText={null}
         descriptionExpanded={false}
         dragHandleProps={undefined}
         onAssigneeChange={async () => undefined}
@@ -823,6 +903,7 @@ export function KanbanBoard({
   canChangeStatus = () => allowStatusChange,
   canMoveTask = () => allowStatusChange,
   getTaskAssignees = (_, entries) => entries,
+  getTaskCopyText,
   editActionLabel = "Editar",
   onCreateTask,
   onEditTask,
@@ -1433,6 +1514,7 @@ export function KanbanBoard({
                   canEditTask={canEditTask}
                   canChangeStatus={canChangeStatus}
                   getTaskAssignees={getTaskAssignees}
+                  getTaskCopyText={getTaskCopyText}
                   expandedTaskIds={expandedTaskIds}
                   onExpandDescription={expandDescription}
                   setColumnElement={setColumnElement}
