@@ -6,6 +6,7 @@ import { PrismaService } from "../prisma/prisma.service";
 
 type StatsWindow = "week" | "month" | "semester" | "year";
 type MetricTask = Awaited<ReturnType<IndicatorsService["loadSprintMetricTasks"]>>[number];
+type SprintTimeSeriesPoint = Awaited<ReturnType<IndicatorsService["buildSprintTimeSeries"]>>[number];
 type SprintMembershipEvent = { taskId: string; type: "entered" | "removed"; at: Date };
 type SprintWindow = { from: Date; to: Date; completedAt: Date | null };
 type MetricsScope = {
@@ -669,18 +670,42 @@ export class IndicatorsService {
         { backfillEnteredScope: true }
       )
       : [];
-    const totalScope = burndownSource.reduce((max, point) => Math.max(max, point.scopePoints), 0);
-    const steps = Math.max(burndownSource.length - 1, 1);
+    const burndown = this.prependBurndownBaseline(burndownSource);
+    const teamBurndown = this.prependBurndownBaseline(teamSeries);
+    const userBurndown = this.prependBurndownBaseline(userSeries);
+    const totalScope = this.resolveSeriesTotalScope(burndownSource);
+    const steps = Math.max(burndown.length - 1, 1);
     const todayKey = new Date().toISOString().slice(0, 10);
 
-    return burndownSource.map((point, index) => ({
+    return burndown.map((point, index) => ({
       date: point.date,
       remainingPoints: point.remainingPoints,
       idealRemainingPoints: Math.max(Number((totalScope - ((totalScope / steps) * index)).toFixed(2)), 0),
-      teamRemainingPoints: teamSeries[index]?.remainingPoints ?? null,
-      userRemainingPoints: userSeries[index]?.remainingPoints ?? null,
+      teamRemainingPoints: teamBurndown[index]?.remainingPoints ?? null,
+      userRemainingPoints: userBurndown[index]?.remainingPoints ?? null,
       isToday: point.date === todayKey
     }));
+  }
+
+  private prependBurndownBaseline(points: SprintTimeSeriesPoint[]): SprintTimeSeriesPoint[] {
+    if (points.length === 0) {
+      return [];
+    }
+
+    const totalScope = this.resolveSeriesTotalScope(points);
+    return [
+      {
+        date: points[0].date,
+        completedPoints: 0,
+        scopePoints: totalScope,
+        remainingPoints: totalScope
+      },
+      ...points
+    ];
+  }
+
+  private resolveSeriesTotalScope(points: SprintTimeSeriesPoint[]) {
+    return points.reduce((max, point) => Math.max(max, point.scopePoints), 0);
   }
 
   private async loadSprintMetricTasks(sprintId: string) {

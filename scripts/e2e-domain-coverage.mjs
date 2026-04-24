@@ -729,9 +729,14 @@ async function main() {
       [200]
     );
     assert.ok(Array.isArray(indicatorsBurndown), "burndown should return array");
-    assert.equal(indicatorsBurndown.length, indicatorsBurnup.length, "burndown should mirror burnup day count");
+    assert.equal(indicatorsBurndown.length, indicatorsBurnup.length + 1, "burndown should include an initial baseline point");
+    assert.equal(
+      indicatorsBurndown[0].remainingPoints,
+      indicatorsBurndown[0].idealRemainingPoints,
+      "burndown should start with actual remaining work on the ideal line"
+    );
     assert.ok(
-      indicatorsBurndown[1].remainingPoints < indicatorsBurndown[0].remainingPoints,
+      indicatorsBurndown.slice(1).some((point) => point.remainingPoints < indicatorsBurndown[0].remainingPoints),
       "burndown remaining work should change when work is completed on a later day"
     );
 
