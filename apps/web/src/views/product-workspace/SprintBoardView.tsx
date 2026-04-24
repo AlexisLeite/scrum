@@ -1,11 +1,12 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
 import ReactECharts from "echarts-for-react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { ProductController } from "../../controllers";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
 import { productCollectionScope, useRootStore } from "../../stores/root-store";
+import { buildDrawerRouteHref } from "../../ui/drawers/drawer-route-state";
 import { TaskUpsertionDrawer } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { KanbanBoard } from "../../ui/kanban";
 import { buildAxisTheme, buildLegendTheme, buildTooltipTheme, useEChartsTheme } from "../../ui/charts/echarts-theme";
@@ -29,6 +30,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
   const chartTheme = useEChartsTheme();
+  const location = useLocation();
   const { productId, sprintId } = useParams<{ productId: string; sprintId: string }>();
   const user = store.session.user;
   const canManageSprintBoard = canManageSprints(user, productId);
@@ -121,6 +123,12 @@ export const SprintBoardView = observer(function SprintBoardView() {
       })
     );
   };
+  const getBoardTaskHref = (task: BoardTask) => buildDrawerRouteHref(location.pathname, location.search, [{
+    type: "task",
+    productId,
+    taskId: task.id,
+    statusOptions
+  }], location.hash);
 
   const updateBoardTaskStatus = async (taskId: string, nextStatus: string, actualHours?: number) => {
     setBoardError("");
@@ -235,6 +243,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
           canEditTask={() => true}
           canChangeAssignee={() => canManageSprintBoard}
           canChangeStatus={(task) => canMoveVisibleTask(user, task, user?.id, productId)}
+          getTaskHref={(task) => getBoardTaskHref(task as BoardTask)}
           isTaskPending={(taskId) => Boolean(pendingTaskIds[taskId])}
           onCreateTask={(defaultStatus) => openBoardTaskDrawer({ defaultStatus })}
           onEditTask={(task) => openBoardTaskDrawer({ task: task as BoardTask })}

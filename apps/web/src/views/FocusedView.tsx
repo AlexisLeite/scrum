@@ -2,6 +2,7 @@ import React from "react";
 import { observer } from "mobx-react-lite";
 import ReactECharts from "echarts-for-react";
 import { FiRefreshCw } from "react-icons/fi";
+import { useLocation } from "react-router-dom";
 import { ProductAssignableUserDto } from "@scrum/contracts";
 import { ProductController } from "../controllers";
 import {
@@ -19,6 +20,7 @@ import { useRootStore } from "../stores/root-store";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { useEChartsTheme } from "../ui/charts/echarts-theme";
 import { buildBurndownOption } from "../ui/charts/burndown-chart";
+import { buildDrawerRouteHref } from "../ui/drawers/drawer-route-state";
 import { TaskUpsertionDrawer } from "../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { KanbanBoard } from "../ui/kanban";
 
@@ -205,6 +207,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
   canMoveTask: (task: FocusedTask) => boolean;
   getTaskAssignees: (task: FocusedTask, assignees: DrawerOption[]) => DrawerOption[];
   getTaskCopyText: (task: FocusedTask) => string;
+  getTaskHref: (task: FocusedTask) => string | undefined;
   toolbarActions?: React.ReactNode;
   isTaskPending: (taskId: string) => boolean;
   isTaskOpening: (taskId: string) => boolean;
@@ -230,6 +233,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
     canMoveTask,
     getTaskAssignees,
     getTaskCopyText,
+    getTaskHref,
     toolbarActions,
     isTaskPending,
     isTaskOpening,
@@ -267,6 +271,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
         canMoveTask={(task) => canMoveTask(task as FocusedTask)}
         getTaskAssignees={(task, nextAssignees) => getTaskAssignees(task as FocusedTask, nextAssignees as DrawerOption[])}
         getTaskCopyText={(task) => getTaskCopyText(task as FocusedTask)}
+        getTaskHref={(task) => getTaskHref(task as FocusedTask)}
         toolbarActions={toolbarActions}
         isTaskPending={isTaskPending}
         isTaskOpening={isTaskOpening}
@@ -402,6 +407,7 @@ export const FocusedView = observer(function FocusedView() {
   const store = useRootStore();
   const productController = React.useMemo(() => new ProductController(store), [store]);
   const chartTheme = useEChartsTheme();
+  const location = useLocation();
   const user = store.session.user;
   const { assignableUsers, assignableUsersByProductId } = useProductAssignableUsers(
     productController,
@@ -493,7 +499,7 @@ export const FocusedView = observer(function FocusedView() {
     activeReloadCountRef.current += 1;
     setLoading(true);
     try {
-      const nextBoard = await productController.loadFocusedBoard();
+      const nextBoard = await productController.loadFocusedBoard() as FocusedBoard;
       if (requestId !== latestReloadRequestIdRef.current || mutationVersion !== boardMutationVersionRef.current) {
         return;
       }
@@ -981,6 +987,19 @@ export const FocusedView = observer(function FocusedView() {
     (task: FocusedTask) => `Usa el skill Scrum Task Implementation y trabaja la tarea "${task.title}" con id ${task.id} `,
     []
   );
+  const getFocusedTaskHref = React.useCallback((task: FocusedTask) => {
+    const productId = task.productId ?? task.product?.id ?? null;
+    if (!productId) {
+      return undefined;
+    }
+
+    return buildDrawerRouteHref(location.pathname, location.search, [{
+      type: "task",
+      productId,
+      taskId: task.id,
+      statusOptions
+    }], location.hash);
+  }, [location.hash, location.pathname, location.search, statusOptions]);
   const hasPendingFocusedMutations = React.useMemo(
     () => Object.keys(pendingTaskIds).length > 0,
     [pendingTaskIds]
@@ -1193,6 +1212,7 @@ export const FocusedView = observer(function FocusedView() {
           canMoveTask={canMoveFocusedBoardTask}
           getTaskAssignees={getFocusedTaskAssignees}
           getTaskCopyText={getFocusedTaskCopyText}
+          getTaskHref={getFocusedTaskHref}
           toolbarActions={focusedToolbarActions}
           isTaskPending={isFocusedTaskPending}
           isTaskOpening={isFocusedTaskOpening}

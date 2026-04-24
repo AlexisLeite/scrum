@@ -78,6 +78,7 @@ type KanbanBoardProps = {
   canMoveTask?: (task: KanbanTask) => boolean;
   getTaskAssignees?: (task: KanbanTask, assignees: KanbanAssignee[]) => KanbanAssignee[];
   getTaskCopyText?: (task: KanbanTask) => string | null | undefined;
+  getTaskHref?: (task: KanbanTask) => string | undefined;
   editActionLabel?: string | ((task: KanbanTask) => string);
   isTaskPending?: (taskId: string) => boolean;
   isTaskOpening?: (taskId: string) => boolean;
@@ -418,6 +419,7 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
   allowStatusChange: boolean;
   editActionLabel: string;
   copyText?: string | null;
+  taskHref?: string;
   descriptionExpanded: boolean;
   onExpandDescription?: (taskId: string) => void;
   dragHandleProps?: Record<string, unknown>;
@@ -437,6 +439,7 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
     allowStatusChange,
     editActionLabel,
     copyText,
+    taskHref,
     descriptionExpanded,
     onExpandDescription,
     dragHandleProps,
@@ -470,6 +473,28 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
       // Keep the button in its default state if the browser blocks clipboard access.
     }
   }, [copyText]);
+  const handleTaskTitleClick = React.useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (
+      event.defaultPrevented
+      || event.button !== 0
+      || event.metaKey
+      || event.altKey
+      || event.ctrlKey
+      || event.shiftKey
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    onEditTask(task);
+  }, [onEditTask, task]);
+  const titleContent = (
+    <span className="kb-task-title-label">
+      <span className="kb-task-title-text">{task.title}</span>
+      {opening ? <span className="task-title-loading-indicator" aria-hidden="true" /> : null}
+    </span>
+  );
+  const titleDisabled = pending || opening || !allowEditTask;
 
   return (
     <>
@@ -484,18 +509,26 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
           >
             ::
           </button>
-          <button
-            type="button"
-            className="kb-task-title-button"
-            onClick={() => onEditTask(task)}
-            disabled={pending || opening || !allowEditTask}
-            aria-busy={opening}
-          >
-            <span className="kb-task-title-label">
-              <span className="kb-task-title-text">{task.title}</span>
-              {opening ? <span className="task-title-loading-indicator" aria-hidden="true" /> : null}
-            </span>
-          </button>
+          {taskHref && !titleDisabled ? (
+            <a
+              href={taskHref}
+              className="kb-task-title-button"
+              onClick={handleTaskTitleClick}
+              aria-busy={opening}
+            >
+              {titleContent}
+            </a>
+          ) : (
+            <button
+              type="button"
+              className="kb-task-title-button"
+              onClick={() => onEditTask(task)}
+              disabled={titleDisabled}
+              aria-busy={opening}
+            >
+              {titleContent}
+            </button>
+          )}
         </div>
         {copyText ? (
           <button
@@ -578,6 +611,7 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
   allowStatusChange: boolean;
   editActionLabel: string;
   copyText?: string | null;
+  taskHref?: string;
   descriptionExpanded: boolean;
   onExpandDescription?: (taskId: string) => void;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
@@ -596,6 +630,7 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
     allowStatusChange,
     editActionLabel,
     copyText,
+    taskHref,
     descriptionExpanded,
     onExpandDescription,
     onAssigneeChange,
@@ -632,6 +667,7 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
         allowStatusChange={allowStatusChange}
         editActionLabel={editActionLabel}
         copyText={copyText}
+        taskHref={taskHref}
         descriptionExpanded={descriptionExpanded}
         onExpandDescription={onExpandDescription}
         dragHandleProps={{ ...attributes, ...listeners }}
@@ -653,6 +689,7 @@ const SortableTaskCard = React.memo(function SortableTaskCard(props: {
   && prev.allowStatusChange === next.allowStatusChange
   && prev.editActionLabel === next.editActionLabel
   && prev.copyText === next.copyText
+  && prev.taskHref === next.taskHref
   && prev.descriptionExpanded === next.descriptionExpanded
   && prev.onExpandDescription === next.onExpandDescription
   && prev.onAssigneeChange === next.onAssigneeChange
@@ -710,6 +747,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
   canChangeStatus: (task: KanbanTask) => boolean;
   getTaskAssignees: (task: KanbanTask, assignees: KanbanAssignee[]) => KanbanAssignee[];
   getTaskCopyText?: (task: KanbanTask) => string | null | undefined;
+  getTaskHref?: (task: KanbanTask) => string | undefined;
   expandedTaskIds: Set<string>;
   onExpandDescription: (taskId: string) => void;
   setColumnElement: (columnName: string, node: HTMLElement | null) => void;
@@ -737,6 +775,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
     canChangeStatus,
     getTaskAssignees,
     getTaskCopyText,
+    getTaskHref,
     expandedTaskIds,
     onExpandDescription,
     setColumnElement,
@@ -820,6 +859,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
                 allowStatusChange={taskAllowsStatus}
                 editActionLabel={getEditActionLabel(task)}
                 copyText={getTaskCopyText?.(task) ?? null}
+                taskHref={getTaskHref?.(task)}
                 descriptionExpanded={expandedTaskIds.has(task.id)}
                 onExpandDescription={onExpandDescription}
                 onAssigneeChange={onAssigneeChange}
@@ -904,6 +944,7 @@ export function KanbanBoard({
   canMoveTask = () => allowStatusChange,
   getTaskAssignees = (_, entries) => entries,
   getTaskCopyText,
+  getTaskHref,
   editActionLabel = "Editar",
   onCreateTask,
   onEditTask,
@@ -1515,6 +1556,7 @@ export function KanbanBoard({
                   canChangeStatus={canChangeStatus}
                   getTaskAssignees={getTaskAssignees}
                   getTaskCopyText={getTaskCopyText}
+                  getTaskHref={getTaskHref}
                   expandedTaskIds={expandedTaskIds}
                   onExpandDescription={expandDescription}
                   setColumnElement={setColumnElement}

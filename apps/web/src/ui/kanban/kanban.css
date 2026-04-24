@@ -246,12 +246,15 @@
 }
 
 .kb-task-title-button {
+  display: inline-block;
   min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
+  font: inherit;
+  text-decoration: none;
   text-align: left;
 }
 

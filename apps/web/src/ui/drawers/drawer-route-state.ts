@@ -154,6 +154,29 @@ export function serializeDrawerRouteDescriptors(descriptors: DrawerRouteDescript
   return JSON.stringify(descriptors);
 }
 
+export function buildDrawerRouteSearch(search: string, descriptors: DrawerRouteDescriptor[]): string {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const serialized = serializeDrawerRouteDescriptors(descriptors);
+
+  if (serialized) {
+    params.set(DRAWER_ROUTE_PARAM, serialized);
+  } else {
+    params.delete(DRAWER_ROUTE_PARAM);
+  }
+
+  const nextSearch = params.toString();
+  return nextSearch ? `?${nextSearch}` : "";
+}
+
+export function buildDrawerRouteHref(
+  pathname: string,
+  search: string,
+  descriptors: DrawerRouteDescriptor[],
+  hash = ""
+): string {
+  return `${pathname}${buildDrawerRouteSearch(search, descriptors)}${hash}`;
+}
+
 export function parseDrawerRouteDescriptors(search: string): DrawerRouteDescriptor[] {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const rawValue = params.get(DRAWER_ROUTE_PARAM);
