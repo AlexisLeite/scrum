@@ -54,6 +54,22 @@ type PrefetchedTaskDrawerData = {
   activity?: ActivityListResult & { items: ActivityEntry[] };
   messageDraft?: DraftDto | null;
 };
+type DeferredTaskDrawerCatalog = {
+  stories: TaskStoryOption[];
+  sprints: TaskSprintOption[];
+  assignees: TaskAssigneeOption[];
+};
+type DeferredTaskDrawerLoadResult = {
+  task: EditableTask;
+  stories?: TaskStoryOption[];
+  sprints?: TaskSprintOption[];
+  assignees?: TaskAssigneeOption[];
+  statusOptions?: string[];
+  readOnly?: boolean;
+  definitionReadOnly?: boolean;
+  allowMessageCreation?: boolean;
+  prefetchedTaskDrawerData?: PrefetchedTaskDrawerData;
+};
 
 const EFFORT_POINT_VALUES = [1, 2, 3, 5, 8, 13, 21] as const;
 const ESTIMATED_HOUR_PRESETS = [4, 8, 16, 24] as const;
@@ -61,7 +77,7 @@ const DEFAULT_NEW_TASK_EFFORT_POINTS = "5";
 const CREATE_STORY_OPTION_VALUE = "__create_new_story__";
 type TaskCreationPlacement = "start" | "end";
 
-type TaskUpsertionDrawerOptions = {
+export type TaskUpsertionDrawerOptions = {
   controller: ProductController;
   productId: string;
   stories: TaskStoryOption[];
@@ -73,6 +89,7 @@ type TaskUpsertionDrawerOptions = {
   defaultParentTaskLabel?: string;
   defaultSourceMessageId?: string;
   defaultSourceMessagePreview?: string;
+  taskId?: string;
   task?: EditableTask;
   defaultStoryId?: string;
   fixedSprintId?: string;
@@ -82,18 +99,21 @@ type TaskUpsertionDrawerOptions = {
   allowTaskCreation?: boolean;
   allowMessageCreation?: boolean;
   definitionReadOnly?: boolean;
+  deferredTaskLoader?: () => Promise<DeferredTaskDrawerLoadResult>;
+  deferredCatalogLoader?: () => Promise<DeferredTaskDrawerCatalog>;
   prefetchedTaskDrawerData?: PrefetchedTaskDrawerData;
   onDone?: () => Promise<void> | void;
 };
 
 export class TaskUpsertionDrawer extends Drawer {
   constructor(private readonly options: TaskUpsertionDrawerOptions) {
+    const isExistingTask = Boolean(options.task ?? options.taskId);
     const routeDescriptor: TaskDrawerRouteDescriptor = {
       type: "task",
       productId: options.productId,
-      taskId: options.task?.id,
-      storyId: options.task ? undefined : options.defaultStoryId,
-      sprintId: options.task ? undefined : options.fixedSprintId,
+      taskId: options.task?.id ?? options.taskId,
+      storyId: isExistingTask ? undefined : options.defaultStoryId,
+      sprintId: isExistingTask ? undefined : options.fixedSprintId,
       defaultStatus: options.defaultStatus,
       parentTaskId: options.defaultParentTaskId,
       sourceMessageId: options.defaultSourceMessageId,
@@ -103,7 +123,7 @@ export class TaskUpsertionDrawer extends Drawer {
     };
 
     super(
-      options.task
+      isExistingTask
         ? options.readOnly
           ? "Detalle de tarea"
           : "Editar tarea"
@@ -116,20 +136,125 @@ export class TaskUpsertionDrawer extends Drawer {
   }
 
   render(context: DrawerRenderContext): React.ReactNode {
+    return <TaskUpsertionDrawerContent options={this.options} context={context} />;
+  }
+}
+
+export function TaskUpsertionDrawerContent(props: {
+  options: TaskUpsertionDrawerOptions;
+  context: DrawerRenderContext;
+}) {
+  const { options, context } = props;
+
+  if (options.taskId && !options.task) {
     return (
-      <TaskUpsertionForm
-        options={this.options}
+      <DeferredTaskUpsertionForm
+        options={options}
         close={context.close}
         requestClose={context.requestClose}
         drawerController={context.controller}
         drawerId={context.drawerId}
-        definitionHref={
-          this.options.task ? productTaskDefinitionPath(this.options.productId, this.options.task.id) : undefined
-        }
-        closeOnSubmit={!this.options.task}
       />
     );
   }
+
+  return (
+    <TaskUpsertionForm
+      options={options}
+      close={context.close}
+      requestClose={context.requestClose}
+      drawerController={context.controller}
+      drawerId={context.drawerId}
+      definitionHref={
+        options.task ? productTaskDefinitionPath(options.productId, options.task.id) : undefined
+      }
+      closeOnSubmit={!options.task}
+    />
+  );
+}
+
+function DeferredTaskUpsertionForm(props: {
+  options: TaskUpsertionDrawerOptions;
+  close: () => void;
+  requestClose?: () => Promise<boolean>;
+  drawerController?: DrawerRenderContext["controller"];
+  drawerId?: string;
+}) {
+  const { options, close, requestClose, drawerController, drawerId } = props;
+  const [loadedOptions, setLoadedOptions] = React.useState<TaskUpsertionDrawerOptions | null>(null);
+  const [error, setError] = React.useState("");
+  const [retryToken, setRetryToken] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!options.deferredTaskLoader) {
+      setError("No se pudo preparar la carga diferida de la tarea.");
+      return undefined;
+    }
+
+    let active = true;
+    setLoadedOptions(null);
+    setError("");
+
+    void options.deferredTaskLoader()
+      .then((result) => {
+        if (!active) return;
+        setLoadedOptions({
+          ...options,
+          task: result.task,
+          taskId: result.task.id,
+          stories: result.stories ?? options.stories,
+          sprints: result.sprints ?? options.sprints,
+          assignees: result.assignees ?? options.assignees,
+          statusOptions: result.statusOptions ?? options.statusOptions,
+          readOnly: result.readOnly ?? options.readOnly,
+          definitionReadOnly: result.definitionReadOnly ?? options.definitionReadOnly,
+          allowMessageCreation: result.allowMessageCreation ?? options.allowMessageCreation,
+          prefetchedTaskDrawerData: result.prefetchedTaskDrawerData ?? options.prefetchedTaskDrawerData
+        });
+      })
+      .catch((loadError: unknown) => {
+        if (!active) return;
+        setError(loadError instanceof Error ? loadError.message : "No se pudo cargar el detalle de la tarea.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [options, retryToken]);
+
+  if (!loadedOptions) {
+    return (
+      <section className="card">
+        <h4>Detalle de tarea</h4>
+        {error ? (
+          <>
+            <DrawerErrorBanner messages={[error]} />
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setRetryToken((current) => current + 1)}
+            >
+              Reintentar
+            </button>
+          </>
+        ) : (
+          <p className="muted">Cargando detalle...</p>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <TaskUpsertionForm
+      options={loadedOptions}
+      close={close}
+      requestClose={requestClose}
+      drawerController={drawerController}
+      drawerId={drawerId}
+      definitionHref={productTaskDefinitionPath(loadedOptions.productId, loadedOptions.task!.id)}
+      closeOnSubmit={false}
+    />
+  );
 }
 
 function toOptionalNumber(rawValue: string): number | undefined {
@@ -246,9 +371,9 @@ export function TaskUpsertionForm(props: {
   const store = useRootStore();
   const {
     controller,
-    stories,
-    sprints,
-    assignees,
+    stories: initialStories,
+    sprints: initialSprints,
+    assignees: initialAssignees,
     statusOptions,
     defaultStatus,
     defaultParentTaskId,
@@ -264,6 +389,7 @@ export function TaskUpsertionForm(props: {
     allowTaskCreation = !readOnly,
     allowMessageCreation = true,
     definitionReadOnly = readOnly,
+    deferredCatalogLoader,
     onDone
   } = options;
 
@@ -276,7 +402,19 @@ export function TaskUpsertionForm(props: {
   const [printing, setPrinting] = React.useState(false);
   const [printError, setPrintError] = React.useState("");
   const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false);
-  const [storyOptions, setStoryOptions] = React.useState(stories);
+  const [catalog, setCatalog] = React.useState<DeferredTaskDrawerCatalog>(() => ({
+    stories: initialStories,
+    sprints: initialSprints,
+    assignees: initialAssignees
+  }));
+  const [catalogLoading, setCatalogLoading] = React.useState(false);
+  const [catalogError, setCatalogError] = React.useState("");
+  const [storyOptions, setStoryOptions] = React.useState(initialStories);
+  const { stories, sprints, assignees } = catalog;
+  const [taskDrawerData, setTaskDrawerData] = React.useState<PrefetchedTaskDrawerData | undefined>(
+    () => options.prefetchedTaskDrawerData
+  );
+  const [taskDrawerDataFailed, setTaskDrawerDataFailed] = React.useState(false);
   const initialStatus = task?.status ?? defaultStatus ?? statusOptions[0] ?? "Todo";
   const initialCloseSnapshot = React.useMemo(() => normalizeTaskCloseSnapshot({
     title: task?.title ?? "",
@@ -383,6 +521,77 @@ export function TaskUpsertionForm(props: {
   React.useEffect(() => {
     setCreationPlacement("end");
   }, [fixedSprintId, showCreationPlacementSelector, task]);
+
+  React.useEffect(() => {
+    setCatalog({
+      stories: initialStories,
+      sprints: initialSprints,
+      assignees: initialAssignees
+    });
+    setCatalogError("");
+  }, [initialAssignees, initialSprints, initialStories, options.productId, task?.id]);
+
+  React.useEffect(() => {
+    if (!deferredCatalogLoader) {
+      setCatalogLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    setCatalogLoading(true);
+    setCatalogError("");
+
+    void deferredCatalogLoader()
+      .then((nextCatalog) => {
+        if (!active) return;
+        setCatalog(nextCatalog);
+      })
+      .catch((loadError: unknown) => {
+        if (!active) return;
+        setCatalogError(loadError instanceof Error ? loadError.message : "No se pudieron cargar las opciones de la tarea.");
+      })
+      .finally(() => {
+        if (!active) return;
+        setCatalogLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [deferredCatalogLoader, options.productId, task?.id]);
+
+  React.useEffect(() => {
+    if (!task) {
+      setTaskDrawerData(undefined);
+      setTaskDrawerDataFailed(false);
+      return undefined;
+    }
+    if (options.prefetchedTaskDrawerData !== undefined) {
+      setTaskDrawerData(options.prefetchedTaskDrawerData);
+      setTaskDrawerDataFailed(false);
+      return undefined;
+    }
+
+    let active = true;
+    setTaskDrawerData(undefined);
+    setTaskDrawerDataFailed(false);
+
+    void controller
+      .loadTaskDrawerData(task.id)
+      .then((nextData) => {
+        if (!active) return;
+        setTaskDrawerData(nextData);
+      })
+      .catch((loadError: unknown) => {
+        if (!active) return;
+        console.warn("Task drawer deferred load failed", loadError);
+        setTaskDrawerDataFailed(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [controller, options.prefetchedTaskDrawerData, task?.id]);
 
   React.useEffect(() => {
     setStoryOptions(stories);
@@ -563,6 +772,7 @@ export function TaskUpsertionForm(props: {
   const hasUnsavedChanges = !readOnly && !isHydratingRemote && !taskCloseSnapshotsEqual(currentCloseSnapshot, closeBaseline);
   const saveActionDisabled = readOnly || isHydratingRemote || saving || !hasUnsavedChanges;
   const canPrintTask = !saving && !isHydratingRemote && !printing && Boolean(title.trim());
+  const taskDrawerDeferredSectionsReady = !task || taskDrawerData !== undefined || taskDrawerDataFailed;
 
   useDrawerCloseGuard({
     controller: drawerController,
@@ -654,6 +864,7 @@ export function TaskUpsertionForm(props: {
             />
           </label>
         ) : null}
+        {catalogLoading ? <p className="muted">Actualizando opciones de la tarea...</p> : null}
 
         <RichDescriptionField
           label="Descripcion"
@@ -844,16 +1055,28 @@ export function TaskUpsertionForm(props: {
             {readOnly ? "Cerrar" : closeLabel}
           </button>
         </div>
-        <DrawerErrorBanner messages={[saveError, error, printError]} />
-        {task ? (
+        <DrawerErrorBanner messages={[saveError, error, printError, catalogError]} />
+        {task && !taskDrawerDeferredSectionsReady ? (
+          <section className="card">
+            <h4>Historial de actividad</h4>
+            <p className="muted">Cargando actividad...</p>
+          </section>
+        ) : null}
+        {task && taskDrawerDeferredSectionsReady ? (
           <ActivityTimeline
             controller={controller}
             entityType="TASK"
             entityId={task.id}
-            initialEntries={options.prefetchedTaskDrawerData?.activity?.items}
+            initialEntries={taskDrawerData?.activity?.items}
           />
         ) : null}
-        {task && showCollaboration ? (
+        {task && showCollaboration && !taskDrawerDeferredSectionsReady ? (
+          <section className="card task-definition-conversation">
+            <h4>Actividad colaborativa</h4>
+            <p className="muted">Cargando conversacion...</p>
+          </section>
+        ) : null}
+        {task && showCollaboration && taskDrawerDeferredSectionsReady ? (
           <TaskCollaborationPanel
             controller={controller}
             productId={options.productId}
@@ -865,8 +1088,8 @@ export function TaskUpsertionForm(props: {
             readOnly={readOnly}
             allowTaskCreation={allowTaskCreation}
             allowMessageCreation={allowMessageCreation}
-            initialDetail={options.prefetchedTaskDrawerData?.detail}
-            initialMessageDraft={options.prefetchedTaskDrawerData?.messageDraft}
+            initialDetail={taskDrawerData?.detail}
+            initialMessageDraft={taskDrawerData?.messageDraft}
             onChanged={onDone}
           />
         ) : null}

@@ -24,26 +24,11 @@ import { useRootStore } from "./stores/root-store";
 import { DrawerHost } from "./ui/drawers/DrawerHost";
 import { useDrawerRoutePersistence } from "./ui/drawers/useDrawerRoutePersistence";
 import { ModalsController } from "./ui/modals/ModalsController";
-import { FocusedView } from "./views/FocusedView";
 import {
   administrationDefaultPath,
   AdministrationView
 } from "./views/AdministrationView";
 import { SettingsView } from "./views/SettingsView";
-import {
-  ProductBacklogView,
-  ProductMetricsView,
-  ProductOverviewView,
-  SprintBoardView,
-  SprintPlanningView,
-  StoryTasksView
-} from "./views/ProductWorkspaceViews";
-import {
-  ProductDefinitionView,
-  SprintDefinitionView,
-  StoryDefinitionView,
-  TaskDefinitionView
-} from "./views/product-workspace/ProductDefinitionViews";
 import { AdminUsersManagementView } from "./views/backoffice/AdminUsersManagementView";
 import { AdminRolesView } from "./views/backoffice/AdminRolesView";
 import { AdminBackupsView } from "./views/backoffice/AdminBackupsView";
@@ -68,6 +53,32 @@ import { PageTitleProvider } from "./hooks/usePageTitle";
 import { resolvePathPageTitle } from "./lib/page-title";
 
 const SESSION_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const FocusedView = React.lazy(() => import("./views/FocusedView").then((module) => ({ default: module.FocusedView })));
+const ProductBacklogView = React.lazy(() => import("./views/product-workspace/ProductBacklogView").then((module) => ({ default: module.ProductBacklogView })));
+const ProductMetricsView = React.lazy(() => import("./views/product-workspace/ProductMetricsView").then((module) => ({ default: module.ProductMetricsView })));
+const ProductOverviewView = React.lazy(() => import("./views/product-workspace/ProductOverviewView").then((module) => ({ default: module.ProductOverviewView })));
+const SprintBoardView = React.lazy(() => import("./views/product-workspace/SprintBoardView").then((module) => ({ default: module.SprintBoardView })));
+const SprintPlanningView = React.lazy(() => import("./views/product-workspace/SprintPlanningView").then((module) => ({ default: module.SprintPlanningView })));
+const StoryTasksView = React.lazy(() => import("./views/product-workspace/StoryTasksView").then((module) => ({ default: module.StoryTasksView })));
+const ProductDefinitionView = React.lazy(() => import("./views/product-workspace/ProductDefinitionViews").then((module) => ({ default: module.ProductDefinitionView })));
+const SprintDefinitionView = React.lazy(() => import("./views/product-workspace/ProductDefinitionViews").then((module) => ({ default: module.SprintDefinitionView })));
+const StoryDefinitionView = React.lazy(() => import("./views/product-workspace/ProductDefinitionViews").then((module) => ({ default: module.StoryDefinitionView })));
+const TaskDefinitionView = React.lazy(() => import("./views/product-workspace/ProductDefinitionViews").then((module) => ({ default: module.TaskDefinitionView })));
+
+function RouteSuspense({ children }: { children: React.ReactNode }) {
+  return (
+    <React.Suspense
+      fallback={
+        <section className="card page-state">
+          <h2>Cargando vista</h2>
+          <p>Preparando contenido...</p>
+        </section>
+      }
+    >
+      {children}
+    </React.Suspense>
+  );
+}
 
 export const App = observer(function App() {
   const store = useRootStore();
@@ -142,7 +153,7 @@ export const App = observer(function App() {
             <Route path="/signup" element={<Navigate to="/login" replace />} />
             <Route path="/profile" element={<Navigate to="/settings" replace />} />
             <Route path="/settings" element={<Protected><SettingsView /></Protected>} />
-            <Route path="/focused" element={<Protected><FocusedView /></Protected>} />
+            <Route path="/focused" element={<Protected><RouteSuspense><FocusedView /></RouteSuspense></Protected>} />
             <Route path="/auth/gitlab/callback" element={<GitlabCallbackView />} />
 
             <Route
@@ -203,7 +214,7 @@ export const App = observer(function App() {
                 path={productRoutes.rootDefinition}
                 element={
                   <ProtectedProductFeature allowed={canViewProductDefinition}>
-                    <ProductDefinitionView />
+                    <RouteSuspense><ProductDefinitionView /></RouteSuspense>
                   </ProtectedProductFeature>
                 }
               />
@@ -211,7 +222,7 @@ export const App = observer(function App() {
                 path={productRoutes.overview}
                 element={
                   <ProtectedProductFeature allowed={canViewProductWorkspace}>
-                    <ProductOverviewView />
+                    <RouteSuspense><ProductOverviewView /></RouteSuspense>
                   </ProtectedProductFeature>
                 }
               />
@@ -219,7 +230,7 @@ export const App = observer(function App() {
                 path={productRoutes.backlog}
                 element={
                   <ProtectedProductFeature allowed={canViewProductBacklog}>
-                    <ProductBacklogView />
+                    <RouteSuspense><ProductBacklogView /></RouteSuspense>
                   </ProtectedProductFeature>
                 }
               />
@@ -227,7 +238,7 @@ export const App = observer(function App() {
                 path={productRoutes.storyTasks}
                 element={
                   <ProtectedProductFeature allowed={canViewProductBacklog}>
-                    <StoryTasksView />
+                    <RouteSuspense><StoryTasksView /></RouteSuspense>
                   </ProtectedProductFeature>
                 }
               />
@@ -235,7 +246,7 @@ export const App = observer(function App() {
                 path={productRoutes.storyDefinition}
                 element={
                   <ProtectedProductFeature allowed={canViewProductBacklog}>
-                    <StoryDefinitionView />
+                    <RouteSuspense><StoryDefinitionView /></RouteSuspense>
                   </ProtectedProductFeature>
                 }
               />
@@ -243,7 +254,7 @@ export const App = observer(function App() {
                 path={productRoutes.sprints}
                 element={
                   <ProtectedProductFeature allowed={canViewProductSprints}>
-                    <SprintPlanningView />
+                    <RouteSuspense><SprintPlanningView /></RouteSuspense>
                   </ProtectedProductFeature>
                 }
               />
@@ -251,7 +262,7 @@ export const App = observer(function App() {
                 path={productRoutes.sprintDefinition}
                 element={
                   <ProtectedProductFeature allowed={canViewProductSprints}>
-                    <SprintDefinitionView />
+                    <RouteSuspense><SprintDefinitionView /></RouteSuspense>
                   </ProtectedProductFeature>
                 }
               />
@@ -259,7 +270,7 @@ export const App = observer(function App() {
                 path={productRoutes.board}
                 element={
                   <ProtectedProductFeature allowed={canViewSprintBoard}>
-                    <SprintBoardView />
+                    <RouteSuspense><SprintBoardView /></RouteSuspense>
                   </ProtectedProductFeature>
                 }
               />
@@ -267,7 +278,7 @@ export const App = observer(function App() {
                 path={productRoutes.metrics}
                 element={
                   <ProtectedProductFeature allowed={canViewProductMetrics}>
-                    <ProductMetricsView />
+                    <RouteSuspense><ProductMetricsView /></RouteSuspense>
                   </ProtectedProductFeature>
                 }
               />
@@ -275,7 +286,7 @@ export const App = observer(function App() {
                 path={productRoutes.taskDefinition}
                 element={
                   <ProtectedProductFeature allowed={canViewProductWorkspace}>
-                    <TaskDefinitionView />
+                    <RouteSuspense><TaskDefinitionView /></RouteSuspense>
                   </ProtectedProductFeature>
                 }
               />

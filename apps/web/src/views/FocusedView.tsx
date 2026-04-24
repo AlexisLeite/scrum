@@ -1,6 +1,5 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
-import ReactECharts from "echarts-for-react";
 import { FiRefreshCw } from "react-icons/fi";
 import { useLocation } from "react-router-dom";
 import { ProductAssignableUserDto } from "@scrum/contracts";
@@ -21,8 +20,17 @@ import { SearchableSelect } from "../ui/SearchableSelect";
 import { useEChartsTheme } from "../ui/charts/echarts-theme";
 import { buildBurndownOption } from "../ui/charts/burndown-chart";
 import { buildDrawerRouteHref } from "../ui/drawers/drawer-route-state";
-import { TaskUpsertionDrawer } from "../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { KanbanBoard } from "../ui/kanban";
+
+const LazyReactECharts = React.lazy(() => import("echarts-for-react"));
+let taskUpsertionDrawerModulePromise: Promise<typeof import("../ui/drawers/product-workspace/TaskUpsertionDrawer")> | null = null;
+
+function loadTaskUpsertionDrawerModule() {
+  if (!taskUpsertionDrawerModulePromise) {
+    taskUpsertionDrawerModulePromise = import("../ui/drawers/product-workspace/TaskUpsertionDrawer");
+  }
+  return taskUpsertionDrawerModulePromise;
+}
 
 type FocusedTask = {
   id: string;
@@ -46,8 +54,18 @@ type FocusedTask = {
   isHistoricalUnfinished?: boolean;
 };
 
+type FocusedCreationContext = {
+  productId: string;
+  productName: string;
+  productKey?: string | null;
+  sprintId: string;
+  sprintName: string;
+  teamId?: string | null;
+};
+
 type FocusedBoard = {
   hasActiveSprint?: boolean;
+  contexts?: FocusedCreationContext[];
   columns: Array<{
     name: string;
     tasks: FocusedTask[];
@@ -65,14 +83,6 @@ type TaskDrawerCatalog = {
   stories: StoryItem[];
   sprints: SprintItem[];
   assignees: TaskDrawerAssigneeOption[];
-};
-type FocusedCreationContext = {
-  productId: string;
-  productName: string;
-  productKey?: string | null;
-  sprintId: string;
-  sprintName: string;
-  teamId?: string | null;
 };
 
 const FOCUSED_CONTEXT_STORAGE_KEY = "focused:selected-context";
@@ -409,10 +419,6 @@ export const FocusedView = observer(function FocusedView() {
   const chartTheme = useEChartsTheme();
   const location = useLocation();
   const user = store.session.user;
-  const { assignableUsers, assignableUsersByProductId } = useProductAssignableUsers(
-    productController,
-    user?.focusedProductIds ?? []
-  );
   const [board, setBoard] = React.useState<FocusedBoard>({ hasActiveSprint: false, columns: [] });
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -420,8 +426,6 @@ export const FocusedView = observer(function FocusedView() {
   const [openingTaskIds, setOpeningTaskIds] = React.useState<Record<string, boolean>>({});
   const [chartLoading, setChartLoading] = React.useState(false);
   const [boardResolved, setBoardResolved] = React.useState(false);
-  const [contextsLoading, setContextsLoading] = React.useState(false);
-  const [contextsResolved, setContextsResolved] = React.useState(false);
   const [selectedContextKey, setSelectedContextKey] = React.useState(() => readStoredFocusedContextKey());
   const [chartRefreshToken, setChartRefreshToken] = React.useState(0);
   const [availableContexts, setAvailableContexts] = React.useState<FocusedCreationContext[]>([]);
@@ -505,11 +509,13 @@ export const FocusedView = observer(function FocusedView() {
       }
       setBoard((current) => ({
         hasActiveSprint: Boolean(nextBoard.hasActiveSprint),
+        contexts: nextBoard.contexts ?? [],
         columns: (nextBoard.columns ?? []).map((column) => ({
           ...column,
           tasks: column.tasks.map((task) => hydrateFocusedTaskStory(task as FocusedTask, findTask(current, task.id)))
         }))
       }));
+      setAvailableContexts(nextBoard.contexts ?? []);
       setError("");
       setChartRefreshToken((current) => current + 1);
     } catch (loadError) {
@@ -536,75 +542,15 @@ export const FocusedView = observer(function FocusedView() {
     return () => window.clearInterval(intervalId);
   }, [reloadBoard]);
 
-  const focusedProductIds = user?.focusedProductIds ?? [];
-  const focusedProductIdsKey = focusedProductIds.join("|");
-
   React.useEffect(() => {
-    if (!user || focusedProductIds.length === 0) {
-      setAvailableContexts([]);
-      setContextsLoading(false);
-      setContextsResolved(true);
-      return;
+    if (!boardResolved) {
+      return undefined;
     }
-
-    let active = true;
-    setContextsLoading(true);
-
-    void (async () => {
-      try {
-        const [products, sprintCollections] = await Promise.all([
-          productController.loadProducts({ syncStore: false }),
-          Promise.all(
-            focusedProductIds.map(async (productId) => ({
-              productId,
-              sprints: await productController.loadSprints(productId, { syncStore: false })
-            }))
-          )
-        ]);
-
-        if (!active) {
-          return;
-        }
-
-        const productById = new Map(
-          products.map((product) => [product.id, { name: product.name ?? "Producto", key: product.key ?? null }])
-        );
-
-        const contexts = sprintCollections.flatMap(({ productId, sprints }) =>
-          (sprints as Array<{ id: string; name: string; teamId?: string | null; status?: string }>)
-            .filter((sprint) => sprint.status === "ACTIVE")
-            .map((sprint) => ({
-              productId,
-              productName: productById.get(productId)?.name ?? "Producto",
-              productKey: productById.get(productId)?.key ?? null,
-              sprintId: sprint.id,
-              sprintName: sprint.name,
-              teamId: sprint.teamId ?? null
-            } satisfies FocusedCreationContext))
-        );
-
-        setAvailableContexts(contexts);
-      } catch {
-        if (active) {
-          setAvailableContexts([]);
-        }
-      } finally {
-        if (active) {
-          setContextsLoading(false);
-          setContextsResolved(true);
-        }
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [focusedProductIds, focusedProductIdsKey, productController, user]);
-
-  const allAssignableUsers = React.useMemo<DrawerOption[]>(
-    () => assignableUsers.map((entry) => ({ id: entry.id, name: entry.name })),
-    [assignableUsers]
-  );
+    const prefetchTimeout = window.setTimeout(() => {
+      void loadTaskUpsertionDrawerModule();
+    }, 500);
+    return () => window.clearTimeout(prefetchTimeout);
+  }, [boardResolved]);
 
   const statusOptions = React.useMemo(
     () => board.columns.length > 0
@@ -617,6 +563,18 @@ export const FocusedView = observer(function FocusedView() {
   const visibleContexts = React.useMemo(
     () => mergeFocusedContexts(availableContexts, creationContexts),
     [availableContexts, creationContexts]
+  );
+  const assignableProductIds = React.useMemo(
+    () => Array.from(new Set(visibleContexts.map((context) => context.productId))),
+    [visibleContexts]
+  );
+  const { assignableUsers, assignableUsersByProductId } = useProductAssignableUsers(
+    productController,
+    assignableProductIds
+  );
+  const allAssignableUsers = React.useMemo<DrawerOption[]>(
+    () => assignableUsers.map((entry) => ({ id: entry.id, name: entry.name })),
+    [assignableUsers]
   );
   const selectedContext = React.useMemo(
     () => visibleContexts.find((context) => buildFocusedContextKey(context) === selectedContextKey)
@@ -647,7 +605,7 @@ export const FocusedView = observer(function FocusedView() {
   const latestChartKeyRef = React.useRef("");
   const shouldShowChartSkeleton = selectedContext
     ? store.burndown.length === 0 && (chartLoading || latestChartKeyRef.current !== selectedChartKey)
-    : contextsLoading || !boardResolved || !contextsResolved;
+    : !boardResolved;
   const selectedBoard = React.useMemo<FocusedBoard>(() => {
     if (!selectedContext) {
       return board;
@@ -831,28 +789,59 @@ export const FocusedView = observer(function FocusedView() {
         : user
           ? [{ id: user.id, name: user.name }]
           : minimalAssignees;
-      let prefetchedTaskDrawerData: Awaited<ReturnType<typeof productController.loadTaskDrawerData>> | undefined;
 
-      if (shouldLoadCatalog) {
-        try {
-          const catalog = await ensureTaskDrawerCatalog(productId);
-          stories = catalog.stories;
-          sprints = catalog.sprints;
-          assignees = canAssignOthersInTask
-            ? catalog.assignees
-            : user
-              ? [{ id: user.id, name: user.name }]
-              : minimalAssignees;
-        } catch (loadError) {
-          setError(getErrorMessage(loadError));
-          return;
-        }
+      let TaskUpsertionDrawer: typeof import("../ui/drawers/product-workspace/TaskUpsertionDrawer").TaskUpsertionDrawer;
+      try {
+        ({ TaskUpsertionDrawer } = await loadTaskUpsertionDrawerModule());
+      } catch (loadError) {
+        setError(getErrorMessage(loadError));
+        return;
       }
 
-      try {
-        prefetchedTaskDrawerData = await productController.loadTaskDrawerData(task.id);
-      } catch (prefetchError) {
-        console.warn("Task drawer prefetch failed", prefetchError);
+      if (shouldLoadCatalog) {
+        const initialAssignees = assignees;
+        const loadDeferredCatalog = async () => {
+          const catalog = await ensureTaskDrawerCatalog(productId);
+          return {
+            stories: catalog.stories,
+            sprints: catalog.sprints,
+            assignees: canAssignOthersInTask
+              ? catalog.assignees
+              : user
+                ? [{ id: user.id, name: user.name }]
+                : initialAssignees
+          };
+        };
+        store.drawers.add(
+          new TaskUpsertionDrawer({
+            controller: productController,
+            productId,
+            stories,
+            sprints,
+            assignees,
+            statusOptions,
+            readOnly: !canEditFocusedTask,
+            definitionReadOnly: !canEditFocusedTask,
+            allowTaskCreation: canCreateLinkedTask,
+            allowMessageCreation: canCommentOnVisibleTask(user, task, user?.id, productId),
+            deferredCatalogLoader: loadDeferredCatalog,
+            task: {
+              id: task.id,
+              title: task.title,
+              description: task.description,
+              status: task.status,
+              storyId: task.story?.id ?? task.storyId ?? null,
+              sprintId: task.sprint?.id ?? task.sprintId ?? null,
+              assigneeId: task.assignee?.id ?? task.assigneeId ?? null,
+              effortPoints: task.effortPoints ?? null,
+              estimatedHours: task.estimatedHours ?? null,
+              actualHours: task.actualHours ?? null,
+              unfinishedSprintCount: task.unfinishedSprintCount ?? 0
+            },
+            onDone: reloadBoard
+          })
+        );
+        return;
       }
 
       store.drawers.add(
@@ -867,7 +856,6 @@ export const FocusedView = observer(function FocusedView() {
           definitionReadOnly: !canEditFocusedTask,
           allowTaskCreation: canCreateLinkedTask,
           allowMessageCreation: canCommentOnVisibleTask(user, task, user?.id, productId),
-          prefetchedTaskDrawerData,
           task: {
             id: task.id,
             title: task.title,
@@ -891,7 +879,10 @@ export const FocusedView = observer(function FocusedView() {
   const openFocusedCreationDrawer = React.useCallback(
     async (defaultStatus: string, creationContext: FocusedCreationContext) => {
       try {
-        const catalog = await ensureTaskDrawerCatalog(creationContext.productId);
+        const [catalog, { TaskUpsertionDrawer }] = await Promise.all([
+          ensureTaskDrawerCatalog(creationContext.productId),
+          loadTaskUpsertionDrawerModule()
+        ]);
         store.drawers.add(
           new TaskUpsertionDrawer({
             controller: productController,
@@ -1173,12 +1164,14 @@ export const FocusedView = observer(function FocusedView() {
           ) : shouldShowChartSkeleton ? (
             <FocusedBurndownSkeleton />
           ) : store.burndown.length > 0 ? (
-            <ReactECharts
-              option={buildBurndownOption(store.burndown, chartTheme)}
-              notMerge={false}
-              lazyUpdate
-              style={{ height: 320, width: "100%" }}
-            />
+            <React.Suspense fallback={<FocusedBurndownSkeleton />}>
+              <LazyReactECharts
+                option={buildBurndownOption(store.burndown, chartTheme)}
+                notMerge={false}
+                lazyUpdate
+                style={{ height: 320, width: "100%" }}
+              />
+            </React.Suspense>
           ) : (
             <p className="muted">Aun no hay serie temporal disponible para este sprint.</p>
           )}

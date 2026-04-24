@@ -116,63 +116,93 @@ export class TasksService {
     return tasks.map((task) => this.withUnfinishedSprintCount(task));
   }
 
-  async listFocused(user: AuthUser) {
+  async listFocused(user: AuthUser, options?: { includeLinkedContext?: boolean }) {
     const accessibleProducts = user.focusedProductIds;
     if (accessibleProducts.length === 0) {
       return { sprint: null, hasActiveSprint: false, columns: [] };
     }
+    const includeLinkedContext = options?.includeLinkedContext ?? false;
 
     const activeSprintWhere = {
       status: SprintStatus.ACTIVE,
       productId: { in: accessibleProducts }
     } satisfies Prisma.SprintWhereInput;
 
-    const hasActiveSprint = (await this.prisma.sprint.count({
-      where: activeSprintWhere
-    })) > 0;
+    const activeSprints = await this.prisma.sprint.findMany({
+      where: activeSprintWhere,
+      select: {
+        id: true,
+        name: true,
+        teamId: true,
+        productId: true,
+        product: {
+          select: {
+            id: true,
+            name: true,
+            key: true
+          }
+        }
+      },
+      orderBy: [
+        { product: { name: "asc" } },
+        { name: "asc" }
+      ]
+    });
 
     const tasks = await this.prisma.task.findMany({
       where: {
         sprint: activeSprintWhere
       },
       include: {
-        parentTask: {
-          select: {
-            id: true,
-            title: true,
-            status: true
-          }
-        },
-        sourceMessage: {
-          select: {
-            id: true,
-            body: true,
-            createdAt: true,
-            taskId: true,
-            authorUser: {
-              select: {
+        ...(includeLinkedContext
+          ? {
+              parentTask: {
+                select: {
+                  id: true,
+                  title: true,
+                  status: true
+                }
+              },
+              sourceMessage: {
+                select: {
+                  id: true,
+                  body: true,
+                  createdAt: true,
+                  taskId: true,
+                  authorUser: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true
+                    }
+                  }
+                }
+              }
+            }
+          : {}),
+        assignee: {
+          select: includeLinkedContext
+            ? {
                 id: true,
                 name: true,
                 email: true
               }
-            }
-          }
-        },
-        assignee: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
+            : {
+                id: true,
+                name: true
+              }
         },
         story: {
-          select: {
-            id: true,
-            title: true,
-            description: true,
-            storyPoints: true,
-            status: true
-          }
+          select: includeLinkedContext
+            ? {
+                id: true,
+                title: true,
+                status: true
+              }
+            : {
+                id: true,
+                title: true
+              }
         },
         sprint: {
           select: {
@@ -210,7 +240,15 @@ export class TasksService {
 
     return {
       sprint: null,
-      hasActiveSprint,
+      hasActiveSprint: activeSprints.length > 0,
+      contexts: activeSprints.map((sprint) => ({
+        productId: sprint.productId,
+        productName: sprint.product.name,
+        productKey: sprint.product.key,
+        sprintId: sprint.id,
+        sprintName: sprint.name,
+        teamId: sprint.teamId
+      })),
       columns: columnNames.map((name) => ({
         name,
         tasks: visibleTasks

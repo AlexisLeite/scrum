@@ -69,7 +69,7 @@ export function useDrawerRoutePersistence(store: RootStore) {
     };
   }, [location.hash, location.pathname, location.search, navigate, store.drawers, store.session.hydrated]);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!store.session.hydrated || !store.session.user || restoringRef.current) {
       return undefined;
     }

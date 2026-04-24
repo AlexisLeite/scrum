@@ -327,7 +327,7 @@ export class McpService {
           throw new BadRequestException("limit must be >= 1");
         }
 
-        const board = await this.tasksService.listFocused(user);
+        const board = await this.tasksService.listFocused(user, { includeLinkedContext: true });
         const normalizedBoard = this.normalizeFocusedBoard(board);
         const flattenedTasks = this.flattenFocusedBoard(normalizedBoard);
         const allowedStatuses = requestedType
@@ -668,6 +668,8 @@ export class McpService {
 
   private serializeFocusedTaskEntry(entry: ReturnType<McpService["flattenFocusedBoard"]>[number]) {
     const { columnName, task } = entry;
+    const assignee = task.assignee as ({ id: string; name: string; email?: string | null } | null);
+    const story = task.story as ({ id: string; title: string; status?: string | null } | null);
     return {
       id: task.id,
       title: task.title,
@@ -680,18 +682,18 @@ export class McpService {
       actualHours: task.actualHours ?? null,
       unfinishedSprintCount: task.unfinishedSprintCount ?? 0,
       assigneeId: task.assigneeId,
-      assignee: task.assignee
+      assignee: assignee
         ? {
-            id: task.assignee.id,
-            name: task.assignee.name,
-            email: task.assignee.email
+            id: assignee.id,
+            name: assignee.name,
+            email: assignee.email ?? null
           }
         : null,
-      story: task.story
+      story: story
         ? {
-            id: task.story.id,
-            title: task.story.title,
-            status: task.story.status
+            id: story.id,
+            title: story.title,
+            status: story.status ?? null
           }
         : null,
       sprint: task.sprint

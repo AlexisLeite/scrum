@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
+  Button as MdxToolbarButton,
   codeMirrorPlugin,
   codeBlockPlugin,
   CreateLink,
@@ -1408,7 +1409,7 @@ function ToolbarButton(props: ToolbarButtonProps) {
   const { label, pressed = false, onClick, onMouseDown, disabled = false, children } = props;
 
   return (
-    <button
+    <MdxToolbarButton
       type="button"
       className={`rich-description-toolbar-button${pressed ? " is-pressed" : ""}`}
       onClick={onClick}
@@ -1419,6 +1420,6 @@ function ToolbarButton(props: ToolbarButtonProps) {
       title={label}
     >
       {children}
-    </button>
+    </MdxToolbarButton>
   );
 }
