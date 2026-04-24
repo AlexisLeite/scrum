@@ -570,7 +570,8 @@ export class IndicatorsService {
     sprintId: string,
     rawFrom: Date,
     rawTo: Date,
-    filter?: (task: MetricTask) => boolean
+    filter?: (task: MetricTask) => boolean,
+    options: { backfillEnteredScope?: boolean } = {}
   ) {
     const from = this.startOfDay(rawFrom);
     const [tasks, membershipEvents] = await Promise.all([
@@ -595,7 +596,10 @@ export class IndicatorsService {
             return acc;
           }
           const points = task.effortPoints ?? task.story.storyPoints;
-          const intervals = this.resolveSprintIntervals(task, from, membershipByTaskId.get(task.id) ?? []);
+          const taskEvents = membershipByTaskId.get(task.id) ?? [];
+          const intervals = options.backfillEnteredScope
+            ? this.resolveBackfilledSprintIntervals(task, from, taskEvents)
+            : this.resolveSprintIntervals(task, from, taskEvents);
           if (!this.isTaskInSprintAt(intervals, dayEnd)) {
             return acc;
           }
@@ -633,8 +637,14 @@ export class IndicatorsService {
     }
 
     const scopedFilter = this.buildScopedTaskFilter(scope);
-    const burnup = await this.buildSprintTimeSeries(sprintId, rawFrom, rawTo, scopedFilter);
-    if (burnup.length === 0) {
+    const burndownSource = await this.buildSprintTimeSeries(
+      sprintId,
+      rawFrom,
+      rawTo,
+      scopedFilter,
+      { backfillEnteredScope: true }
+    );
+    if (burndownSource.length === 0) {
       return [];
     }
 
@@ -647,21 +657,23 @@ export class IndicatorsService {
       sprintId,
       rawFrom,
       rawTo,
-      (task) => task.productId === scope.productId && sprintTeamIds.includes(task.assigneeId ?? "")
+      (task) => task.productId === scope.productId && sprintTeamIds.includes(task.assigneeId ?? ""),
+      { backfillEnteredScope: true }
     );
     const userSeries = scope.userId
       ? await this.buildSprintTimeSeries(
         sprintId,
         rawFrom,
         rawTo,
-        (task) => task.productId === scope.productId && task.assigneeId === scope.userId
+        (task) => task.productId === scope.productId && task.assigneeId === scope.userId,
+        { backfillEnteredScope: true }
       )
       : [];
-    const totalScope = burnup.reduce((max, point) => Math.max(max, point.scopePoints), 0);
-    const steps = Math.max(burnup.length - 1, 1);
+    const totalScope = burndownSource.reduce((max, point) => Math.max(max, point.scopePoints), 0);
+    const steps = Math.max(burndownSource.length - 1, 1);
     const todayKey = new Date().toISOString().slice(0, 10);
 
-    return burnup.map((point, index) => ({
+    return burndownSource.map((point, index) => ({
       date: point.date,
       remainingPoints: point.remainingPoints,
       idealRemainingPoints: Math.max(Number((totalScope - ((totalScope / steps) * index)).toFixed(2)), 0),
@@ -820,6 +832,19 @@ export class IndicatorsService {
     }
 
     return intervals;
+  }
+
+  private resolveBackfilledSprintIntervals(task: MetricTask, sprintStart: Date, events: SprintMembershipEvent[]) {
+    const intervals = this.resolveSprintIntervals(task, sprintStart, events);
+    if (intervals.length === 0) {
+      return intervals;
+    }
+
+    const sprintStartDay = this.startOfDay(sprintStart);
+    return intervals.map((interval) => ({
+      from: sprintStartDay,
+      to: interval.to
+    }));
   }
 
   private isTaskInSprintAt(intervals: Array<{ from: Date; to: Date | null }>, at: Date) {
