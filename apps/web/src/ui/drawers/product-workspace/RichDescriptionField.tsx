@@ -866,7 +866,8 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     };
   }, []);
 
-  const collaborationDisabled = disabled && collaboration?.documentType !== "TASK_DESCRIPTION";
+  // Keep the Yjs session mounted while the field is temporarily read-only, for example during save.
+  const collaborationDisabled = false;
 
   const editorField = (
     <div
@@ -950,9 +951,12 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
               <ToolbarButton
                 label="Guardar"
                 onClick={() => {
+                  if (saveDisabled || editorInteractionDisabled) {
+                    return;
+                  }
                   void onSave();
                 }}
-                disabled={saveDisabled || isGeneratingMarkdown}
+                disabled={saveDisabled || editorInteractionDisabled}
               >
                 <FiSave aria-hidden="true" />
               </ToolbarButton>

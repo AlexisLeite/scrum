@@ -595,6 +595,8 @@ function SortablePrintItemRow(props: {
                 rows={12}
                 productId={productId}
                 disabled={contentState?.saving}
+                onSave={() => onSaveContent(item)}
+                saveDisabled={!isDirty || contentState?.saving}
                 uriStateKey={`product-print-content:${productId}:${item.id}`}
                 collaboration={
                   item.kind === "product_description"

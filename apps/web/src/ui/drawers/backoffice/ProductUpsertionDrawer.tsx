@@ -48,6 +48,9 @@ function errorMessage(error: unknown): string {
 }
 
 type SaveHook = () => void | Promise<void>;
+type ProductSubmitOptions = {
+  closeAfterSave?: boolean;
+};
 type ActivityItem = {
   id: string;
   action?: string;
@@ -216,8 +219,9 @@ export function ProductUpsertionForm(props: {
     return () => { active = false; };
   }, [loadAccessUsers, product]);
 
-  const submit = React.useCallback(async () => {
+  const submit = React.useCallback(async (options: ProductSubmitOptions = {}) => {
     if (formDisabled) return;
+    const shouldClose = options.closeAfterSave ?? closeOnSubmit;
     setSaving(true);
     setError("");
     try {
@@ -245,7 +249,7 @@ export function ProductUpsertionForm(props: {
       }
       await clearDraft();
       if (onSaved) await onSaved();
-      if (closeOnSubmit) {
+      if (shouldClose) {
         close();
       }
     } catch (submitError) {
@@ -311,6 +315,8 @@ export function ProductUpsertionForm(props: {
         onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
         rows={4}
         disabled={formDisabled}
+        onSave={() => submit({ closeAfterSave: false })}
+        saveDisabled={formDisabled}
         uriStateKey={descriptionUriStateKey}
         collaboration={product ? { documentType: "PRODUCT_DESCRIPTION", entityId: product.id } : undefined}
       />
