@@ -253,7 +253,7 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
   cursor: text;
 }
 
@@ -273,7 +273,6 @@
   background: transparent;
   box-sizing: border-box;
   resize: none;
-  overflow-y: auto;
   scrollbar-gutter: stable both-edges;
   scroll-padding-bottom: var(--rich-description-tail-space, 30vh);
   --rich-heading-1-size: 2.0625rem;

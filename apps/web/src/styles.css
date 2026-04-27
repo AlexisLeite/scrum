@@ -1403,7 +1403,7 @@ a.btn-secondary,
   margin: 0;
 }
 
-.sprint-task-split-layout > .task-search-picker {
+.sprint-task-split-layout>.task-search-picker {
   display: contents;
 }
 
@@ -1415,7 +1415,7 @@ a.btn-secondary,
   grid-area: available-panel;
 }
 
-.sprint-task-split-layout > .sprint-task-pane-toolbar {
+.sprint-task-split-layout>.sprint-task-pane-toolbar {
   grid-area: planned-toolbar;
 }
 
@@ -1432,7 +1432,7 @@ a.btn-secondary,
   height: 100%;
 }
 
-.sprint-task-split-layout > .sprint-task-pane-panel {
+.sprint-task-split-layout>.sprint-task-pane-panel {
   grid-area: planned-panel;
 }
 
@@ -1459,9 +1459,9 @@ a.btn-secondary,
 }
 
 .sprint-task-split-layout .task-search-picker-panel,
-.sprint-task-split-layout > .sprint-task-pane-panel,
-.sprint-task-split-pane-content > .sprint-task-table-shell,
-.sprint-task-split-pane-content > .sprint-task-list-shell {
+.sprint-task-split-layout>.sprint-task-pane-panel,
+.sprint-task-split-pane-content>.sprint-task-table-shell,
+.sprint-task-split-pane-content>.sprint-task-list-shell {
   min-height: 0;
   height: 100%;
 }
@@ -1592,7 +1592,7 @@ a.btn-secondary,
 }
 
 .sprint-task-table .story-task-title-text,
-.sprint-task-table .sprint-task-meta > span:not(.status) {
+.sprint-task-table .sprint-task-meta>span:not(.status) {
   display: block;
   min-width: 0;
   max-width: 100%;
@@ -3873,12 +3873,10 @@ th {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--loading-skeleton-sheen) 48%,
-    transparent 100%
-  );
+  background: linear-gradient(90deg,
+      transparent 0%,
+      var(--loading-skeleton-sheen) 48%,
+      transparent 100%);
   transform: translateX(-100%);
   animation: loading-skeleton-shimmer 1.8s ease-in-out infinite;
 }
@@ -4270,13 +4268,13 @@ th {
 
 /* Track */
 ::-webkit-scrollbar-track {
-  background: var(--bg-main);
+  background: var(--bg-elevated);
   /* or your color */
 }
 
 /* Thumb */
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-elevated);
+  background: var(--bg-hover);
   border-radius: 4px;
 }
 
