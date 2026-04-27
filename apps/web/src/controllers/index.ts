@@ -442,6 +442,13 @@ export class ProductController {
     return task;
   }
 
+  async updateTaskChecklistItem(taskId: string, payload: { itemIndex: number; checked: boolean }) {
+    const task = await apiClient.patch<any>(`/tasks/${taskId}/checklist`, payload);
+    this.store.tasks.upsert(task);
+    this.syncTaskInBoard(task);
+    return task;
+  }
+
   async assignTask(taskId: string, payload: { assigneeId?: string | null; sprintId?: string | null }) {
     const task = await apiClient.patch<any>(`/tasks/${taskId}/assign`, payload);
     this.store.tasks.upsert(task);

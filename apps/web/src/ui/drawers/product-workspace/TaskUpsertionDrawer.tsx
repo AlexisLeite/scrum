@@ -75,6 +75,7 @@ const EFFORT_POINT_VALUES = [1, 2, 3, 5, 8, 13, 21] as const;
 const ESTIMATED_HOUR_PRESETS = [4, 8, 16, 24] as const;
 const DEFAULT_NEW_TASK_EFFORT_POINTS = "5";
 const CREATE_STORY_OPTION_VALUE = "__create_new_story__";
+const TASK_CHECKLIST_MARKER_PATTERN = /^(\s*(?:[-+*]|\d+[.)])\s+\[)([ xX])(\]\s*)/gm;
 type TaskCreationPlacement = "start" | "end";
 
 export type TaskUpsertionDrawerOptions = {
@@ -284,6 +285,16 @@ function normalizeTaskCloseDescription(value: string) {
   return value.replace(/\r\n/g, "\n").trim();
 }
 
+function updateTaskChecklistMarker(markdown: string, itemIndex: number, checked: boolean) {
+  let currentIndex = -1;
+  const nextMarker = checked ? "x" : " ";
+  TASK_CHECKLIST_MARKER_PATTERN.lastIndex = 0;
+  return markdown.replace(TASK_CHECKLIST_MARKER_PATTERN, (match, prefix: string, _currentMarker: string, suffix: string) => {
+    currentIndex += 1;
+    return currentIndex === itemIndex ? `${prefix}${nextMarker}${suffix}` : match;
+  });
+}
+
 function normalizeTaskCloseSnapshot(snapshot: TaskCloseSnapshot): TaskCloseSnapshot {
   return {
     ...snapshot,
@@ -480,6 +491,7 @@ export function TaskUpsertionForm(props: {
   const actualHours = typeof form.actualHours === "string" ? form.actualHours : "";
   const formDisabled = readOnly || saving || isHydratingRemote;
   const editorDisabled = readOnly || isHydratingRemote;
+  const canToggleReadOnlyTaskCheckboxes = Boolean(readOnly && task?.id && task.assigneeId === store.session.user?.id);
 
   const shouldSelectStory = !defaultStoryId || Boolean(fixedSprintId) || Boolean(task);
   const storySelectionLocked = !task && Boolean(defaultStoryId);
@@ -698,6 +710,27 @@ export function TaskUpsertionForm(props: {
     }
   };
 
+  const handleReadOnlyTaskCheckboxToggle = React.useCallback(async (payload: { itemIndex: number; checked: boolean }) => {
+    if (!task) {
+      return;
+    }
+
+    setError("");
+    try {
+      await controller.updateTaskChecklistItem(task.id, {
+        itemIndex: payload.itemIndex,
+        checked: payload.checked
+      });
+      setCloseBaseline((current) => ({
+        ...current,
+        description: updateTaskChecklistMarker(current.description, payload.itemIndex, payload.checked)
+      }));
+    } catch (toggleError) {
+      setError(toggleError instanceof Error ? toggleError.message : "No se pudo actualizar el checkbox de la tarea.");
+      throw toggleError;
+    }
+  }, [controller, task]);
+
   const handleStatusChange = (nextStatus: string) => {
     setForm((current) => ({ ...current, status: nextStatus }));
   };
@@ -878,6 +911,8 @@ export function TaskUpsertionForm(props: {
           saveDisabled={saveActionDisabled}
           uriStateKey={descriptionUriStateKey}
           collaboration={task ? { documentType: "TASK_DESCRIPTION", entityId: task.id } : undefined}
+          allowReadOnlyTaskCheckboxToggle={canToggleReadOnlyTaskCheckboxes}
+          onTaskCheckboxToggle={task ? handleReadOnlyTaskCheckboxToggle : undefined}
         />
         {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
 

@@ -1,12 +1,12 @@
 import React from "react";
-import { FiBold, FiCode, FiImage, FiItalic, FiLink, FiList, FiMinus, FiRotateCcw, FiRotateCw, FiTable } from "react-icons/fi";
+import { FiBold, FiCheckSquare, FiCode, FiImage, FiItalic, FiLink, FiList, FiMinus, FiRotateCcw, FiRotateCw, FiTable } from "react-icons/fi";
 import { LuListOrdered, LuQuote } from "react-icons/lu";
 import { EditorState, Plugin, TextSelection } from "prosemirror-state";
 import { EditorView, type NodeView, type ViewMutationRecord } from "prosemirror-view";
 import { Node as ProseMirrorNode, Slice } from "prosemirror-model";
 import { baseKeymap, chainCommands, createParagraphNear, lift, setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
 import { history, redo, undo } from "prosemirror-history";
-import { inputRules, textblockTypeInputRule, wrappingInputRule } from "prosemirror-inputrules";
+import { InputRule, inputRules, textblockTypeInputRule, wrappingInputRule } from "prosemirror-inputrules";
 import { keymap as prosemirrorKeymap } from "prosemirror-keymap";
 import { liftListItem, sinkListItem, splitListItem, wrapInList } from "prosemirror-schema-list";
 import {
@@ -96,6 +96,8 @@ type ProseMirrorMarkdownEditorProps = {
   collaboration?: RichDescriptionCollaboration;
   collaborationDisabled?: boolean;
   user?: { id?: string; name?: string; email?: string } | null;
+  allowReadOnlyTaskCheckboxToggle?: boolean;
+  onTaskCheckboxToggle?: (payload: { itemIndex: number; checked: boolean; text: string }) => Promise<void> | void;
   toolbarExtras?: React.ReactNode;
 };
 
@@ -110,6 +112,8 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       collaboration,
       collaborationDisabled = false,
       user,
+      allowReadOnlyTaskCheckboxToggle = false,
+      onTaskCheckboxToggle,
       toolbarExtras
     } = props;
     const shellRef = React.useRef<HTMLDivElement | null>(null);
@@ -117,6 +121,8 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     const activeToolbarItemRef = React.useRef<HTMLElement | null>(null);
     const viewRef = React.useRef<EditorView | null>(null);
     const readOnlyRef = React.useRef(readOnly);
+    const allowReadOnlyTaskCheckboxToggleRef = React.useRef(allowReadOnlyTaskCheckboxToggle);
+    const onTaskCheckboxToggleRef = React.useRef(onTaskCheckboxToggle);
     const onChangeRef = React.useRef(onChange);
     const providerRef = React.useRef<ScrumYjsProvider | null>(null);
     const ydocRef = React.useRef<Y.Doc | null>(null);
@@ -129,6 +135,8 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     const collaborationName = collaboration?.entityId && !collaborationDisabled ? buildDocumentName(collaboration) : "";
 
     readOnlyRef.current = readOnly;
+    allowReadOnlyTaskCheckboxToggleRef.current = allowReadOnlyTaskCheckboxToggle;
+    onTaskCheckboxToggleRef.current = onTaskCheckboxToggle;
     onChangeRef.current = onChange;
 
     React.useEffect(() => {
@@ -170,7 +178,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       const yXmlFragment = ydoc?.getXmlFragment(YDOC_FRAGMENT_NAME) ?? null;
       ydocRef.current = ydoc;
       providerRef.current = provider;
-      provider?.setLocalUser(user);
+      provider?.setLocalUser(readOnlyRef.current ? null : user);
       if (!provider) {
         setConnectionStatus(null);
       }
@@ -199,6 +207,14 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
           tabindex: "0"
         },
         nodeViews: {
+          list_item: (node, view, getPos) => new ListItemNodeView(
+            node,
+            view,
+            getPos,
+            () => readOnlyRef.current,
+            () => allowReadOnlyTaskCheckboxToggleRef.current,
+            () => onTaskCheckboxToggleRef.current
+          ),
           code_block: (node, view, getPos) => new CodeBlockNodeView(node, view, getPos),
           table: (node, view, getPos) => new TableNodeView(node, view, getPos, () => readOnlyRef.current)
         },
@@ -245,8 +261,8 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     }, [collaborationName, contentEditableClassName]);
 
     React.useEffect(() => {
-      providerRef.current?.setLocalUser(user);
-    }, [user?.email, user?.id, user?.name]);
+      providerRef.current?.setLocalUser(readOnly ? null : user);
+    }, [readOnly, user?.email, user?.id, user?.name]);
 
     React.useEffect(() => {
       if (collaborationName) {
@@ -335,9 +351,11 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
         return;
       }
 
-      if (!(event.target instanceof Node) || !view.dom.contains(event.target)) {
-        event.preventDefault();
+      if (event.target instanceof Node && view.dom.contains(event.target)) {
+        return;
       }
+
+      event.preventDefault();
       focusEditorView(view, readOnlyRef.current);
     }, []);
 
@@ -437,6 +455,9 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
           <ToolbarButton label="Lista" disabled={readOnly} onClick={() => runCommand(wrapInList(markdownSchema.nodes.bullet_list))}>
             <FiList aria-hidden="true" />
           </ToolbarButton>
+          <ToolbarButton label="Lista checkbox" disabled={readOnly} onClick={() => insertMarkdownAtSelection("\n\n- [ ] \n\n")}>
+            <FiCheckSquare aria-hidden="true" />
+          </ToolbarButton>
           <ToolbarButton label="Lista ordenada" disabled={readOnly} onClick={() => runCommand(wrapInList(markdownSchema.nodes.ordered_list))}>
             <LuListOrdered aria-hidden="true" />
           </ToolbarButton>
@@ -510,6 +531,8 @@ function buildPlugins(args: {
       rules: [
         textblockTypeInputRule(/^```([a-zA-Z0-9_-]+)?\s$/, markdownSchema.nodes.code_block, (match) => ({ params: match[1] || "txt" })),
         textblockTypeInputRule(/^(#{2,6})\s$/, markdownSchema.nodes.heading, (match) => ({ level: match[1].length })),
+        taskListItemInputRule(),
+        inlineCodeInputRule(),
         wrappingInputRule(/^\s*([-+*])\s$/, markdownSchema.nodes.bullet_list),
         wrappingInputRule(/^(\d+)\.\s$/, markdownSchema.nodes.ordered_list, (match) => ({ order: Number(match[1]) })),
         wrappingInputRule(/^\s*>\s$/, markdownSchema.nodes.blockquote)
@@ -519,7 +542,7 @@ function buildPlugins(args: {
       "Mod-b": toggleMark(markdownSchema.marks.strong),
       "Mod-i": toggleMark(markdownSchema.marks.em),
       "Mod-`": toggleMark(markdownSchema.marks.code),
-      "Enter": chainCommands(insertTableCellLineBreak, splitListItem(markdownSchema.nodes.list_item)),
+      "Enter": chainCommands(insertTableCellLineBreak, splitTaskListItem, splitListItem(markdownSchema.nodes.list_item)),
       "ArrowUp": moveSelectionOutOfTable("up"),
       "ArrowDown": moveSelectionOutOfTable("down"),
       "ArrowLeft": moveSelectionOutOfTable("left"),
@@ -534,6 +557,7 @@ function buildPlugins(args: {
       "Mod-Enter": createParagraphNear
     }),
     prosemirrorKeymap(baseKeymap),
+    taskListNormalizationPlugin(),
     tableEditing()
   ];
 
@@ -622,6 +646,125 @@ function insertTableCellLineBreak(state: EditorState, dispatch?: EditorView["dis
     dispatch(state.tr.replaceSelectionWith(markdownSchema.nodes.hard_break.create()).scrollIntoView());
   }
   return true;
+}
+
+function taskListItemInputRule() {
+  return new InputRule(/^\s*\[([ xX])\]\s$/, (state, match, start, end) => {
+    const context = findBulletListItemContext(state);
+    if (!context) {
+      return null;
+    }
+
+    const checked = match[1].toLowerCase() === "x";
+    return state.tr
+      .delete(start, end)
+      .setNodeMarkup(context.position, undefined, {
+        ...context.node.attrs,
+        checked
+      });
+  });
+}
+
+function inlineCodeInputRule() {
+  return new InputRule(/`([^`\n]+)`$/, (state, match, start, end) => {
+    const codeMark = markdownSchema.marks.code;
+    if (!codeMark || state.selection.$from.parent.type.spec.code) {
+      return null;
+    }
+
+    const codeText = match[1] ?? "";
+    if (!codeText) {
+      return null;
+    }
+
+    const transaction = state.tr.insertText(codeText, start, end);
+    transaction.addMark(start, start + codeText.length, codeMark.create());
+    transaction.setSelection(TextSelection.create(transaction.doc, start + codeText.length));
+    transaction.removeStoredMark(codeMark);
+    return transaction;
+  });
+}
+
+function splitTaskListItem(state: EditorState, dispatch?: EditorView["dispatch"], view?: EditorView) {
+  const context = findBulletListItemContext(state);
+  if (!context || context.node.attrs.checked === null) {
+    return false;
+  }
+  return splitListItem(markdownSchema.nodes.list_item, { checked: false })(state, dispatch, view);
+}
+
+function findBulletListItemContext(state: EditorState) {
+  const { $from } = state.selection;
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    const node = $from.node(depth);
+    const parent = depth > 0 ? $from.node(depth - 1) : null;
+    if (node.type === markdownSchema.nodes.list_item && parent?.type === markdownSchema.nodes.bullet_list) {
+      return {
+        node,
+        position: $from.before(depth)
+      };
+    }
+  }
+  return null;
+}
+
+function getTaskChecklistItemIndex(doc: ProseMirrorNode, targetPosition: number) {
+  let currentIndex = -1;
+  let targetIndex = -1;
+  doc.descendants((node, position) => {
+    if (targetIndex >= 0) {
+      return false;
+    }
+    if (node.type === markdownSchema.nodes.list_item && node.attrs.checked !== null) {
+      currentIndex += 1;
+      if (position === targetPosition) {
+        targetIndex = currentIndex;
+        return false;
+      }
+    }
+    return true;
+  });
+  return targetIndex;
+}
+
+function taskListNormalizationPlugin() {
+  return new Plugin({
+    appendTransaction(transactions, _oldState, newState) {
+      if (!transactions.some((transaction) => transaction.docChanged)) {
+        return null;
+      }
+
+      const transaction = newState.tr;
+      newState.doc.descendants((node, position) => {
+        if (node.type !== markdownSchema.nodes.bullet_list) {
+          return true;
+        }
+
+        let containsTaskItems = false;
+        node.forEach((child) => {
+          if (child.type === markdownSchema.nodes.list_item && child.attrs.checked !== null) {
+            containsTaskItems = true;
+          }
+        });
+        if (!containsTaskItems) {
+          return false;
+        }
+
+        node.forEach((child, offset) => {
+          if (child.type === markdownSchema.nodes.list_item && child.attrs.checked === null) {
+            transaction.setNodeMarkup(position + 1 + offset, undefined, {
+              ...child.attrs,
+              checked: false
+            });
+          }
+        });
+
+        return false;
+      });
+
+      return transaction.docChanged ? transaction : null;
+    }
+  });
 }
 
 function moveSelectionOutOfTable(direction: "up" | "down" | "left" | "right") {
@@ -819,6 +962,136 @@ function clampInteger(value: number, min: number, max: number) {
     return min;
   }
   return Math.max(min, Math.min(max, Math.trunc(value)));
+}
+
+class ListItemNodeView implements NodeView {
+  dom: HTMLLIElement;
+  contentDOM: HTMLElement;
+  private checkbox: HTMLInputElement;
+
+  constructor(
+    private node: ProseMirrorNode,
+    private view: EditorView,
+    private getPos: (() => number | undefined) | boolean,
+    private isReadOnly: () => boolean,
+    private canToggleReadOnlyCheckbox: () => boolean,
+    private getTaskCheckboxToggleHandler: () => ProseMirrorMarkdownEditorProps["onTaskCheckboxToggle"] | undefined
+  ) {
+    this.dom = document.createElement("li");
+    this.checkbox = document.createElement("input");
+    this.checkbox.type = "checkbox";
+    this.checkbox.className = "prosemirror-task-list-checkbox";
+    this.checkbox.setAttribute("aria-label", "Marcar item de lista");
+    this.checkbox.contentEditable = "false";
+    this.contentDOM = document.createElement("div");
+    this.contentDOM.className = "prosemirror-list-item-content";
+    this.dom.append(this.checkbox, this.contentDOM);
+    this.checkbox.addEventListener("mousedown", this.stopCheckboxEvent);
+    this.checkbox.addEventListener("click", this.stopCheckboxEvent);
+    this.checkbox.addEventListener("change", this.handleCheckboxChange);
+    this.syncCheckboxState();
+  }
+
+  update(node: ProseMirrorNode) {
+    if (node.type !== this.node.type) {
+      return false;
+    }
+    this.node = node;
+    this.syncCheckboxState();
+    return true;
+  }
+
+  stopEvent(event: Event) {
+    return event.target instanceof Node && this.checkbox.contains(event.target);
+  }
+
+  ignoreMutation(record: ViewMutationRecord) {
+    return this.checkbox.contains(record.target);
+  }
+
+  destroy() {
+    this.checkbox.removeEventListener("mousedown", this.stopCheckboxEvent);
+    this.checkbox.removeEventListener("click", this.stopCheckboxEvent);
+    this.checkbox.removeEventListener("change", this.handleCheckboxChange);
+  }
+
+  private stopCheckboxEvent = (event: Event) => {
+    event.stopPropagation();
+  };
+
+  private handleCheckboxChange = (event: Event) => {
+    event.stopPropagation();
+    if (this.node.attrs.checked === null || !this.canToggleCheckbox()) {
+      this.syncCheckboxState();
+      return;
+    }
+
+    const position = typeof this.getPos === "function" ? this.getPos() : undefined;
+    if (position === undefined) {
+      this.syncCheckboxState();
+      return;
+    }
+
+    const previousChecked = Boolean(this.node.attrs.checked);
+    const nextChecked = this.checkbox.checked;
+    const itemIndex = getTaskChecklistItemIndex(this.view.state.doc, position);
+    const itemText = this.node.textContent;
+    this.view.dispatch(
+      this.view.state.tr
+        .setNodeMarkup(position, undefined, {
+          ...this.node.attrs,
+          checked: nextChecked
+        })
+        .scrollIntoView()
+    );
+
+    const onTaskCheckboxToggle = this.getTaskCheckboxToggleHandler();
+    if (!onTaskCheckboxToggle || itemIndex < 0) {
+      return;
+    }
+
+    void Promise.resolve(onTaskCheckboxToggle({
+      itemIndex,
+      checked: nextChecked,
+      text: itemText
+    })).catch(() => {
+      this.restoreCheckboxState(previousChecked);
+    });
+  };
+
+  private canToggleCheckbox() {
+    return !this.isReadOnly() || this.canToggleReadOnlyCheckbox();
+  }
+
+  private syncCheckboxState() {
+    const isTaskListItem = this.node.attrs.checked !== null;
+    this.dom.classList.toggle("prosemirror-task-list-item", isTaskListItem);
+    this.contentDOM.classList.toggle("prosemirror-task-list-item-content", isTaskListItem);
+    this.checkbox.hidden = !isTaskListItem;
+    this.checkbox.disabled = !isTaskListItem || !this.canToggleCheckbox();
+    this.checkbox.checked = Boolean(this.node.attrs.checked);
+  }
+
+  private restoreCheckboxState(checked: boolean) {
+    const position = typeof this.getPos === "function" ? this.getPos() : undefined;
+    if (position === undefined) {
+      this.syncCheckboxState();
+      return;
+    }
+
+    const currentNode = this.view.state.doc.nodeAt(position);
+    if (!currentNode || currentNode.type !== this.node.type || currentNode.attrs.checked === null) {
+      this.syncCheckboxState();
+      return;
+    }
+
+    this.view.dispatch(
+      this.view.state.tr.setNodeMarkup(position, undefined, {
+        ...currentNode.attrs,
+        checked
+      })
+    );
+  }
 }
 
 class TableNodeView implements NodeView {

@@ -38,6 +38,8 @@ type RichDescriptionFieldProps = {
   saveDisabled?: boolean;
   uriStateKey?: string;
   collaboration?: RichDescriptionCollaboration;
+  allowReadOnlyTaskCheckboxToggle?: boolean;
+  onTaskCheckboxToggle?: (payload: { itemIndex: number; checked: boolean; text: string }) => Promise<void> | void;
 };
 
 export type RichDescriptionFieldHandle = {
@@ -92,7 +94,9 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     onSave,
     saveDisabled = false,
     uriStateKey,
-    collaboration
+    collaboration,
+    allowReadOnlyTaskCheckboxToggle = false,
+    onTaskCheckboxToggle
   } = props;
   const store = useRootStore();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -239,10 +243,13 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       return;
     }
     const currentMarkdown = editorRef.current.getMarkdown();
-    const nextMarkdown = materializeUploadedImageMarkdown(currentMarkdown);
+    const nextMarkdown = normalizeEditorImageUrl(materializeUploadedImageMarkdown(currentMarkdown));
+    if (normalizeEditorImageUrl(currentMarkdown) !== nextMarkdown) {
+      editorRef.current.setMarkdown(nextMarkdown);
+    }
     onChange(nextMarkdown);
     scheduleHeightSync();
-    releaseResolvedPreviewUrls(currentMarkdown);
+    releaseResolvedPreviewUrls(nextMarkdown);
   }, [materializeUploadedImageMarkdown, onChange, releaseResolvedPreviewUrls, scheduleHeightSync]);
 
   const replaceRenderedImageSource = React.useCallback((previewUrl: string, persistedUrl: string) => {
@@ -887,6 +894,8 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         collaboration={collaboration}
         collaborationDisabled={collaborationDisabled}
         user={store.session.user}
+        allowReadOnlyTaskCheckboxToggle={allowReadOnlyTaskCheckboxToggle}
+        onTaskCheckboxToggle={onTaskCheckboxToggle}
         toolbarExtras={(
           <>
             <ToolbarButton

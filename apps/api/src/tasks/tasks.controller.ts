@@ -8,6 +8,7 @@ import {
   CreateTaskDto,
   UpdateTaskMessageDto,
   UpdateTaskDto,
+  UpdateTaskChecklistItemDto,
   UpdateTaskStatusDto
 } from "./tasks.dto";
 import { TasksService } from "./tasks.service";
@@ -60,6 +61,11 @@ export class TasksController {
   @Patch("tasks/:id/status")
   updateStatus(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: UpdateTaskStatusDto) {
     return this.tasksService.updateStatus(id, dto.status, user, dto.actualHours);
+  }
+
+  @Patch("tasks/:id/checklist")
+  updateChecklistItem(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: UpdateTaskChecklistItemDto) {
+    return this.tasksService.updateChecklistItem(id, dto, user);
   }
 
   @Patch("tasks/:id/assign")

@@ -6,7 +6,7 @@ import { AuthUser } from "../common/current-user.decorator";
 import { DraftsService } from "../drafts/drafts.service";
 import { PermissionsService } from "../permissions/permissions.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { CreateTaskDto, CreateTaskFromMessageDto, CreateTaskMessageDto, UpdateTaskDto, UpdateTaskMessageDto } from "./tasks.dto";
+import { CreateTaskDto, CreateTaskFromMessageDto, CreateTaskMessageDto, UpdateTaskChecklistItemDto, UpdateTaskDto, UpdateTaskMessageDto } from "./tasks.dto";
 
 type TaskCreationLineage = {
   parentTaskId: string | null;
@@ -46,6 +46,7 @@ type TaskHierarchyNode = {
 
 const DEFAULT_TASK_STATUS_ORDER = ["Todo", "In Progress", "Blocked", "Done", "Closed"] as const;
 const TERMINAL_TASK_STATUSES = ["Done", "Closed"] as const;
+const TASK_CHECKLIST_MARKER_PATTERN = /^(\s*(?:[-+*]|\d+[.)])\s+\[)([ xX])(\]\s*)/gm;
 const TASK_MESSAGE_USER_SELECT = Prisma.validator<Prisma.UserSelect>()({
   id: true,
   name: true,
@@ -660,6 +661,80 @@ export class TasksService {
     return this.update(id, { status, actualHours }, user, "TASK_STATUS_UPDATED", {
       allowTeamMemberSelfKanbanOnly: true
     });
+  }
+
+  async updateChecklistItem(id: string, dto: UpdateTaskChecklistItemDto, user: AuthUser) {
+    const current = await this.prisma.task.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        storyId: true,
+        productId: true,
+        status: true,
+        sprintId: true,
+        boardOrder: true,
+        assigneeId: true,
+        title: true,
+        description: true,
+        effortPoints: true,
+        estimatedHours: true,
+        actualHours: true,
+        sprint: {
+          select: { teamId: true }
+        }
+      }
+    });
+    if (!current) {
+      throw new BadRequestException("Task not found");
+    }
+
+    await this.assertProductAccess(user, current.productId);
+    await this.assertSprintIsMutable(current.sprintId, user);
+    this.assertCanToggleTaskChecklist(user, current);
+
+    const nextDescription = updateTaskChecklistItemMarkdown(current.description ?? "", dto.itemIndex, dto.checked);
+    if (nextDescription === (current.description ?? "")) {
+      return this.prisma.task.findUniqueOrThrow({ where: { id } });
+    }
+
+    const updated = await this.prisma.task.update({
+      where: { id },
+      data: {
+        description: nextDescription
+      }
+    });
+
+    const before = {
+      storyId: current.storyId,
+      title: current.title,
+      description: current.description,
+      effortPoints: current.effortPoints,
+      estimatedHours: current.estimatedHours,
+      actualHours: current.actualHours,
+      status: current.status,
+      assigneeId: current.assigneeId,
+      sprintId: current.sprintId,
+      boardOrder: current.boardOrder
+    };
+
+    await this.activityService.record({
+      actorUserId: user.sub,
+      teamId: current.sprint?.teamId ?? undefined,
+      productId: current.productId,
+      entityType: ActivityEntityType.TASK,
+      entityId: updated.id,
+      action: "TASK_CHECKLIST_UPDATED",
+      metadataJson: {
+        storyId: updated.storyId,
+        changedFields: this.getTaskChangedFields(before, updated),
+        itemIndex: dto.itemIndex,
+        checked: dto.checked
+      },
+      beforeJson: before,
+      afterJson: updated
+    });
+
+    return updated;
   }
 
   async assign(id: string, assigneeId: string | null | undefined, sprintId: string | null | undefined, user: AuthUser) {
@@ -1677,6 +1752,29 @@ export class TasksService {
     throw new ForbiddenException("Insufficient permission to modify this task");
   }
 
+  private assertCanToggleTaskChecklist(
+    user: AuthUser,
+    task: { productId?: string | null; assigneeId: string | null; sprintId: string | null }
+  ) {
+    const productId = task.productId ?? "";
+    if (
+      this.permissionsService.hasProductPermission(user, productId, "product.admin.story.task.update")
+      || this.permissionsService.hasProductPermission(user, productId, "product.focused.update")
+    ) {
+      return;
+    }
+
+    if (
+      task.sprintId
+      && task.assigneeId === user.sub
+      && this.permissionsService.hasProductPermission(user, productId, "product.focused.acquiredByMe.comment")
+    ) {
+      return;
+    }
+
+    throw new ForbiddenException("Insufficient permission to update this task checklist");
+  }
+
   private assertCanReadTask(
     user: AuthUser,
     task: { productId?: string | null; assigneeId?: string | null; sprintId?: string | null }
@@ -1715,4 +1813,26 @@ export class TasksService {
     }
     return this.permissionsService.hasProductPermission(user, productId, "product.focused.acquiredByOther.read");
   }
+}
+
+function updateTaskChecklistItemMarkdown(markdown: string, itemIndex: number, checked: boolean) {
+  let currentIndex = -1;
+  let updated = false;
+  const nextMarker = checked ? "x" : " ";
+  TASK_CHECKLIST_MARKER_PATTERN.lastIndex = 0;
+  const nextMarkdown = markdown.replace(TASK_CHECKLIST_MARKER_PATTERN, (match, prefix: string, _currentMarker: string, suffix: string) => {
+    currentIndex += 1;
+    if (currentIndex !== itemIndex) {
+      return match;
+    }
+
+    updated = true;
+    return `${prefix}${nextMarker}${suffix}`;
+  });
+
+  if (!updated) {
+    throw new BadRequestException("Task checklist item not found");
+  }
+
+  return nextMarkdown;
 }

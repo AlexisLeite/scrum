@@ -3302,6 +3302,39 @@ html .drawer-content .card {
   text-decoration-thickness: 2px;
 }
 
+.markdown-preview .contains-task-list,
+.markdown-preview .task-list-item {
+  list-style: none;
+}
+
+.markdown-preview .task-list-item>input[type="checkbox"] {
+  width: 0.95rem;
+  height: 0.95rem;
+  min-height: 0.95rem;
+  margin-right: 0.45rem;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 58%, var(--border));
+  border-radius: 4px;
+  appearance: none;
+  background: color-mix(in srgb, var(--field-bg) 88%, var(--bg-soft));
+  vertical-align: -0.13rem;
+}
+
+.markdown-preview .task-list-item>input[type="checkbox"]:checked {
+  border-color: var(--accent-a);
+  background: var(--accent-a);
+}
+
+.markdown-preview .task-list-item>input[type="checkbox"]:checked::after {
+  content: "";
+  display: block;
+  width: 0.32rem;
+  height: 0.56rem;
+  margin: 0.08rem auto 0;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
 .markdown-preview code {
   background: color-mix(in srgb, var(--panel-muted) 88%, transparent);
   border: 1px solid var(--border-subtle);

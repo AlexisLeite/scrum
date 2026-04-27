@@ -1,6 +1,8 @@
 import { Type } from "class-transformer";
 import {
+  IsBoolean,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -167,6 +169,16 @@ export class UpdateTaskStatusDto {
   @IsNumber()
   @Min(0)
   actualHours?: number;
+}
+
+export class UpdateTaskChecklistItemDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  itemIndex!: number;
+
+  @IsBoolean()
+  checked!: boolean;
 }
 
 export class AssignTaskDto {

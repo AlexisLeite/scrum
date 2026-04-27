@@ -437,6 +437,69 @@
   text-wrap: wrap;
 }
 
+.rich-description-content.ProseMirror .prosemirror-list-item-content {
+  min-width: 0;
+}
+
+.rich-description-content.ProseMirror .prosemirror-task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0.18rem 0;
+}
+
+.rich-description-content.ProseMirror .prosemirror-task-list-checkbox {
+  flex: 0 0 auto;
+  width: 0.95rem;
+  height: 0.95rem;
+  min-height: 0.95rem;
+  margin-top: 0.26rem;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 58%, var(--border));
+  border-radius: 4px;
+  appearance: none;
+  background: color-mix(in srgb, var(--field-bg) 88%, var(--bg-soft));
+  cursor: pointer;
+}
+
+.rich-description-content.ProseMirror .prosemirror-task-list-item-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rich-description-content.ProseMirror .prosemirror-task-list-item-content> :first-child {
+  margin-top: 0;
+}
+
+.rich-description-content.ProseMirror .prosemirror-task-list-item-content> :last-child {
+  margin-bottom: 0;
+}
+
+.rich-description-content.ProseMirror .prosemirror-task-list-checkbox:checked {
+  border-color: var(--accent-a);
+  background: var(--accent-a);
+}
+
+.rich-description-content.ProseMirror .prosemirror-task-list-checkbox:checked::after {
+  content: "";
+  display: block;
+  width: 0.32rem;
+  height: 0.56rem;
+  margin: 0.08rem auto 0;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.rich-description-content.ProseMirror .prosemirror-task-list-checkbox:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.rich-description-content.ProseMirror .prosemirror-task-list-checkbox:disabled {
+  cursor: not-allowed;
+}
+
 .rich-description-editor .mdxeditor-root-contenteditable {
   position: relative;
 }
