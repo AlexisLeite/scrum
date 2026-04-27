@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { CollaborativeDocumentType, SprintStatus } from "@prisma/client";
 import { IncomingMessage, Server as HttpServer } from "node:http";
@@ -23,6 +23,7 @@ type CollaborationConnection = WebSocket & {
   user?: AuthUser;
   roomName?: string;
   awarenessClientIds?: Set<number>;
+  canEditDocument?: boolean;
 };
 
 type CollaborationRoom = {
@@ -34,6 +35,7 @@ type CollaborationRoom = {
   awareness: Awareness;
   connections: Set<CollaborationConnection>;
   lastEditedByUserId?: string;
+  persistTimer?: ReturnType<typeof setTimeout>;
 };
 
 type AwarenessUpdate = {
@@ -44,6 +46,7 @@ type AwarenessUpdate = {
 
 @Injectable()
 export class CollaborationService {
+  private readonly logger = new Logger(CollaborationService.name);
   private readonly rooms = new Map<string, Promise<CollaborationRoom>>();
   private server: WebSocketServer | null = null;
 
@@ -79,6 +82,7 @@ export class CollaborationService {
       socket.user = user;
       socket.roomName = documentName;
       socket.awarenessClientIds = new Set();
+      socket.canEditDocument = access.canEdit;
       room.connections.add(socket);
 
       socket.send(encodeMessage(MESSAGE_UPDATE, Y.encodeStateAsUpdate(room.ydoc)));
@@ -109,6 +113,9 @@ export class CollaborationService {
     }
 
     if (message.type === MESSAGE_UPDATE) {
+      if (!socket.canEditDocument) {
+        return;
+      }
       room.lastEditedByUserId = socket.user?.sub;
       Y.applyUpdate(room.ydoc, message.payload, socket);
       return;
@@ -134,6 +141,7 @@ export class CollaborationService {
     }
     if (room.connections.size === 0) {
       this.rooms.delete(room.name);
+      this.flushRoomPersistence(room);
       room.ydoc.destroy();
     }
   }
@@ -164,6 +172,17 @@ export class CollaborationService {
     productId?: string
   ): Promise<CollaborationRoom> {
     const ydoc = new Y.Doc();
+    const storedDocument = await this.prisma.collaborativeDocument.findUnique({
+      where: { documentType_entityId: { documentType, entityId } },
+      select: { yjsState: true, lastEditedByUserId: true }
+    });
+    if (storedDocument?.yjsState.byteLength) {
+      try {
+        Y.applyUpdate(ydoc, toUint8Array(storedDocument.yjsState));
+      } catch (error) {
+        this.logger.warn(`Ignoring invalid collaborative state for ${name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     ydoc.getXmlFragment(YDOC_FRAGMENT_NAME);
 
     const room: CollaborationRoom = {
@@ -174,7 +193,7 @@ export class CollaborationService {
       ydoc,
       awareness: new Awareness(ydoc),
       connections: new Set(),
-      lastEditedByUserId: undefined
+      lastEditedByUserId: storedDocument?.lastEditedByUserId ?? undefined
     };
 
     room.ydoc.on("update", (update: Uint8Array, origin: unknown) => {
@@ -183,6 +202,7 @@ export class CollaborationService {
       if (sender?.user?.sub) {
         room.lastEditedByUserId = sender.user.sub;
       }
+      this.scheduleRoomPersistence(room);
     });
 
     room.awareness.on("update", ({ added, updated, removed }: AwarenessUpdate, origin: unknown) => {
@@ -198,6 +218,50 @@ export class CollaborationService {
     });
 
     return room;
+  }
+
+  private scheduleRoomPersistence(room: CollaborationRoom) {
+    if (room.persistTimer) {
+      clearTimeout(room.persistTimer);
+    }
+    room.persistTimer = setTimeout(() => {
+      room.persistTimer = undefined;
+      void this.persistRoomDocument(room);
+    }, 500);
+  }
+
+  private flushRoomPersistence(room: CollaborationRoom) {
+    if (room.persistTimer) {
+      clearTimeout(room.persistTimer);
+      room.persistTimer = undefined;
+    }
+    void this.persistRoomDocument(room);
+  }
+
+  private async persistRoomDocument(room: CollaborationRoom) {
+    try {
+      const yjsState = Buffer.from(Y.encodeStateAsUpdate(room.ydoc));
+      const markdownSnapshot = await this.loadEntityMarkdownSnapshot(room.documentType, room.entityId);
+      await this.prisma.collaborativeDocument.upsert({
+        where: { documentType_entityId: { documentType: room.documentType, entityId: room.entityId } },
+        create: {
+          documentType: room.documentType,
+          entityId: room.entityId,
+          productId: room.productId ?? null,
+          yjsState,
+          markdownSnapshot,
+          lastEditedByUserId: room.lastEditedByUserId ?? null
+        },
+        update: {
+          productId: room.productId ?? null,
+          yjsState,
+          markdownSnapshot,
+          lastEditedByUserId: room.lastEditedByUserId ?? null
+        }
+      });
+    } catch (error) {
+      this.logger.error(`Could not persist collaborative state for ${room.name}`, error instanceof Error ? error.stack : String(error));
+    }
   }
 
   private broadcast(
@@ -251,7 +315,7 @@ export class CollaborationService {
     user: AuthUser,
     documentType: CollaborativeDocumentType,
     entityId: string
-  ): Promise<{ productId?: string }> {
+  ): Promise<{ productId?: string; canEdit: boolean }> {
     if (documentType === CollaborativeDocumentType.PRODUCT_DESCRIPTION) {
       const product = await this.prisma.product.findUnique({
         where: { id: entityId },
@@ -266,7 +330,7 @@ export class CollaborationService {
       ) {
         throw new ForbiddenException("Insufficient product permission");
       }
-      return { productId: product.id };
+      return { productId: product.id, canEdit: true };
     }
 
     if (documentType === CollaborativeDocumentType.STORY_DESCRIPTION) {
@@ -283,24 +347,25 @@ export class CollaborationService {
         "product.admin.story.update",
         "Insufficient product permission"
       );
-      return { productId: story.productId };
+      return { productId: story.productId, canEdit: true };
     }
 
     if (documentType === CollaborativeDocumentType.TASK_DESCRIPTION) {
       const task = await this.prisma.task.findUnique({
         where: { id: entityId },
-        select: { productId: true, sprintId: true }
+        select: { productId: true, sprintId: true, assigneeId: true }
       });
       if (!task) {
         throw new NotFoundException("Task not found");
       }
-      if (
-        !this.permissionsService.hasProductPermission(user, task.productId, "product.admin.story.task.update")
-        && !(task.sprintId && this.permissionsService.hasProductPermission(user, task.productId, "product.focused.update"))
-      ) {
+      const canEdit = this.canEditTaskDescription(user, task);
+      const canRead = canEdit
+        || this.permissionsService.hasProductPermission(user, task.productId, "product.admin.story.task.read")
+        || await this.permissionsService.canReadTaskInFocused(user.sub, task);
+      if (!canRead) {
         throw new ForbiddenException("Insufficient task permission");
       }
-      return { productId: task.productId };
+      return { productId: task.productId, canEdit };
     }
 
     if (documentType === CollaborativeDocumentType.SPRINT_GOAL) {
@@ -320,7 +385,7 @@ export class CollaborationService {
       if (sprint.status === SprintStatus.COMPLETED || sprint.status === SprintStatus.CANCELLED) {
         throw new BadRequestException("This sprint is closed and can no longer be modified");
       }
-      return { productId: sprint.productId };
+      return { productId: sprint.productId, canEdit: true };
     }
 
     if (documentType === CollaborativeDocumentType.TASK_MESSAGE_BODY) {
@@ -344,7 +409,7 @@ export class CollaborationService {
         throw new ForbiddenException("Only the message author can edit it");
       }
       this.assertCanComment(user, message.task);
-      return { productId: message.task.productId };
+      return { productId: message.task.productId, canEdit: true };
     }
 
     throw new BadRequestException("Unsupported collaborative document type");
@@ -380,6 +445,14 @@ export class CollaborationService {
     }
 
     throw new ForbiddenException("Insufficient permission to comment on this task");
+  }
+
+  private canEditTaskDescription(
+    user: AuthUser,
+    task: { productId: string; sprintId: string | null }
+  ) {
+    return this.permissionsService.hasProductPermission(user, task.productId, "product.admin.story.task.update")
+      || Boolean(task.sprintId && this.permissionsService.hasProductPermission(user, task.productId, "product.focused.update"));
   }
 
   private async loadEntityMarkdownSnapshot(documentType: CollaborativeDocumentType, entityId: string) {
@@ -445,6 +518,10 @@ function encodeMessage(type: number, payload: Uint8Array) {
   message[0] = type;
   message.set(payload, 1);
   return message;
+}
+
+function toUint8Array(value: Uint8Array | Buffer) {
+  return value instanceof Uint8Array ? value : new Uint8Array(value);
 }
 
 function parseCookieHeader(header: string | undefined) {

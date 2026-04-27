@@ -94,6 +94,7 @@ type ProseMirrorMarkdownEditorProps = {
   contentEditableClassName?: string;
   readOnly?: boolean;
   collaboration?: RichDescriptionCollaboration;
+  collaborationDisabled?: boolean;
   user?: { id?: string; name?: string; email?: string } | null;
   toolbarExtras?: React.ReactNode;
 };
@@ -107,10 +108,13 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       contentEditableClassName = "",
       readOnly = false,
       collaboration,
+      collaborationDisabled = false,
       user,
       toolbarExtras
     } = props;
     const shellRef = React.useRef<HTMLDivElement | null>(null);
+    const toolbarRef = React.useRef<HTMLDivElement | null>(null);
+    const activeToolbarItemRef = React.useRef<HTMLElement | null>(null);
     const viewRef = React.useRef<EditorView | null>(null);
     const readOnlyRef = React.useRef(readOnly);
     const onChangeRef = React.useRef(onChange);
@@ -122,7 +126,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     const [connectionStatus, setConnectionStatus] = React.useState<"connecting" | "connected" | "disconnected" | null>(null);
     const [tableRows, setTableRows] = React.useState(3);
     const [tableColumns, setTableColumns] = React.useState(3);
-    const collaborationName = collaboration?.entityId ? buildDocumentName(collaboration) : "";
+    const collaborationName = collaboration?.entityId && !collaborationDisabled ? buildDocumentName(collaboration) : "";
 
     readOnlyRef.current = readOnly;
     onChangeRef.current = onChange;
@@ -130,6 +134,30 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     React.useEffect(() => {
       initialMarkdownRef.current = markdownValue;
     }, [collaborationName]);
+
+    const refreshToolbarTabStops = React.useCallback((preferredItem?: HTMLElement | null) => {
+      const toolbar = toolbarRef.current;
+      if (!toolbar) {
+        activeToolbarItemRef.current = null;
+        return;
+      }
+
+      const items = getToolbarItems(toolbar);
+      const nextActiveItem = preferredItem && items.includes(preferredItem)
+        ? preferredItem
+        : activeToolbarItemRef.current && items.includes(activeToolbarItemRef.current)
+          ? activeToolbarItemRef.current
+          : items[0] ?? null;
+
+      activeToolbarItemRef.current = nextActiveItem;
+      items.forEach((item) => {
+        item.tabIndex = item === nextActiveItem ? 0 : -1;
+      });
+    }, []);
+
+    React.useLayoutEffect(() => {
+      refreshToolbarTabStops();
+    });
 
     React.useEffect(() => {
       const host = shellRef.current;
@@ -143,6 +171,9 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       ydocRef.current = ydoc;
       providerRef.current = provider;
       provider?.setLocalUser(user);
+      if (!provider) {
+        setConnectionStatus(null);
+      }
 
       const initialYDoc = yXmlFragment ? initProseMirrorDoc(yXmlFragment, markdownSchema) : null;
       const doc = yXmlFragment
@@ -164,7 +195,8 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
         state,
         editable: () => !readOnlyRef.current,
         attributes: {
-          class: contentEditableClassName
+          class: contentEditableClassName,
+          tabindex: "0"
         },
         nodeViews: {
           code_block: (node, view, getPos) => new CodeBlockNodeView(node, view, getPos),
@@ -252,6 +284,63 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       return true;
     }, []);
 
+    const handleToolbarFocusCapture = React.useCallback((event: React.FocusEvent<HTMLDivElement>) => {
+      const toolbarItem = findToolbarItemForTarget(event.currentTarget, event.target);
+      if (toolbarItem) {
+        refreshToolbarTabStops(toolbarItem);
+      }
+    }, [refreshToolbarTabStops]);
+
+    const handleToolbarKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Tab" && !event.shiftKey) {
+        const view = viewRef.current;
+        if (view) {
+          event.preventDefault();
+          focusEditorView(view, readOnlyRef.current);
+        }
+        return;
+      }
+
+      if (!isToolbarNavigationKey(event.key)) {
+        return;
+      }
+
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if ((event.key === "ArrowUp" || event.key === "ArrowDown") && isToolbarFormControl(target)) {
+        return;
+      }
+
+      const toolbar = event.currentTarget;
+      const items = getToolbarItems(toolbar);
+      if (items.length === 0) {
+        return;
+      }
+
+      const currentItem = findToolbarItemForTarget(toolbar, target) ?? activeToolbarItemRef.current ?? items[0];
+      const currentIndex = Math.max(0, items.indexOf(currentItem));
+      const nextIndex = nextToolbarItemIndex(event.key, currentIndex, items.length);
+      const nextItem = items[nextIndex];
+      if (!nextItem) {
+        return;
+      }
+
+      event.preventDefault();
+      refreshToolbarTabStops(nextItem);
+      nextItem.focus();
+    }, [refreshToolbarTabStops]);
+
+    const handleEditorHostMouseDown = React.useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+      const view = viewRef.current;
+      if (!view || event.button !== 0 || shouldPreserveEditorHostMouseTarget(event.target)) {
+        return;
+      }
+
+      if (!(event.target instanceof Node) || !view.dom.contains(event.target)) {
+        event.preventDefault();
+      }
+      focusEditorView(view, readOnlyRef.current);
+    }, []);
+
     React.useImperativeHandle(ref, () => ({
       focus() {
         viewRef.current?.focus();
@@ -298,7 +387,15 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
 
     return (
       <div className={`prosemirror-markdown-editor ${className}`.trim()}>
-        <div className="prosemirror-toolbar" role="toolbar" aria-label="Herramientas markdown">
+        <div
+          ref={toolbarRef}
+          className="prosemirror-toolbar"
+          role="toolbar"
+          aria-label="Herramientas markdown"
+          aria-orientation="horizontal"
+          onFocusCapture={handleToolbarFocusCapture}
+          onKeyDown={handleToolbarKeyDown}
+        >
           <ToolbarButton label="Deshacer" disabled={readOnly} onClick={() => runCommand(collaborationName ? yUndoCommand : undo)}>
             <FiRotateCcw aria-hidden="true" />
           </ToolbarButton>
@@ -397,7 +494,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
           {toolbarExtras}
         </div>
         {connectionStatus ? <span className={`prosemirror-collab-status is-${connectionStatus}`}>{collaborationStatusLabel(connectionStatus)}</span> : null}
-        <div ref={shellRef} className="prosemirror-editor-host" />
+        <div ref={shellRef} className="prosemirror-editor-host" onMouseDown={handleEditorHostMouseDown} />
       </div>
     );
   }
@@ -469,6 +566,14 @@ function replaceDocumentMarkdown(view: EditorView, markdown: string) {
   const nextDoc = parseMarkdown(markdown);
   const transaction = view.state.tr.replaceWith(0, view.state.doc.content.size, nextDoc.content).scrollIntoView();
   view.dispatch(transaction);
+}
+
+function focusEditorView(view: EditorView, readOnly: boolean) {
+  if (readOnly) {
+    view.dom.focus({ preventScroll: true });
+    return;
+  }
+  view.focus();
 }
 
 function serializeSelectionMarkdown(state: EditorState) {
@@ -617,6 +722,80 @@ function ToolbarButton(props: {
       {props.children}
     </button>
   );
+}
+
+const TOOLBAR_ITEM_SELECTOR = [
+  "button",
+  "input",
+  "select",
+  "textarea",
+  "a[href]",
+  "[role='button']",
+  "[tabindex]"
+].join(",");
+
+function getToolbarItems(toolbar: HTMLElement) {
+  return Array.from(toolbar.querySelectorAll<HTMLElement>(TOOLBAR_ITEM_SELECTOR))
+    .filter((item) => item.closest(".prosemirror-toolbar") === toolbar)
+    .filter((item) => !isToolbarItemDisabled(item) && isElementVisible(item));
+}
+
+function findToolbarItemForTarget(toolbar: HTMLElement, target: EventTarget | null) {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const item = target.closest<HTMLElement>(TOOLBAR_ITEM_SELECTOR);
+  if (!item || item.closest(".prosemirror-toolbar") !== toolbar || isToolbarItemDisabled(item)) {
+    return null;
+  }
+  return item;
+}
+
+function isToolbarNavigationKey(key: string) {
+  return key === "ArrowRight" ||
+    key === "ArrowLeft" ||
+    key === "ArrowDown" ||
+    key === "ArrowUp" ||
+    key === "Home" ||
+    key === "End";
+}
+
+function nextToolbarItemIndex(key: string, currentIndex: number, itemCount: number) {
+  if (key === "Home") {
+    return 0;
+  }
+  if (key === "End") {
+    return itemCount - 1;
+  }
+
+  const direction = key === "ArrowRight" || key === "ArrowDown" ? 1 : -1;
+  return (currentIndex + direction + itemCount) % itemCount;
+}
+
+function isToolbarFormControl(target: HTMLElement | null) {
+  return target instanceof HTMLInputElement ||
+    target instanceof HTMLSelectElement ||
+    target instanceof HTMLTextAreaElement;
+}
+
+function isToolbarItemDisabled(item: HTMLElement) {
+  return (item instanceof HTMLButtonElement ||
+    item instanceof HTMLInputElement ||
+    item instanceof HTMLSelectElement ||
+    item instanceof HTMLTextAreaElement) && item.disabled;
+}
+
+function isElementVisible(item: HTMLElement) {
+  return item.offsetParent !== null || item.getClientRects().length > 0;
+}
+
+function shouldPreserveEditorHostMouseTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return Boolean(target.closest(".cm-editor, .prosemirror-code-block-toolbar, button, input, select, textarea, a[href]"));
 }
 
 function buildTableMarkdown(rowCount: number, columnCount: number) {

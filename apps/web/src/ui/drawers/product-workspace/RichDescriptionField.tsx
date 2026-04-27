@@ -859,6 +859,8 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     };
   }, []);
 
+  const collaborationDisabled = disabled && collaboration?.documentType !== "TASK_DESCRIPTION";
+
   const editorField = (
     <div
       className={`rich-description-field${isMaximized ? " is-maximized" : ""}`}
@@ -883,6 +885,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         contentEditableClassName="rich-description-content"
         readOnly={editorInteractionDisabled}
         collaboration={collaboration}
+        collaborationDisabled={collaborationDisabled}
         user={store.session.user}
         toolbarExtras={(
           <>
@@ -1335,7 +1338,12 @@ function ToolbarButton(props: ToolbarButtonProps) {
       type="button"
       className={`rich-description-toolbar-button${pressed ? " is-pressed" : ""}`}
       onClick={onClick}
-      onMouseDown={onMouseDown}
+      onMouseDown={(event) => {
+        onMouseDown?.(event);
+        if (!event.defaultPrevented) {
+          event.preventDefault();
+        }
+      }}
       disabled={disabled}
       aria-label={label}
       aria-pressed={pressed}

@@ -129,13 +129,13 @@ export class ScrumYjsProvider {
       }
     });
 
-    socket.addEventListener("close", () => {
+    socket.addEventListener("close", (event) => {
       if (this.socket !== socket) {
         return;
       }
       this.emitStatus("disconnected");
       this.socket = null;
-      if (!this.destroyed) {
+      if (!this.destroyed && event.code !== 1008) {
         window.setTimeout(() => this.connect(), 1200);
       }
     });
@@ -214,5 +214,28 @@ function colorFromString(value: string) {
     hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
   }
   const hue = Math.abs(hash) % 360;
-  return `hsl(${hue} 72% 48%)`;
+  return hslToHex(hue, 72, 48);
+}
+
+function hslToHex(hue: number, saturation: number, lightness: number) {
+  const normalizedSaturation = saturation / 100;
+  const normalizedLightness = lightness / 100;
+  const chroma = (1 - Math.abs(2 * normalizedLightness - 1)) * normalizedSaturation;
+  const secondLargestComponent = chroma * (1 - Math.abs((hue / 60) % 2 - 1));
+  const lightnessMatch = normalizedLightness - chroma / 2;
+  const [red, green, blue] = hue < 60
+    ? [chroma, secondLargestComponent, 0]
+    : hue < 120
+      ? [secondLargestComponent, chroma, 0]
+      : hue < 180
+        ? [0, chroma, secondLargestComponent]
+        : hue < 240
+          ? [0, secondLargestComponent, chroma]
+          : hue < 300
+            ? [secondLargestComponent, 0, chroma]
+            : [chroma, 0, secondLargestComponent];
+
+  return `#${[red, green, blue]
+    .map((component) => Math.round((component + lightnessMatch) * 255).toString(16).padStart(2, "0"))
+    .join("")}`;
 }

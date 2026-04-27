@@ -254,6 +254,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  cursor: text;
 }
 
 .rich-description-field.is-maximized .prosemirror-editor-host {
@@ -426,6 +427,10 @@
   font-size: 0.72rem;
   line-height: 1.1;
   white-space: nowrap;
+}
+
+.ProseMirror-yjs-selection {
+  border-radius: 2px;
 }
 
 .rich-description-content :is(p, li, td, th, label) {
