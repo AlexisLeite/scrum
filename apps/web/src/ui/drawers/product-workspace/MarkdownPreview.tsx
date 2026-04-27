@@ -145,6 +145,14 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
                   renderedCodeBlockIndex += 1;
 
                   return <MarkdownCodeBlock {...preProps} copyValue={copyValue} />;
+                },
+                table(tableProps) {
+                  const { node: _node, ...rest } = tableProps;
+                  return (
+                    <div className="markdown-preview-table-scroll">
+                      <table {...rest} />
+                    </div>
+                  );
                 }
               }}
             >

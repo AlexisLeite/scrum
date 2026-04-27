@@ -784,12 +784,15 @@ function asTextContent(tokens: Token[] | undefined) {
   return rendered.length === 1 ? rendered[0] : rendered;
 }
 
-function renderTableCell(cell: Tokens.TableCell): TableCell {
+function renderTableCell(cell: Tokens.TableCell, rowIndex: number = 0): TableCell {
   return {
     text: asTextContent(cell.tokens) as ContentText["text"],
     bold: cell.header,
-    fillColor: cell.header ? "#edf4ff" : undefined,
-    alignment: cell.align ?? undefined
+    fillColor: cell.header ? "#e7f0fb" : rowIndex % 2 === 0 ? "#f7fafd" : undefined,
+    alignment: cell.align ?? undefined,
+    margin: [4, 3, 4, 3],
+    fontSize: 9.5,
+    lineHeight: 1.25
   };
 }
 
@@ -1183,14 +1186,23 @@ function renderBlockTokens(tokens: Token[] | undefined, context: RenderContext):
               headerRows: 1,
               widths: tableToken.header.map(() => "*"),
               body: [
-                tableToken.header.map((cell: Tokens.TableCell) => renderTableCell(cell)),
-                ...tableToken.rows.map((row: Tokens.TableCell[]) =>
-                  row.map((cell: Tokens.TableCell) => renderTableCell(cell))
+                tableToken.header.map((cell: Tokens.TableCell) => renderTableCell(cell, 0)),
+                ...tableToken.rows.map((row: Tokens.TableCell[], rowIndex) =>
+                  row.map((cell: Tokens.TableCell) => renderTableCell(cell, rowIndex + 1))
                 )
               ]
             },
-            layout: "lightHorizontalLines",
-            margin: [0, 4, 0, 12]
+            layout: {
+              hLineWidth: () => 0.7,
+              vLineWidth: () => 0.7,
+              hLineColor: () => "#cfd9e6",
+              vLineColor: () => "#d7e0eb",
+              paddingLeft: () => 2,
+              paddingRight: () => 2,
+              paddingTop: () => 2,
+              paddingBottom: () => 2
+            },
+            margin: [0, 6, 0, 14]
           };
           content.push(tableNode);
         }

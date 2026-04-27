@@ -596,6 +596,13 @@ function SortablePrintItemRow(props: {
                 productId={productId}
                 disabled={contentState?.saving}
                 uriStateKey={`product-print-content:${productId}:${item.id}`}
+                collaboration={
+                  item.kind === "product_description"
+                    ? { documentType: "PRODUCT_DESCRIPTION", entityId: productId }
+                    : item.kind === "story" && item.sourceId
+                      ? { documentType: "STORY_DESCRIPTION", entityId: item.sourceId }
+                      : undefined
+                }
               />
 
               <div className="row-actions compact product-print-editor-actions">

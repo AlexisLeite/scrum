@@ -388,6 +388,7 @@ export function SprintUpsertionForm(props: {
         onChange={setGoal}
         rows={4}
         uriStateKey={goalUriStateKey}
+        collaboration={sprint ? { documentType: "SPRINT_GOAL", entityId: sprint.id } : undefined}
       />
 
       <div className="form-grid two-columns">

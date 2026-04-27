@@ -1,6 +1,7 @@
 import React from "react";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { RichDescriptionField, type RichDescriptionFieldHandle } from "./RichDescriptionField";
+import type { RichDescriptionCollaboration } from "./yjs-collaboration-provider";
 
 export type TaskMessageRevision = {
   id: string;
@@ -67,6 +68,7 @@ const TaskInlineMessageEditor = React.memo(function TaskInlineMessageEditor(prop
   onEditorSave?: () => void;
   hasPendingChanges?: boolean;
   uriStateKey?: string;
+  collaboration?: RichDescriptionCollaboration;
 }) {
   const {
     label,
@@ -79,7 +81,8 @@ const TaskInlineMessageEditor = React.memo(function TaskInlineMessageEditor(prop
     submitLabel,
     onEditorSave,
     hasPendingChanges = Boolean(body.trim()),
-    uriStateKey
+    uriStateKey,
+    collaboration
   } = props;
   const editorRef = React.useRef<RichDescriptionFieldHandle | null>(null);
   const submitDisabled = submitting || !body.trim() || !hasPendingChanges;
@@ -101,6 +104,7 @@ const TaskInlineMessageEditor = React.memo(function TaskInlineMessageEditor(prop
         onSave={onEditorSave}
         saveDisabled={submitDisabled}
         uriStateKey={uriStateKey}
+        collaboration={collaboration}
       />
       <div className="row-actions compact">
         <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={submitting}>
@@ -208,6 +212,7 @@ export function TaskMessageThread(props: TaskMessageThreadProps) {
                 onEditorSave={() => void rest.onSubmitEdit()}
                 hasPendingChanges={rest.editingBody.trim() !== message.body.trim()}
                 uriStateKey={`task-message-edit:${message.id}`}
+                collaboration={{ documentType: "TASK_MESSAGE_BODY", entityId: message.id }}
               />
             ) : (
               <MarkdownPreview markdown={message.body} className="task-message-body markdown-preview-card" />

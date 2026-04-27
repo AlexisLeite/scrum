@@ -877,6 +877,7 @@ export function TaskUpsertionForm(props: {
           onSave={!readOnly ? () => void persistTask() : undefined}
           saveDisabled={saveActionDisabled}
           uriStateKey={descriptionUriStateKey}
+          collaboration={task ? { documentType: "TASK_DESCRIPTION", entityId: task.id } : undefined}
         />
         {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
 

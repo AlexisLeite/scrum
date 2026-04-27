@@ -18,8 +18,9 @@
 }
 
 .rich-description-maximized-backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 1200;
   pointer-events: auto;
   background: color-mix(in srgb, var(--bg-soft) 72%, rgba(15, 23, 42, 0.42));
   backdrop-filter: blur(10px);
@@ -137,6 +138,130 @@
   outline-offset: 1px;
 }
 
+.prosemirror-markdown-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rich-description-field.is-maximized .prosemirror-markdown-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.prosemirror-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 0.4rem;
+  border-bottom: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--field-bg) 92%, transparent);
+}
+
+.rich-description-field.is-maximized .prosemirror-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.prosemirror-toolbar-separator {
+  display: inline-block;
+  width: 1px;
+  height: 28px;
+  margin: 0 0.15rem;
+  background: var(--border-soft);
+}
+
+.prosemirror-toolbar-select {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 94px;
+  max-width: 116px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 0.55rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  color: var(--text-main);
+  font: inherit;
+}
+
+.prosemirror-toolbar-select option,
+.prosemirror-code-language-select option {
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+
+.prosemirror-table-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.prosemirror-toolbar-number {
+  flex: 0 0 auto;
+  width: 3.2rem;
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 0.35rem;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.prosemirror-table-control-divider {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.prosemirror-collab-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: fit-content;
+  margin: 0.35rem 0.7rem 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.prosemirror-collab-status::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--text-muted);
+}
+
+.prosemirror-collab-status.is-connected::before {
+  background: #22c55e;
+}
+
+.prosemirror-collab-status.is-connecting::before {
+  background: #eab308;
+}
+
+.prosemirror-collab-status.is-disconnected::before {
+  background: #ef4444;
+}
+
+.prosemirror-editor-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rich-description-field.is-maximized .prosemirror-editor-host {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 .rich-description-content {
   padding: 0.65rem 0.72rem 0.65rem;
   min-height: var(--rich-description-min-height, 96px);
@@ -147,13 +272,160 @@
   background: transparent;
   box-sizing: border-box;
   resize: none;
-  overflow-y: visible;
+  overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
+  scroll-padding-bottom: var(--rich-description-tail-space, 30vh);
   --rich-heading-1-size: 2.0625rem;
   --rich-heading-2-size: 1.84375rem;
   --rich-heading-3-size: 1.625rem;
   --rich-heading-4-size: 1.40625rem;
   --rich-heading-5-size: 1.1875rem;
   --rich-heading-6-size: 1rem;
+}
+
+.rich-description-content.ProseMirror {
+  outline: none;
+  white-space: pre-wrap;
+}
+
+.rich-description-content.ProseMirror p {
+  margin: 0.75rem 0;
+}
+
+.rich-description-content blockquote {
+  margin: 1rem 0;
+  padding: 0.72rem 0.95rem 0.72rem 1rem;
+  border-left: 4px solid var(--accent-b);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--accent-b) 10%, var(--bg-soft));
+  color: var(--text-main);
+}
+
+.rich-description-content blockquote> :first-child {
+  margin-top: 0;
+}
+
+.rich-description-content blockquote> :last-child {
+  margin-bottom: 0;
+}
+
+.rich-description-content.ProseMirror .prosemirror-table-wrapper {
+  position: relative;
+  max-width: 100%;
+  margin: 1rem 0;
+  overflow: visible;
+}
+
+.rich-description-content.ProseMirror .prosemirror-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+.rich-description-content.ProseMirror .prosemirror-table-scroll>table {
+  min-width: 32rem;
+  margin: 0;
+}
+
+.prosemirror-table-hover-controls {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1300;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-soft) 92%, var(--bg-main));
+  box-shadow: var(--shadow-soft);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.prosemirror-table-hover-controls.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.prosemirror-table-control-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-soft) 78%, var(--bg-main));
+  color: var(--text-main);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.prosemirror-table-control-button:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--accent-a) 18%, var(--bg-soft));
+}
+
+.prosemirror-table-control-button[data-variant="danger"]:hover {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border-strong));
+  background: color-mix(in srgb, var(--danger) 18%, var(--bg-soft));
+}
+
+.prosemirror-table-control-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.rich-description-content.ProseMirror table {
+  width: 100%;
+  margin: 1rem 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  overflow-wrap: anywhere;
+}
+
+.rich-description-content.ProseMirror th,
+.rich-description-content.ProseMirror td {
+  min-width: 4rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.rich-description-content.ProseMirror th {
+  background: color-mix(in srgb, var(--bg-soft) 72%, transparent);
+  font-weight: 700;
+}
+
+.ProseMirror-yjs-cursor {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 2px solid var(--accent-a);
+  border-right: 2px solid var(--accent-a);
+  pointer-events: none;
+}
+
+.ProseMirror-yjs-cursor>div {
+  position: absolute;
+  top: -1.4em;
+  left: -2px;
+  padding: 0.1rem 0.35rem;
+  border-radius: 6px;
+  background: var(--accent-a);
+  color: #fff;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .rich-description-content :is(p, li, td, th, label) {
@@ -319,6 +591,60 @@
   background: var(--code-block-bg) !important;
   background-color: var(--code-block-bg) !important;
   color: var(--text-main);
+}
+
+.prosemirror-code-block {
+  margin: 1rem 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--code-block-bg);
+}
+
+.prosemirror-code-block-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.35rem;
+  border-bottom: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-soft) 62%, transparent);
+}
+
+.prosemirror-code-language-select {
+  flex: 0 1 11rem;
+  width: auto;
+  min-width: 8rem;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 0.5rem;
+  border-radius: 8px;
+  background: var(--field-bg);
+  color: var(--text-main);
+}
+
+.prosemirror-code-block-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.prosemirror-code-block-button:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+}
+
+.prosemirror-code-block .cm-editor {
+  min-height: 3rem;
 }
 
 .rich-description-editor .cm-editor ::selection,

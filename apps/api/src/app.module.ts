@@ -5,6 +5,7 @@ import { ActivityModule } from "./activity/activity.module";
 import { AiModule } from "./ai/ai.module";
 import { ApiKeysModule } from "./api-keys/api-keys.module";
 import { AuthModule } from "./auth/auth.module";
+import { CollaborationModule } from "./collaboration/collaboration.module";
 import { DraftsModule } from "./drafts/drafts.module";
 import { IndicatorsModule } from "./indicators/indicators.module";
 import { MediaModule } from "./media/media.module";
@@ -32,6 +33,7 @@ import { TeamsModule } from "./teams/teams.module";
     ApiKeysModule,
     AdminModule,
     AuthModule,
+    CollaborationModule,
     DraftsModule,
     MediaModule,
     TeamsModule,

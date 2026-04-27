@@ -478,6 +478,7 @@ export function StoryUpsertionForm(props: {
         disabled={formDisabled}
         productId={productId}
         uriStateKey={descriptionUriStateKey}
+        collaboration={story ? { documentType: "STORY_DESCRIPTION", entityId: story.id } : undefined}
       />
       {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
 

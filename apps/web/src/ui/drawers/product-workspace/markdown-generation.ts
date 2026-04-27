@@ -1,4 +1,7 @@
-import type { MDXEditorMethods } from "@mdxeditor/editor";
+type MarkdownEditorMethods = {
+  getMarkdown: () => string;
+  getSelectionMarkdown: () => string;
+};
 
 export type EditorSelectionSnapshot = {
   currentMarkdown: string;
@@ -25,7 +28,7 @@ const GENERATION_PLACEHOLDER_PATTERN = /<span\b[^>]*data-ai-generation-placehold
 
 export function captureEditorSelection(
   content: HTMLElement | null,
-  editor: MDXEditorMethods | null
+  editor: MarkdownEditorMethods | null
 ): EditorSelectionSnapshot {
   const currentMarkdown = editor?.getMarkdown() ?? "";
   const selectionMarkdown = editor?.getSelectionMarkdown() ?? "";

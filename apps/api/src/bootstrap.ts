@@ -7,6 +7,7 @@ import type { NextFunction } from "express";
 import { static as serveStatic } from "express";
 import { Request, Response } from "express";
 import { AppModule } from "./app.module";
+import { CollaborationService } from "./collaboration/collaboration.service";
 import { resolveMediaRoot } from "./media/media.service";
 import { McpService } from "./mcp/mcp.service";
 
@@ -74,6 +75,7 @@ export async function createHttpApp(): Promise<INestApplication> {
   ensureDatabaseEnv();
   const app = await NestFactory.create(AppModule);
   await configureApp(app);
+  app.get(CollaborationService).attach(app.getHttpServer());
   return app;
 }
 

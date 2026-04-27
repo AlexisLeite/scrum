@@ -312,6 +312,7 @@ export function ProductUpsertionForm(props: {
         rows={4}
         disabled={formDisabled}
         uriStateKey={descriptionUriStateKey}
+        collaboration={product ? { documentType: "PRODUCT_DESCRIPTION", entityId: product.id } : undefined}
       />
       {isHydratingRemote ? <p className="muted">Recuperando borrador guardado...</p> : null}
       {isEditing && product ? (

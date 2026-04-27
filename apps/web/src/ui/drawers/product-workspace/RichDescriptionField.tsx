@@ -3,41 +3,16 @@ import { createPortal } from "react-dom";
 import { FiMaximize2, FiMinimize2, FiPrinter, FiSave, FiVideo } from "react-icons/fi";
 import { LuWandSparkles } from "react-icons/lu";
 import { useSearchParams } from "react-router-dom";
-import {
-  BlockTypeSelect,
-  BoldItalicUnderlineToggles,
-  Button as MdxToolbarButton,
-  codeMirrorPlugin,
-  codeBlockPlugin,
-  CreateLink,
-  headingsPlugin,
-  imagePlugin,
-  InsertCodeBlock,
-  InsertImage,
-  InsertTable,
-  linkDialogPlugin,
-  linkPlugin,
-  listsPlugin,
-  ListsToggle,
-  markdownShortcutPlugin,
-  MDXEditor,
-  MDXEditorMethods,
-  quotePlugin,
-  Separator,
-  tablePlugin,
-  toolbarPlugin,
-  UndoRedo,
-  diffSourcePlugin,
-  DiffSourceToggleWrapper
-} from "@mdxeditor/editor";
-import "@mdxeditor/editor/style.css";
 import { apiClient } from "../../../api/client";
 import { buildInternalReferenceMarkdown, ReferenceSearchResult } from "../../../lib/internal-references";
+import { useRootStore } from "../../../stores/root-store";
 import { useBodyScrollLock } from "../../useBodyScrollLock";
 import { useOverlayEscape } from "../../useOverlayEscape";
 import { MAXIMIZED_EDITOR_PARAM } from "../drawer-route-state";
 import { ImageLightbox } from "./ImageLightbox";
 import { MarkdownGenerationDialog } from "./MarkdownGenerationDialog";
+import { ProseMirrorMarkdownEditor, type ProseMirrorMarkdownEditorHandle } from "./ProseMirrorMarkdownEditor";
+import type { RichDescriptionCollaboration } from "./yjs-collaboration-provider";
 import {
   captureEditorSelection,
   createGenerationRegion,
@@ -62,6 +37,7 @@ type RichDescriptionFieldProps = {
   onSave?: (() => Promise<void> | void) | undefined;
   saveDisabled?: boolean;
   uriStateKey?: string;
+  collaboration?: RichDescriptionCollaboration;
 };
 
 export type RichDescriptionFieldHandle = {
@@ -96,23 +72,6 @@ type ActiveAnchor = {
   };
 };
 
-const CODE_BLOCK_LANGUAGES: Record<string, string> = {
-  txt: "Text",
-  md: "Markdown",
-  js: "JavaScript",
-  ts: "TypeScript",
-  jsx: "JSX",
-  tsx: "TSX",
-  json: "JSON",
-  bash: "Bash",
-  sh: "Shell",
-  sql: "SQL",
-  css: "CSS",
-  html: "HTML",
-  yaml: "YAML"
-};
-
-const ALLOWED_HEADING_LEVELS = [2, 3, 4, 5, 6] as const;
 const IMAGE_ORIGIN_FALLBACK = "contaboserver.net:5444";
 const IMAGE_ORIGIN_PUBLIC = "contaboserver.net:3000";
 
@@ -132,11 +91,13 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     printDisabled = false,
     onSave,
     saveDisabled = false,
-    uriStateKey
+    uriStateKey,
+    collaboration
   } = props;
+  const store = useRootStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const minHeight = Math.max(rows, 4) * 24;
-  const editorRef = React.useRef<MDXEditorMethods | null>(null);
+  const editorRef = React.useRef<ProseMirrorMarkdownEditorHandle | null>(null);
   const fieldRef = React.useRef<HTMLDivElement | null>(null);
   const videoInputRef = React.useRef<HTMLInputElement | null>(null);
   const resizeFrameRef = React.useRef<number | null>(null);
@@ -313,7 +274,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   }, [onChange, releaseResolvedPreviewUrls, scheduleHeightSync]);
 
   React.useEffect(() => {
-    if (!editorRef.current) {
+    if (collaboration || !editorRef.current) {
       return;
     }
     const currentMarkdown = normalizeEditorImageUrl(materializeUploadedImageMarkdown(editorRef.current.getMarkdown()));
@@ -321,7 +282,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     if (currentMarkdown !== nextMarkdown) {
       editorRef.current.setMarkdown(nextMarkdown);
     }
-  }, [materializeUploadedImageMarkdown, value]);
+  }, [collaboration, materializeUploadedImageMarkdown, value]);
 
   React.useEffect(() => {
     scheduleHeightSync();
@@ -910,7 +871,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       onMouseDown={isMaximized ? (event) => event.stopPropagation() : undefined}
     >
       <span className="rich-description-label">{label}</span>
-      <MDXEditor
+      <ProseMirrorMarkdownEditor
         ref={editorRef}
         markdown={normalizeEditorImageUrl(value || "")}
         onChange={(nextValue) => {
@@ -920,108 +881,79 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         }}
         className="rich-description-editor"
         contentEditableClassName="rich-description-content"
-        readOnly={disabled}
-        plugins={[
-          headingsPlugin({ allowedHeadingLevels: ALLOWED_HEADING_LEVELS }),
-          quotePlugin(),
-          listsPlugin(),
-          linkPlugin(),
-          linkDialogPlugin(),
-          tablePlugin(),
-          imagePlugin(),
-          codeBlockPlugin({ defaultCodeBlockLanguage: "txt" }),
-          codeMirrorPlugin({
-            codeBlockLanguages: CODE_BLOCK_LANGUAGES
-          }),
-          markdownShortcutPlugin(),
-          diffSourcePlugin({ viewMode: "rich-text" }),
-          toolbarPlugin({
-            toolbarContents: () => (
-              <DiffSourceToggleWrapper>
-                <>
-                  <UndoRedo />
-                  <Separator />
-                  <BlockTypeSelect />
-                  <Separator />
-                  <BoldItalicUnderlineToggles />
-                  <Separator />
-                  <ListsToggle />
-                  <Separator />
-                  <CreateLink />
-                  <InsertImage />
-                  <ToolbarButton
-                    label="Autogenerar markdown"
-                    onMouseDown={(event) => {
-                      if (editorInteractionDisabled) {
-                        return;
-                      }
+        readOnly={editorInteractionDisabled}
+        collaboration={collaboration}
+        user={store.session.user}
+        toolbarExtras={(
+          <>
+            <ToolbarButton
+              label="Autogenerar markdown"
+              onMouseDown={(event) => {
+                if (editorInteractionDisabled) {
+                  return;
+                }
 
-                      event.preventDefault();
-                      captureGenerationSelection();
-                    }}
-                    onClick={() => {
-                      if (editorInteractionDisabled) {
-                        return;
-                      }
+                event.preventDefault();
+                captureGenerationSelection();
+              }}
+              onClick={() => {
+                if (editorInteractionDisabled) {
+                  return;
+                }
 
-                      if (!generationSelectionRef.current) {
-                        captureGenerationSelection();
-                      }
-                      setGenerationError("");
-                      setGenerationDialogOpen(true);
-                    }}
-                    disabled={editorInteractionDisabled}
-                  >
-                    <LuWandSparkles aria-hidden="true" />
-                  </ToolbarButton>
-                  <ToolbarButton
-                    label="Insertar video"
-                    onClick={() => {
-                      if (!editorInteractionDisabled) {
-                        videoInputRef.current?.click();
-                      }
-                    }}
-                    disabled={editorInteractionDisabled}
-                  >
-                    <FiVideo aria-hidden="true" />
-                  </ToolbarButton>
-                  <InsertTable />
-                  <InsertCodeBlock />
-                  <Separator />
-                  {onPrint ? (
-                    <ToolbarButton
-                      label="Imprimir"
-                      onClick={() => {
-                        void onPrint();
-                      }}
-                      disabled={printDisabled || isGeneratingMarkdown}
-                    >
-                      <FiPrinter aria-hidden="true" />
-                    </ToolbarButton>
-                  ) : null}
-                  {onSave ? (
-                    <ToolbarButton
-                      label="Guardar"
-                      onClick={() => {
-                        void onSave();
-                      }}
-                      disabled={saveDisabled || isGeneratingMarkdown}
-                    >
-                      <FiSave aria-hidden="true" />
-                    </ToolbarButton>
-                  ) : null}
-                  <ToolbarButton
-                    label={isMaximized ? "Salir de pantalla completa" : "Pantalla completa"}
-                    pressed={isMaximized}
-                    onClick={() => setMaximized((current) => !current)}
-                  >
-                    {isMaximized ? <FiMinimize2 aria-hidden="true" /> : <FiMaximize2 aria-hidden="true" />}
-                  </ToolbarButton>
-                </>
-              </DiffSourceToggleWrapper>
-            )
-          })
-        ]}
+                if (!generationSelectionRef.current) {
+                  captureGenerationSelection();
+                }
+                setGenerationError("");
+                setGenerationDialogOpen(true);
+              }}
+              disabled={editorInteractionDisabled}
+            >
+              <LuWandSparkles aria-hidden="true" />
+            </ToolbarButton>
+            <ToolbarButton
+              label="Insertar video"
+              onClick={() => {
+                if (!editorInteractionDisabled) {
+                  videoInputRef.current?.click();
+                }
+              }}
+              disabled={editorInteractionDisabled}
+            >
+              <FiVideo aria-hidden="true" />
+            </ToolbarButton>
+            <span className="prosemirror-toolbar-separator" />
+            {onPrint ? (
+              <ToolbarButton
+                label="Imprimir"
+                onClick={() => {
+                  void onPrint();
+                }}
+                disabled={printDisabled || isGeneratingMarkdown}
+              >
+                <FiPrinter aria-hidden="true" />
+              </ToolbarButton>
+            ) : null}
+            {onSave ? (
+              <ToolbarButton
+                label="Guardar"
+                onClick={() => {
+                  void onSave();
+                }}
+                disabled={saveDisabled || isGeneratingMarkdown}
+              >
+                <FiSave aria-hidden="true" />
+              </ToolbarButton>
+            ) : null}
+            <ToolbarButton
+              label={isMaximized ? "Salir de pantalla completa" : "Pantalla completa"}
+              pressed={isMaximized}
+              onClick={() => setMaximized((current) => !current)}
+            >
+              {isMaximized ? <FiMinimize2 aria-hidden="true" /> : <FiMaximize2 aria-hidden="true" />}
+            </ToolbarButton>
+          </>
+        )}
       />
       <input
         ref={videoInputRef}
@@ -1119,17 +1051,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     </div>
   );
 
-  if (!isMaximized || typeof document === "undefined") {
-    return editorField;
-  }
-
-  return createPortal(
-    <div className="rich-description-maximized-shell">
-      <div className="rich-description-maximized-backdrop" onMouseDown={() => setMaximized(false)} />
-      {editorField}
-    </div>,
-    document.body
-  );
+  return editorField;
 });
 
 function buildUploadingImageMarkdown(alt: string, previewUrl: string) {
@@ -1409,7 +1331,7 @@ function ToolbarButton(props: ToolbarButtonProps) {
   const { label, pressed = false, onClick, onMouseDown, disabled = false, children } = props;
 
   return (
-    <MdxToolbarButton
+    <button
       type="button"
       className={`rich-description-toolbar-button${pressed ? " is-pressed" : ""}`}
       onClick={onClick}
@@ -1420,6 +1342,6 @@ function ToolbarButton(props: ToolbarButtonProps) {
       title={label}
     >
       {children}
-    </MdxToolbarButton>
+    </button>
   );
 }

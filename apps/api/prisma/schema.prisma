@@ -30,6 +30,7 @@ model User {
   teamMembers         TeamMember[]
   drafts              UserDraft[]
   sprintMembers       SprintMember[]
+  editedCollaborativeDocuments CollaborativeDocument[] @relation("CollaborativeDocumentEditor")
 }
 
 model ApiKey {
@@ -83,6 +84,7 @@ model Product {
   isSystem     Boolean          @default(false)
   activityLogs ActivityLog[]
   apiKeys      ApiKey[]
+  collaborativeDocuments CollaborativeDocument[]
   owner        User             @relation("ProductOwner", fields: [ownerId], references: [id])
   members      ProductMember[]
   teamLinks    ProductTeam[]
@@ -361,6 +363,24 @@ model UserDraft {
   @@index([productId, updatedAt])
 }
 
+model CollaborativeDocument {
+  id                 String                    @id @default(cuid())
+  documentType       CollaborativeDocumentType
+  entityId           String
+  productId          String?
+  yjsState           Bytes
+  markdownSnapshot   String                    @default("")
+  lastEditedByUserId String?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  lastEditedByUser   User?                     @relation("CollaborativeDocumentEditor", fields: [lastEditedByUserId], references: [id], onDelete: SetNull)
+  product            Product?                  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([documentType, entityId])
+  @@index([productId, updatedAt])
+  @@index([lastEditedByUserId, updatedAt])
+}
+
 model ScheduledJob {
   id                String                    @id @default(cuid())
   key               String                    @unique
@@ -462,6 +482,14 @@ enum DraftEntityType {
   STORY
   TASK
   TASK_MESSAGE
+}
+
+enum CollaborativeDocumentType {
+  PRODUCT_DESCRIPTION
+  STORY_DESCRIPTION
+  TASK_DESCRIPTION
+  SPRINT_GOAL
+  TASK_MESSAGE_BODY
 }
 
 enum ScheduledJobFailurePolicy {

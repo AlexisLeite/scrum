@@ -3427,21 +3427,56 @@ html .drawer-content .card {
 }
 
 .markdown-preview blockquote {
-  border-left: 3px solid var(--accent-b);
-  padding-left: 0.9rem;
-  color: var(--text-muted);
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--accent-b);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: color-mix(in srgb, var(--accent-b) 10%, var(--bg-soft));
+  color: var(--text-main);
+}
+
+.markdown-preview blockquote> :first-child {
+  margin-top: 0;
+}
+
+.markdown-preview blockquote> :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-preview-table-scroll {
+  width: 100%;
+  margin: 1rem 0;
+  overflow-x: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
 }
 
 .markdown-preview table {
   width: 100%;
+  min-width: 36rem;
   border-collapse: collapse;
+  table-layout: fixed;
+  margin: 0;
 }
 
 .markdown-preview th,
 .markdown-preview td {
   border: 1px solid var(--border-subtle);
-  padding: 0.5rem 0.6rem;
+  padding: 0.55rem 0.65rem;
   text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.markdown-preview th {
+  background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.markdown-preview tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-soft) 32%, transparent);
 }
 
 .markdown-preview img {
