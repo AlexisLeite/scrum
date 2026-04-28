@@ -594,7 +594,6 @@ function SortablePrintItemRow(props: {
                 onChange={(nextValue) => onDraftChange(item.id, nextValue)}
                 rows={12}
                 productId={productId}
-                disabled={contentState?.saving}
                 onSave={() => onSaveContent(item)}
                 saveDisabled={!isDirty || contentState?.saving}
                 uriStateKey={`product-print-content:${productId}:${item.id}`}
@@ -887,6 +886,9 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
       }
 
       setContentDrafts((current) => {
+        if (current[item.id] !== undefined && current[item.id] !== nextMarkdown) {
+          return current;
+        }
         const next = { ...current };
         delete next[item.id];
         return next;

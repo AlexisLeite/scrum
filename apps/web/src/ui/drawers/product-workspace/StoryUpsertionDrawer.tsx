@@ -152,6 +152,7 @@ export function StoryUpsertionForm(props: {
   const storyPoints = typeof form.storyPoints === "string" ? form.storyPoints : "3";
   const status = form.status === "READY" ? "READY" : "DRAFT";
   const formDisabled = saving || deleting || isHydratingRemote;
+  const editorDisabled = deleting || isHydratingRemote;
   const descriptionUriStateKey = story?.id
     ? `story-description:${story.id}`
     : `story-description:new:${productId}`;
@@ -480,7 +481,7 @@ export function StoryUpsertionForm(props: {
         label="Descripcion"
         value={description}
         onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
-        disabled={formDisabled}
+        disabled={editorDisabled}
         productId={productId}
         onSave={() => submit({ closeAfterSave: false })}
         saveDisabled={formDisabled || !title.trim()}

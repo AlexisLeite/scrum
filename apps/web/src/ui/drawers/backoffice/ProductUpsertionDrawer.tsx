@@ -148,6 +148,7 @@ export function ProductUpsertionForm(props: {
   const key = typeof form.key === "string" ? form.key : "";
   const description = typeof form.description === "string" ? form.description : "";
   const formDisabled = saving || deleting || isHydratingRemote;
+  const editorDisabled = deleting || isHydratingRemote;
   const descriptionUriStateKey = product?.id ? `product-description:${product.id}` : "product-description:new";
   const currentCloseSnapshot = React.useMemo(
     () => normalizeProductCloseSnapshot({
@@ -314,7 +315,7 @@ export function ProductUpsertionForm(props: {
         value={description}
         onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
         rows={4}
-        disabled={formDisabled}
+        disabled={editorDisabled}
         onSave={() => submit({ closeAfterSave: false })}
         saveDisabled={formDisabled}
         uriStateKey={descriptionUriStateKey}
