@@ -42,6 +42,10 @@ type SprintUpsertionDrawerOptions = {
   onDone?: () => Promise<void> | void;
 };
 
+type SprintSubmitOptions = {
+  closeAfterSave?: boolean;
+};
+
 function asDateInput(value: string | null | undefined): string {
   if (!value) return "";
   return value.slice(0, 10);
@@ -221,9 +225,13 @@ export function SprintUpsertionForm(props: {
     }
   };
 
-  const submit = async (event?: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (event?: React.FormEvent<HTMLFormElement>, options: SprintSubmitOptions = {}) => {
     event?.preventDefault();
+    if (saving) {
+      return;
+    }
     setError("");
+    const shouldClose = options.closeAfterSave ?? closeOnSubmit;
     if (!name.trim()) {
       setError("El sprint necesita un nombre.");
       return;
@@ -264,7 +272,7 @@ export function SprintUpsertionForm(props: {
       if (createdSprintId) {
         navigate(productSprintDefinitionPath(productId, createdSprintId));
       }
-      if (closeOnSubmit) {
+      if (shouldClose) {
         close();
       }
     } catch (submitError) {
@@ -387,6 +395,8 @@ export function SprintUpsertionForm(props: {
         value={goal}
         onChange={setGoal}
         rows={4}
+        onSave={() => submit(undefined, { closeAfterSave: false })}
+        saveDisabled={saving}
         uriStateKey={goalUriStateKey}
         collaboration={sprint ? { documentType: "SPRINT_GOAL", entityId: sprint.id } : undefined}
       />

@@ -34,6 +34,10 @@ type StoryUpsertionDrawerOptions = {
   onSavedStory?: (story: EditableStory) => Promise<void> | void;
 };
 
+type StorySubmitOptions = {
+  closeAfterSave?: boolean;
+};
+
 const manualStoryStatuses: Array<"DRAFT" | "READY"> = ["DRAFT", "READY"];
 
 function isManualStoryStatus(status: EditableStory["status"] | null | undefined): status is "DRAFT" | "READY" {
@@ -233,10 +237,11 @@ export function StoryUpsertionForm(props: {
     void loadStoryTasks();
   }, [loadStoryTasks, story]);
 
-  const submit = async () => {
+  const submit = async (options: StorySubmitOptions = {}) => {
     if (formDisabled) {
       return;
     }
+    const shouldClose = options.closeAfterSave ?? closeOnSubmit;
     setError("");
     setSaving(true);
     try {
@@ -262,7 +267,7 @@ export function StoryUpsertionForm(props: {
       if (onDone) {
         await onDone();
       }
-      if (closeOnSubmit) {
+      if (shouldClose) {
         close();
       }
     } catch (submitError) {
@@ -477,6 +482,8 @@ export function StoryUpsertionForm(props: {
         onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
         disabled={formDisabled}
         productId={productId}
+        onSave={() => submit({ closeAfterSave: false })}
+        saveDisabled={formDisabled || !title.trim()}
         uriStateKey={descriptionUriStateKey}
         collaboration={story ? { documentType: "STORY_DESCRIPTION", entityId: story.id } : undefined}
       />
