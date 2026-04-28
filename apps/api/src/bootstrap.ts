@@ -1,4 +1,4 @@
-import { ValidationPipe, type INestApplication } from "@nestjs/common";
+import { HttpException, ValidationPipe, type INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { ExpressAdapter } from "@nestjs/platform-express";
 import cookieParser from "cookie-parser";
@@ -10,6 +10,7 @@ import { AppModule } from "./app.module";
 import { CollaborationService } from "./collaboration/collaboration.service";
 import { resolveMediaRoot } from "./media/media.service";
 import { McpService } from "./mcp/mcp.service";
+import { ReportsService } from "./reports/reports.service";
 
 function normalizeOrigins(rawOrigins: string | undefined): string[] {
   const configuredOrigins = (rawOrigins ?? "https://vmi3181573.contaboserver.net")
@@ -43,6 +44,8 @@ export function ensureDatabaseEnv(): void {
 export async function configureApp(app: INestApplication): Promise<void> {
   const allowedOrigins = resolveAllowedOrigins();
   app.setGlobalPrefix("api/v1");
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "1mb" }));
   app.use(cookieParser());
   app.use("/media", (req: Request, res: Response, next: NextFunction) => {
     const origin = typeof req.headers.origin === "string" ? req.headers.origin : "*";
@@ -65,10 +68,50 @@ export async function configureApp(app: INestApplication): Promise<void> {
     credentials: true
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  const reportsService = app.get(ReportsService);
+  app.use("/api/report", express.json({ limit: "1mb" }), (req: Request, res: Response) => {
+    if (req.method !== "POST") {
+      return res.status(405).json({
+        error: "Report endpoint only accepts POST requests"
+      });
+    }
+
+    void reportsService
+      .createIncident(req.body ?? {}, extractApiKeyFromRequest(req))
+      .then((result) => res.status(201).json(result))
+      .catch((error) => {
+        if (error instanceof HttpException) {
+          const response = error.getResponse();
+          return res.status(error.getStatus()).json(
+            typeof response === "string"
+              ? { error: response }
+              : response
+          );
+        }
+
+        return res.status(500).json({
+          error: error instanceof Error ? error.message : "Invalid report request"
+        });
+      });
+  });
   const mcpService = app.get(McpService);
   app.use("/mcp", (req: Request, res: Response) => {
     void mcpService.handleHttp(req, res);
   });
+}
+
+function extractApiKeyFromRequest(req: Request) {
+  const headerValue = req.header("x-api-key") ?? req.header("X-API-Key");
+  if (headerValue) {
+    return headerValue;
+  }
+
+  const authorization = req.header("authorization");
+  if (authorization?.startsWith("Bearer ")) {
+    return authorization.slice(7);
+  }
+
+  return undefined;
 }
 
 export async function createHttpApp(): Promise<INestApplication> {

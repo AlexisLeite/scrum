@@ -33,20 +33,25 @@ model User {
 }
 
 model ApiKey {
-  id         String    @id @default(cuid())
+  id         String     @id @default(cuid())
   userId     String
   name       String
+  kind       ApiKeyKind @default(MCP_ACCESS)
   prefix     String
-  keyHash    String    @unique
+  keyHash    String     @unique
   lastUsedAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
   productId  String?
-  product    Product?  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId    String?
+  product    Product?   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  story      UserStory? @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([productId, createdAt])
+  @@index([storyId, createdAt])
+  @@index([kind, createdAt])
 }
 
 model Team {
@@ -192,6 +197,7 @@ model UserStory {
   backlogRank Int
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+  apiKeys     ApiKey[]
   tasks       Task[]
   product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
 
@@ -430,6 +436,11 @@ enum Role {
 enum RoleDefinitionScope {
   SYSTEM
   PRODUCT
+}
+
+enum ApiKeyKind {
+  MCP_ACCESS
+  INCIDENT_REPORT
 }
 
 enum StoryStatus {

@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { createHash, randomBytes } from "crypto";
-import { ActivityEntityType } from "@prisma/client";
+import { ActivityEntityType, ApiKeyKind, StoryStatus } from "@prisma/client";
 import { ActivityService } from "../activity/activity.service";
 import { AuthUser } from "../common/current-user.decorator";
 import { PermissionsService } from "../permissions/permissions.service";
@@ -13,6 +13,8 @@ type ApiKeyAuthUser = AuthUser & {
   apiKeyId: string;
   apiKeyName: string;
   apiKeyProductId: string;
+  apiKeyKind: ApiKeyKind;
+  apiKeyStoryId: string | null;
 };
 
 @Injectable()
@@ -30,11 +32,18 @@ export class ApiKeysService {
       select: {
         id: true,
         name: true,
+        kind: true,
         productId: true,
         product: {
           select: {
             name: true,
             key: true
+          }
+        },
+        storyId: true,
+        story: {
+          select: {
+            title: true
           }
         },
         prefix: true,
@@ -47,9 +56,12 @@ export class ApiKeysService {
     return keys.map((key) => ({
       id: key.id,
       name: key.name,
+      kind: key.kind,
       productId: key.productId,
       productName: key.product?.name ?? null,
       productKey: key.product?.key ?? null,
+      storyId: key.storyId,
+      storyTitle: key.story?.title ?? null,
       prefix: key.prefix,
       lastUsedAt: key.lastUsedAt,
       createdAt: key.createdAt,
@@ -61,6 +73,7 @@ export class ApiKeysService {
   async createForUser(user: AuthUser, dto: CreateApiKeyDto) {
     const name = dto.name.trim();
     const productId = dto.productId.trim();
+    const kind = dto.kind ?? ApiKeyKind.MCP_ACCESS;
     if (!name || !productId) {
       throw new BadRequestException("Name and product are required");
     }
@@ -69,11 +82,38 @@ export class ApiKeysService {
       throw new ForbiddenException("You do not have access to that product");
     }
 
-    const rawKey = this.generateApiKey();
+    const storyId = kind === ApiKeyKind.INCIDENT_REPORT ? dto.storyId?.trim() : null;
+    const story = storyId
+      ? await this.prisma.userStory.findUnique({
+          where: { id: storyId },
+          select: {
+            id: true,
+            title: true,
+            productId: true,
+            status: true
+          }
+        })
+      : null;
+
+    if (kind === ApiKeyKind.INCIDENT_REPORT) {
+      if (!storyId) {
+        throw new BadRequestException("Story is required for incident report API keys");
+      }
+      if (!story || story.productId !== productId) {
+        throw new BadRequestException("Story does not belong to the selected product");
+      }
+      if (story.status === StoryStatus.CLOSED) {
+        throw new BadRequestException("Closed stories cannot receive incident reports");
+      }
+    }
+
+    const rawKey = this.generateApiKey(kind);
     const created = await this.prisma.apiKey.create({
       data: {
         userId: user.sub,
         productId,
+        storyId,
+        kind,
         name,
         prefix: rawKey.slice(0, 12),
         keyHash: this.hashKey(rawKey)
@@ -81,11 +121,18 @@ export class ApiKeysService {
       select: {
         id: true,
         name: true,
+        kind: true,
         productId: true,
         product: {
           select: {
             name: true,
             key: true
+          }
+        },
+        storyId: true,
+        story: {
+          select: {
+            title: true
           }
         },
         prefix: true,
@@ -100,18 +147,24 @@ export class ApiKeysService {
       entityType: ActivityEntityType.AUTH,
       entityId: created.id,
       action: "auth.api_key.created",
-        metadataJson: {
-          apiKeyId: created.id,
-          apiKeyName: created.name,
-          productId: created.productId,
-          productKey: created.product?.key ?? null
-        },
+      metadataJson: {
+        apiKeyId: created.id,
+        apiKeyName: created.name,
+        kind: created.kind,
+        productId: created.productId,
+        productKey: created.product?.key ?? null,
+        storyId: created.storyId,
+        storyTitle: created.story?.title ?? null
+      },
       afterJson: {
         id: created.id,
         name: created.name,
+        kind: created.kind,
         prefix: created.prefix,
         productId: created.productId,
-        productKey: created.product?.key ?? null
+        productKey: created.product?.key ?? null,
+        storyId: created.storyId,
+        storyTitle: created.story?.title ?? null
       }
     });
 
@@ -119,9 +172,12 @@ export class ApiKeysService {
       apiKey: {
         id: created.id,
         name: created.name,
+        kind: created.kind,
         productId: created.productId,
         productName: created.product?.name ?? null,
         productKey: created.product?.key ?? null,
+        storyId: created.storyId,
+        storyTitle: created.story?.title ?? null,
         prefix: created.prefix,
         lastUsedAt: created.lastUsedAt,
         createdAt: created.createdAt,
@@ -139,10 +195,17 @@ export class ApiKeysService {
         id: true,
         userId: true,
         name: true,
+        kind: true,
         productId: true,
         product: {
           select: {
             key: true
+          }
+        },
+        storyId: true,
+        story: {
+          select: {
+            title: true
           }
         },
         prefix: true
@@ -158,25 +221,31 @@ export class ApiKeysService {
       entityType: ActivityEntityType.AUTH,
       entityId: apiKey.id,
       action: "auth.api_key.deleted",
-        metadataJson: {
-          apiKeyId: apiKey.id,
-          apiKeyName: apiKey.name,
-          productId: apiKey.productId,
-          productKey: apiKey.product?.key ?? null
-        },
+      metadataJson: {
+        apiKeyId: apiKey.id,
+        apiKeyName: apiKey.name,
+        kind: apiKey.kind,
+        productId: apiKey.productId,
+        productKey: apiKey.product?.key ?? null,
+        storyId: apiKey.storyId,
+        storyTitle: apiKey.story?.title ?? null
+      },
       beforeJson: {
         id: apiKey.id,
         name: apiKey.name,
+        kind: apiKey.kind,
         prefix: apiKey.prefix,
         productId: apiKey.productId,
-        productKey: apiKey.product?.key ?? null
+        productKey: apiKey.product?.key ?? null,
+        storyId: apiKey.storyId,
+        storyTitle: apiKey.story?.title ?? null
       }
     });
 
     return { ok: true };
   }
 
-  async authenticate(rawKey: string | undefined): Promise<ApiKeyAuthUser> {
+  async authenticate(rawKey: string | undefined, expectedKind: ApiKeyKind = ApiKeyKind.MCP_ACCESS): Promise<ApiKeyAuthUser> {
     const normalized = rawKey?.trim();
     if (!normalized) {
       throw new UnauthorizedException("Missing API key");
@@ -208,8 +277,14 @@ export class ApiKeysService {
     if (!apiKey) {
       throw new UnauthorizedException("Invalid API key");
     }
+    if (apiKey.kind !== expectedKind) {
+      throw new UnauthorizedException("API key is not authorized for this endpoint");
+    }
     if (!apiKey.productId || !apiKey.product) {
       throw new UnauthorizedException("Legacy API key must be recreated with a product assignment");
+    }
+    if (apiKey.kind === ApiKeyKind.INCIDENT_REPORT && !apiKey.storyId) {
+      throw new UnauthorizedException("Incident report API key must be recreated with a story assignment");
     }
 
     await this.prisma.apiKey.update({
@@ -236,7 +311,9 @@ export class ApiKeysService {
       avatarUrl: apiKey.user.avatarUrl,
       apiKeyId: apiKey.id,
       apiKeyName: apiKey.name,
-      apiKeyProductId: apiKey.productId
+      apiKeyProductId: apiKey.productId,
+      apiKeyKind: apiKey.kind,
+      apiKeyStoryId: apiKey.storyId
     };
   }
 
@@ -261,8 +338,9 @@ export class ApiKeysService {
     };
   }
 
-  private generateApiKey() {
-    return `mcp_${randomBytes(24).toString("hex")}`;
+  private generateApiKey(kind: ApiKeyKind) {
+    const prefix = kind === ApiKeyKind.INCIDENT_REPORT ? "rpt" : "mcp";
+    return `${prefix}_${randomBytes(24).toString("hex")}`;
   }
 
   private hashKey(rawKey: string) {

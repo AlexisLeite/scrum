@@ -514,12 +514,17 @@ export interface UserProfileDto {
   focusedProductIds: string[];
 }
 
+export type ApiKeyKind = "MCP_ACCESS" | "INCIDENT_REPORT";
+
 export interface ApiKeyDto {
   id: string;
   name: string;
+  kind: ApiKeyKind;
   productId: string | null;
   productName: string | null;
   productKey: string | null;
+  storyId: string | null;
+  storyTitle: string | null;
   prefix: string;
   maskedCode: string;
   lastUsedAt: string | null;

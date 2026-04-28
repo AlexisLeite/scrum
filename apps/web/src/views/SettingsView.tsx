@@ -1,6 +1,6 @@
 import React from "react";
 import { observer } from "mobx-react-lite";
-import { ApiKeyDto, ProductDto } from "@scrum/contracts";
+import { ApiKeyDto, ApiKeyKind, ProductDto, StoryDto } from "@scrum/contracts";
 import { apiClient } from "../api/client";
 import { AuthController, ProductController } from "../controllers";
 import { getUserInitials } from "../lib/permissions";
@@ -22,6 +22,19 @@ type ActivityStats = {
 const statsWindows = ["week", "month", "semester", "year"] as const;
 type StatsWindow = typeof statsWindows[number];
 type ApiKeysSortOrder = "newest" | "oldest";
+const apiKeyKindOptions: ApiKeyKind[] = ["MCP_ACCESS", "INCIDENT_REPORT"];
+const apiKeyKindLabels: Record<ApiKeyKind, string> = {
+  MCP_ACCESS: "Acceso MCP",
+  INCIDENT_REPORT: "Reporte de incidentes"
+};
+const apiKeyKindDescriptions: Record<ApiKeyKind, string> = {
+  MCP_ACCESS: "Usa permisos y producto como las integraciones MCP actuales.",
+  INCIDENT_REPORT: "Publica reportes markdown en una historia del sprint activo."
+};
+
+function getApiKeyKindClass(kind: ApiKeyKind) {
+  return kind.toLowerCase().replace(/_/g, "-");
+}
 
 export const SettingsView = observer(function SettingsView() {
   const store = useRootStore();
@@ -37,10 +50,15 @@ export const SettingsView = observer(function SettingsView() {
   const [apiKeysLoading, setApiKeysLoading] = React.useState(true);
   const [apiKeysError, setApiKeysError] = React.useState("");
   const [newApiKeyName, setNewApiKeyName] = React.useState("");
+  const [newApiKeyKind, setNewApiKeyKind] = React.useState<ApiKeyKind>("MCP_ACCESS");
   const [newApiKeyProductId, setNewApiKeyProductId] = React.useState("");
+  const [newApiKeyStoryId, setNewApiKeyStoryId] = React.useState("");
   const [newApiKeyCode, setNewApiKeyCode] = React.useState("");
+  const [newApiKeyCodeKind, setNewApiKeyCodeKind] = React.useState<ApiKeyKind>("MCP_ACCESS");
   const [apiKeysBusy, setApiKeysBusy] = React.useState(false);
   const [availableProducts, setAvailableProducts] = React.useState<ProductDto[]>([]);
+  const [availableApiKeyStories, setAvailableApiKeyStories] = React.useState<StoryDto[]>([]);
+  const [apiKeyStoriesLoading, setApiKeyStoriesLoading] = React.useState(false);
   const [apiKeysSortOrder, setApiKeysSortOrder] = React.useState<ApiKeysSortOrder>("newest");
 
   React.useEffect(() => {
@@ -108,6 +126,46 @@ export const SettingsView = observer(function SettingsView() {
   }, [productController, user]);
 
   React.useEffect(() => {
+    if (!user || newApiKeyKind !== "INCIDENT_REPORT" || !newApiKeyProductId) {
+      setAvailableApiKeyStories([]);
+      setNewApiKeyStoryId("");
+      setApiKeyStoriesLoading(false);
+      return;
+    }
+
+    let active = true;
+    setApiKeyStoriesLoading(true);
+    void productController.loadStories(newApiKeyProductId, { syncStore: false })
+      .then((stories) => {
+        if (!active) {
+          return;
+        }
+        const selectableStories = (stories as StoryDto[]).filter((story) => story.status !== "CLOSED");
+        setAvailableApiKeyStories(selectableStories);
+        setNewApiKeyStoryId((current) =>
+          selectableStories.some((story) => story.id === current) ? current : selectableStories[0]?.id ?? ""
+        );
+      })
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
+        setAvailableApiKeyStories([]);
+        setNewApiKeyStoryId("");
+        setApiKeysError(error instanceof Error ? error.message : "No se pudieron cargar las historias del producto.");
+      })
+      .finally(() => {
+        if (active) {
+          setApiKeyStoriesLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [newApiKeyKind, newApiKeyProductId, productController, user]);
+
+  React.useEffect(() => {
     if (!user) {
       return;
     }
@@ -146,6 +204,17 @@ export const SettingsView = observer(function SettingsView() {
     label: `${product.name} (${product.key})`,
     searchText: `${product.name} ${product.key}`
   }));
+  const apiKeyRequiresStory = newApiKeyKind === "INCIDENT_REPORT";
+  const apiKeyStoryOptions = availableApiKeyStories.map((story) => ({
+    value: story.id,
+    label: `${story.title} (${story.status})`,
+    searchText: `${story.title} ${story.status}`
+  }));
+  const canCreateApiKey =
+    !apiKeysBusy &&
+    newApiKeyName.trim().length >= 2 &&
+    Boolean(newApiKeyProductId) &&
+    (!apiKeyRequiresStory || (!apiKeyStoriesLoading && Boolean(newApiKeyStoryId)));
   const sortedApiKeys = [...apiKeys].sort((left, right) => {
     const leftTime = new Date(left.createdAt).getTime();
     const rightTime = new Date(right.createdAt).getTime();
@@ -216,20 +285,20 @@ export const SettingsView = observer(function SettingsView() {
         <div className="section-head api-keys-section-head">
           <div className="api-keys-section-copy">
             <h3>API keys</h3>
-            <p className="muted">Cada key se asigna a un producto accesible y usa tu rol vigente sobre ese producto al autenticar el MCP por `x-api-key`.</p>
+            <p className="muted">Cada key se asigna a un producto accesible y queda limitada a su tipo de integración.</p>
           </div>
         </div>
         <div className="api-keys-layout">
           <div className="api-keys-create-shell">
             <div className="api-keys-create-head">
               <div className="api-keys-create-copy">
-                <span className="workspace-context">Crear acceso MCP</span>
+                <span className="workspace-context">Crear credencial</span>
                 <h4>Nueva API key</h4>
                 <p className="muted">
-                  Define un nombre reconocible, elegi el producto correcto y genera una credencial lista para usar en tus integraciones MCP.
+                  Define un nombre reconocible, elegi el alcance correcto y genera una credencial para MCP o reportes externos.
                 </p>
               </div>
-              <div className="api-keys-create-stats"><div style={{ border: 'none' }} />
+              <div className="api-keys-create-stats">
                 <div>
                   <span className="muted">Productos accesibles</span>
                   <strong>{availableProducts.length} disponibles</strong>
@@ -246,6 +315,24 @@ export const SettingsView = observer(function SettingsView() {
                     placeholder="Ej. Claude Desktop"
                   />
                 </label>
+                <div className="api-key-kind-field">
+                  <span>Tipo</span>
+                  <div className="api-key-kind-toggle" role="group" aria-label="Tipo de API key">
+                    {apiKeyKindOptions.map((kind) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        className={`btn btn-ghost ${newApiKeyKind === kind ? "is-active" : ""}`.trim()}
+                        aria-pressed={newApiKeyKind === kind}
+                        disabled={apiKeysBusy}
+                        onClick={() => setNewApiKeyKind(kind)}
+                      >
+                        {apiKeyKindLabels[kind]}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="muted">{apiKeyKindDescriptions[newApiKeyKind]}</span>
+                </div>
                 <label>
                   Producto
                   <SearchableSelect
@@ -259,21 +346,39 @@ export const SettingsView = observer(function SettingsView() {
                     disabled={apiKeysBusy || availableProducts.length === 0}
                   />
                 </label>
+                {apiKeyRequiresStory ? (
+                  <label>
+                    Historia
+                    <SearchableSelect
+                      value={newApiKeyStoryId}
+                      onChange={setNewApiKeyStoryId}
+                      options={apiKeyStoryOptions}
+                      placeholder={apiKeyStoriesLoading ? "Cargando historias" : "Seleccionar historia"}
+                      searchPlaceholder="Buscar historia..."
+                      emptyMessage="No hay historias disponibles."
+                      ariaLabel="Seleccionar historia para reportes de incidentes"
+                      disabled={apiKeysBusy || apiKeyStoriesLoading || apiKeyStoryOptions.length === 0}
+                    />
+                  </label>
+                ) : null}
               </div>
               <div className="api-keys-form-footer">
                 <p className="muted">La key se muestra una sola vez y despues queda listada abajo para administrarla.</p>
                 <button
                   className="btn btn-primary"
-                  disabled={apiKeysBusy || newApiKeyName.trim().length < 2 || !newApiKeyProductId}
+                  disabled={!canCreateApiKey}
                   onClick={() => void (async () => {
                     setApiKeysBusy(true);
                     try {
                       const created = await auth.createApiKey({
                         name: newApiKeyName.trim(),
-                        productId: newApiKeyProductId
+                        productId: newApiKeyProductId,
+                        kind: newApiKeyKind,
+                        storyId: apiKeyRequiresStory ? newApiKeyStoryId : undefined
                       });
                       setApiKeys((current) => [created.apiKey, ...current]);
                       setNewApiKeyCode(created.code);
+                      setNewApiKeyCodeKind(created.apiKey.kind);
                       setNewApiKeyName("");
                       setNewApiKeyProductId((current) => current || availableProducts[0]?.id || "");
                       setApiKeysError("");
@@ -297,7 +402,11 @@ export const SettingsView = observer(function SettingsView() {
                 <h4>Guardalo ahora</h4>
               </div>
               <code className="api-key-generated-code">{newApiKeyCode}</code>
-              <p className="muted">Se muestra una sola vez. Usalo como header `x-api-key` al conectar el MCP.</p>
+              <p className="muted">
+                Se muestra una sola vez. Usalo como header `x-api-key` al {
+                  newApiKeyCodeKind === "INCIDENT_REPORT" ? "enviar POST /api/report." : "conectar el MCP."
+                }
+              </p>
             </div>
           ) : null}
 
@@ -346,7 +455,8 @@ export const SettingsView = observer(function SettingsView() {
                   <thead>
                     <tr>
                       <th>Key</th>
-                      <th>Producto</th>
+                      <th>Tipo</th>
+                      <th>Alcance</th>
                       <th>Creada</th>
                       <th>Ultimo uso</th>
                       <th>Estado</th>
@@ -362,11 +472,19 @@ export const SettingsView = observer(function SettingsView() {
                             <code>{apiKey.maskedCode}</code>
                           </div>
                         </td>
+                        <td className="api-key-kind-cell">
+                          <span className={`pill api-key-kind-pill is-${getApiKeyKindClass(apiKey.kind)}`.trim()}>
+                            {apiKeyKindLabels[apiKey.kind]}
+                          </span>
+                        </td>
                         <td className="api-key-product-cell">
                           {apiKey.productKey && apiKey.productName ? (
                             <div className="api-key-product">
                               <span className="pill api-key-pill">{apiKey.productKey}</span>
                               <span>{apiKey.productName}</span>
+                              {apiKey.kind === "INCIDENT_REPORT" ? (
+                                <span className="api-key-story">{apiKey.storyTitle ?? "Sin historia asignada"}</span>
+                              ) : null}
                             </div>
                           ) : (
                             <span className="muted">Sin producto asignado</span>

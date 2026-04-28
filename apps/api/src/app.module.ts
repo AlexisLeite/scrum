@@ -14,6 +14,7 @@ import { PermissionsModule } from "./permissions/permissions.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductsModule } from "./products/products.module";
 import { ReferencesModule } from "./references/references.module";
+import { ReportsModule } from "./reports/reports.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { SprintsModule } from "./sprints/sprints.module";
 import { StoriesModule } from "./stories/stories.module";
@@ -39,6 +40,7 @@ import { TeamsModule } from "./teams/teams.module";
     TeamsModule,
     ProductsModule,
     ReferencesModule,
+    ReportsModule,
     SchedulerModule,
     StoriesModule,
     TasksModule,
