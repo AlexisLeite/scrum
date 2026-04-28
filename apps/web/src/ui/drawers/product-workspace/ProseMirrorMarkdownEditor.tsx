@@ -567,7 +567,9 @@ function buildPlugins(args: {
       "Shift-Ctrl-3": setBlockType(markdownSchema.nodes.heading, { level: 3 }),
       "Ctrl->": wrapIn(markdownSchema.nodes.blockquote),
       "Mod-[": lift,
-      "Mod-Enter": createParagraphNear
+      "Mod-Enter": createParagraphNear,
+      "Ctrl-Enter": insertHardBreak,
+      "Shift-Enter": insertHardBreak
     }),
     prosemirrorKeymap(baseKeymap),
     taskListNormalizationPlugin(),
@@ -655,6 +657,10 @@ function insertTableCellLineBreak(state: EditorState, dispatch?: EditorView["dis
   if (!isInTable(state)) {
     return false;
   }
+  return insertHardBreak(state, dispatch);
+}
+
+function insertHardBreak(state: EditorState, dispatch?: EditorView["dispatch"]) {
   if (dispatch) {
     dispatch(state.tr.replaceSelectionWith(markdownSchema.nodes.hard_break.create()).scrollIntoView());
   }
