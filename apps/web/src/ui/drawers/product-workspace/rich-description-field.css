@@ -438,6 +438,10 @@
 
 .rich-description-content.ProseMirror .prosemirror-list-item-content {
   min-width: 0;
+
+  p {
+    margin: 0;
+  }
 }
 
 .rich-description-content.ProseMirror .prosemirror-task-list-item {
@@ -446,6 +450,10 @@
   gap: 0.5rem;
   list-style: none;
   margin: 0.18rem 0;
+
+  p {
+    margin: 0;
+  }
 }
 
 .rich-description-content.ProseMirror .prosemirror-task-list-checkbox {

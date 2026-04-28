@@ -22,9 +22,16 @@ Use this remote stream first when checking TypeScript/watch status, before runni
 
 # Dump of postgres database
 
-ssh ...@95.111.237.196 'PGPASSWORD="..." pg_dump -h 127.0.0.1 -p 5433 -U postgres -d gym_management' > dump.sq
-l
+ssh ...@95.111.237.196 'PGPASSWORD="..." pg_dump -h 127.0.0.1 -p 5433 -U postgres -d gym_management' > dump.sql
 
 # Open ssh port on remote postgres
 
 ssh -L 6543:127.0.0.1:5433 usuario@95.111.237.196
+
+# Listar procesos que consumen mucho
+
+ps -eo pid,comm,%cpu,%mem --sort=-%mem
+
+# Matar lista de procesos
+
+kill pid1 pid2 pid3
