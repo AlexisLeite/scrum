@@ -35,3 +35,13 @@ ps -eo pid,comm,%cpu,%mem --sort=-%mem
 # Matar lista de procesos
 
 kill pid1 pid2 pid3
+
+# Desconectar todas las sesiones ssh
+
+## De cualquier usuario
+
+pkill -KILL -f 'sshd: .*@'
+
+## De un usuario
+
+pkill -KILL -f 'sshd: user@'
