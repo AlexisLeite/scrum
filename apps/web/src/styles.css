@@ -3550,6 +3550,14 @@ html .drawer-content .card {
   object-fit: contain;
 }
 
+.markdown-preview-image-button.is-cropped {
+  overflow: hidden;
+}
+
+.markdown-preview-image-button.is-cropped img {
+  max-height: none;
+}
+
 .reference-entity-card {
   display: grid;
   gap: 16px;

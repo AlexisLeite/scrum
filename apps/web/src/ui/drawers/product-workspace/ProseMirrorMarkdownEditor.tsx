@@ -82,6 +82,7 @@ export type ProseMirrorMarkdownEditorHandle = {
   setMarkdown: (markdown: string) => void;
   insertMarkdown: (markdown: string) => void;
   replaceSelectionWithMarkdown: (markdown: string) => boolean;
+  placeSelectionAfterImage: (imageUrl: string) => boolean;
   getSelectionMarkdown: () => string;
   getSelectionPlainText: () => string;
   getContentElement: () => HTMLElement | null;
@@ -93,6 +94,7 @@ type ProseMirrorMarkdownEditorProps = {
   className?: string;
   contentEditableClassName?: string;
   readOnly?: boolean;
+  onImageCrop?: (payload: { blob: Blob; filename: string; source: string }) => Promise<string>;
   collaboration?: RichDescriptionCollaboration;
   collaborationDisabled?: boolean;
   user?: { id?: string; name?: string; email?: string } | null;
@@ -109,6 +111,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       className = "",
       contentEditableClassName = "",
       readOnly = false,
+      onImageCrop,
       collaboration,
       collaborationDisabled = false,
       user,
@@ -121,6 +124,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     const activeToolbarItemRef = React.useRef<HTMLElement | null>(null);
     const viewRef = React.useRef<EditorView | null>(null);
     const readOnlyRef = React.useRef(readOnly);
+    const onImageCropRef = React.useRef(onImageCrop);
     const allowReadOnlyTaskCheckboxToggleRef = React.useRef(allowReadOnlyTaskCheckboxToggle);
     const onTaskCheckboxToggleRef = React.useRef(onTaskCheckboxToggle);
     const onChangeRef = React.useRef(onChange);
@@ -135,6 +139,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     const collaborationName = collaboration?.entityId && !collaborationDisabled ? buildDocumentName(collaboration) : "";
 
     readOnlyRef.current = readOnly;
+    onImageCropRef.current = onImageCrop;
     allowReadOnlyTaskCheckboxToggleRef.current = allowReadOnlyTaskCheckboxToggle;
     onTaskCheckboxToggleRef.current = onTaskCheckboxToggle;
     onChangeRef.current = onChange;
@@ -216,6 +221,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
             () => onTaskCheckboxToggleRef.current
           ),
           code_block: (node, view, getPos) => new CodeBlockNodeView(node, view, getPos),
+          image: (node, view, getPos) => new ImageNodeView(node, view, getPos, () => readOnlyRef.current, () => onImageCropRef.current),
           table: (node, view, getPos) => new TableNodeView(node, view, getPos, () => readOnlyRef.current)
         },
         dispatchTransaction(this: EditorView, transaction) {
@@ -379,6 +385,13 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       },
       replaceSelectionWithMarkdown(markdown: string) {
         return insertMarkdownAtSelection(markdown);
+      },
+      placeSelectionAfterImage(imageUrl: string) {
+        const view = viewRef.current;
+        if (!view) {
+          return false;
+        }
+        return placeSelectionAfterImage(view, imageUrl);
       },
       getSelectionMarkdown() {
         const view = viewRef.current;
@@ -818,6 +831,34 @@ function moveSelectionOutsideNode(
   return transaction.scrollIntoView();
 }
 
+function placeSelectionAfterImage(view: EditorView, imageUrl: string) {
+  let imageEndPosition: number | null = null;
+  view.state.doc.descendants((node, position) => {
+    if (node.type !== markdownSchema.nodes.image || node.attrs.src !== imageUrl) {
+      return true;
+    }
+
+    imageEndPosition = position + node.nodeSize;
+    return false;
+  });
+
+  if (imageEndPosition === null) {
+    return false;
+  }
+
+  try {
+    view.dispatch(
+      view.state.tr
+        .setSelection(TextSelection.create(view.state.doc, imageEndPosition))
+        .scrollIntoView()
+    );
+    view.focus();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function ToolbarNumberInput(props: {
   label: string;
   value: number;
@@ -962,6 +1003,629 @@ function clampInteger(value: number, min: number, max: number) {
     return min;
   }
   return Math.max(min, Math.min(max, Math.trunc(value)));
+}
+
+const IMAGE_MIN_WIDTH = 96;
+const IMAGE_MAX_WIDTH = 1200;
+const IMAGE_MIN_HEIGHT = 72;
+const IMAGE_MAX_HEIGHT = 900;
+
+type ImageNodeAttrs = {
+  src: string;
+  alt: string | null;
+  title: string | null;
+  width: number | null;
+  height: number | null;
+  crop: boolean;
+  cropX: number;
+  cropY: number;
+  cropTop: number;
+  cropRight: number;
+  cropBottom: number;
+  cropLeft: number;
+};
+
+type ImageCropInsets = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
+class ImageNodeView implements NodeView {
+  dom: HTMLElement;
+  private frame: HTMLElement;
+  private image: HTMLImageElement;
+  private toolbar: HTMLElement;
+  private cropBox: HTMLElement;
+  private resizeHandles: HTMLElement[] = [];
+  private cropHandles: HTMLElement[] = [];
+  private cropToggleButton: HTMLButtonElement;
+  private cleanupDrag: (() => void) | null = null;
+  private hideToolbarTimer: number | null = null;
+  private cropEditing = false;
+  private cropApplying = false;
+  private cropSessionWidth: number | null = null;
+  private cropSessionHeight: number | null = null;
+  private cropDraft: ImageCropInsets = createEmptyCropInsets();
+
+  constructor(
+    private node: ProseMirrorNode,
+    private view: EditorView,
+    private getPos: (() => number | undefined) | boolean,
+    private isReadOnly: () => boolean,
+    private resolveImageCropUploader: () => ProseMirrorMarkdownEditorProps["onImageCrop"] | undefined
+  ) {
+    this.dom = document.createElement("span");
+    this.dom.className = "prosemirror-image-node";
+    this.dom.contentEditable = "false";
+    this.dom.addEventListener("mouseenter", this.showToolbar);
+    this.dom.addEventListener("mouseleave", this.scheduleHideToolbar);
+
+    this.frame = document.createElement("span");
+    this.frame.className = "prosemirror-image-frame";
+
+    this.image = document.createElement("img");
+    this.image.draggable = false;
+    this.image.addEventListener("click", this.stopImageClickWhenCropped);
+
+    this.resizeHandles = [
+      this.createHandle("resize", "e", "Redimensionar ancho de imagen"),
+      this.createHandle("resize", "se", "Redimensionar imagen")
+    ];
+    this.cropBox = document.createElement("span");
+    this.cropBox.className = "prosemirror-image-crop-box";
+    this.cropHandles = ["n", "e", "s", "w", "ne", "nw", "se", "sw"].map((direction) =>
+      this.createHandle("crop", direction, "Ajustar recorte de imagen")
+    );
+    this.cropBox.append(...this.cropHandles);
+
+    this.toolbar = document.createElement("span");
+    this.toolbar.className = "prosemirror-image-toolbar";
+    this.toolbar.setAttribute("aria-label", "Controles de imagen");
+    this.toolbar.addEventListener("mouseenter", this.showToolbar);
+    this.toolbar.addEventListener("mouseleave", this.scheduleHideToolbar);
+
+    this.cropToggleButton = this.createButton("Crop", "Activar recorte", () => this.toggleCrop());
+
+    this.toolbar.append(this.cropToggleButton);
+    this.frame.append(this.image, this.cropBox, ...this.resizeHandles);
+    this.dom.append(this.frame, this.toolbar);
+    this.render();
+  }
+
+  update(node: ProseMirrorNode) {
+    if (node.type !== this.node.type) {
+      return false;
+    }
+    this.node = node;
+    this.render();
+    return true;
+  }
+
+  stopEvent(event: Event) {
+    return event.target instanceof Node && this.dom.contains(event.target);
+  }
+
+  ignoreMutation(record: ViewMutationRecord) {
+    return this.dom.contains(record.target);
+  }
+
+  destroy() {
+    this.cleanupDrag?.();
+    this.clearToolbarTimer();
+    this.dom.removeEventListener("mouseenter", this.showToolbar);
+    this.dom.removeEventListener("mouseleave", this.scheduleHideToolbar);
+    this.toolbar.removeEventListener("mouseenter", this.showToolbar);
+    this.toolbar.removeEventListener("mouseleave", this.scheduleHideToolbar);
+    this.image.removeEventListener("click", this.stopImageClickWhenCropped);
+  }
+
+  private render() {
+    const attrs = normalizeImageNodeAttrs(this.node.attrs);
+    this.dom.classList.toggle("is-cropped", attrs.crop);
+    this.dom.classList.toggle("is-crop-editing", this.cropEditing);
+    this.dom.classList.toggle("is-crop-applying", this.cropApplying);
+    this.dom.classList.toggle("is-read-only", this.isReadOnly());
+    this.image.src = attrs.src;
+    this.image.alt = attrs.alt ?? "Imagen de markdown";
+    this.image.title = attrs.title ?? "";
+
+    const cropBoxInsets = this.cropEditing ? this.cropDraft : imageAttrsToCropInsets(attrs);
+    const sessionWidth = this.cropSessionWidth ?? attrs.width;
+    const sessionHeight = this.cropSessionHeight ?? attrs.height;
+    this.frame.style.width = this.cropEditing
+      ? sessionWidth === null ? "" : `${sessionWidth}px`
+      : attrs.width === null ? "" : `${attrs.width}px`;
+    this.frame.style.height = this.cropEditing
+      ? sessionHeight === null ? "" : `${sessionHeight}px`
+      : attrs.crop && attrs.height !== null ? `${attrs.height}px` : "";
+    this.cropBox.style.top = `${cropBoxInsets.top}%`;
+    this.cropBox.style.right = `${cropBoxInsets.right}%`;
+    this.cropBox.style.bottom = `${cropBoxInsets.bottom}%`;
+    this.cropBox.style.left = `${cropBoxInsets.left}%`;
+
+    if (this.cropEditing && attrs.crop && attrs.height !== null) {
+      applyCroppedImageStyle(this.image, attrs);
+    } else if (this.cropEditing) {
+      this.image.style.width = "100%";
+      this.image.style.height = "100%";
+      this.image.style.objectFit = "fill";
+      this.image.style.objectPosition = "";
+      this.image.style.transform = "";
+    } else if (attrs.crop && attrs.height !== null) {
+      applyCroppedImageStyle(this.image, attrs);
+    } else if (attrs.width !== null) {
+      this.image.style.width = "100%";
+      this.image.style.height = "auto";
+      this.image.style.objectFit = "contain";
+      this.image.style.objectPosition = "";
+      this.image.style.transform = "";
+    } else {
+      this.image.style.width = "";
+      this.image.style.height = "";
+      this.image.style.objectFit = "";
+      this.image.style.objectPosition = "";
+      this.image.style.transform = "";
+    }
+
+    this.cropToggleButton.textContent = this.cropEditing ? "Done" : "Crop";
+    this.cropToggleButton.title = this.cropEditing ? "Finalizar recorte" : "Activar recorte";
+    this.cropToggleButton.setAttribute("aria-label", this.cropToggleButton.title);
+    const readOnly = this.isReadOnly();
+    [...this.resizeHandles, ...this.cropHandles].forEach((handle) => {
+      handle.setAttribute("aria-disabled", readOnly || this.cropApplying ? "true" : "false");
+    });
+    this.dom.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
+      button.disabled = readOnly || this.cropApplying;
+    });
+  }
+
+  private createButton(text: string, label: string, action: () => void) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "prosemirror-image-control-button";
+    button.textContent = text;
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!this.isReadOnly()) {
+        action();
+      }
+    });
+    return button;
+  }
+
+  private showToolbar = () => {
+    this.clearToolbarTimer();
+    this.dom.classList.add("is-toolbar-visible");
+  };
+
+  private scheduleHideToolbar = () => {
+    this.clearToolbarTimer();
+    this.hideToolbarTimer = window.setTimeout(() => {
+      this.dom.classList.remove("is-toolbar-visible");
+      this.hideToolbarTimer = null;
+    }, 220);
+  };
+
+  private clearToolbarTimer() {
+    if (this.hideToolbarTimer === null) {
+      return;
+    }
+    window.clearTimeout(this.hideToolbarTimer);
+    this.hideToolbarTimer = null;
+  }
+
+  private createHandle(kind: "resize" | "crop", direction: string, label: string) {
+    const handle = document.createElement("span");
+    handle.className = `prosemirror-image-handle prosemirror-image-${kind}-handle is-${direction}`;
+    handle.setAttribute("role", "button");
+    handle.setAttribute("aria-label", label);
+    handle.title = label;
+    handle.dataset.direction = direction;
+    handle.addEventListener("pointerdown", (event) => {
+      if (kind === "resize") {
+        this.startResize(event, direction);
+        return;
+      }
+      this.startCropResize(event, direction);
+    });
+    return handle;
+  }
+
+  private async toggleCrop() {
+    const attrs = normalizeImageNodeAttrs(this.node.attrs);
+    if (this.cropEditing) {
+      await this.applyCrop();
+      return;
+    }
+
+    const rect = this.frame.getBoundingClientRect();
+    const width = attrs.width ?? Math.round(rect.width || this.image.naturalWidth || 320);
+    const height = attrs.height ?? Math.round(rect.height || this.image.naturalHeight || defaultCropHeight(width));
+    this.cropEditing = true;
+    this.cropDraft = createEmptyCropInsets();
+    this.cropSessionWidth = clampInteger(width, IMAGE_MIN_WIDTH, IMAGE_MAX_WIDTH);
+    this.cropSessionHeight = clampInteger(height, IMAGE_MIN_HEIGHT, IMAGE_MAX_HEIGHT);
+    this.render();
+  }
+
+  private async applyCrop() {
+    const attrs = normalizeImageNodeAttrs(this.node.attrs);
+    const draft = this.cropDraft;
+    if (!hasCropInsets(draft) && !attrs.crop) {
+      this.finishCropSession();
+      return;
+    }
+
+    const currentWidth = this.cropSessionWidth ?? attrs.width ?? Math.round(this.frame.getBoundingClientRect().width || this.image.naturalWidth || 320);
+    const displayWidth = clampInteger(currentWidth * cropWidthRatio(draft), IMAGE_MIN_WIDTH, IMAGE_MAX_WIDTH);
+    const sourceCrop = composeCropInsets(imageAttrsToCropInsets(attrs), draft);
+
+    this.cropApplying = true;
+    this.render();
+
+    try {
+      const croppedImage = await materializeCroppedImage(attrs.src, sourceCrop, buildCroppedImageFilename(attrs));
+      let nextSrc = croppedImage.dataUrl;
+      const uploadCroppedImage = this.resolveImageCropUploader();
+      if (uploadCroppedImage) {
+        try {
+          nextSrc = await uploadCroppedImage({
+            blob: croppedImage.blob,
+            filename: croppedImage.filename,
+            source: attrs.src
+          });
+        } catch {
+          nextSrc = croppedImage.dataUrl;
+        }
+      }
+
+      this.finishCropSession();
+      this.setImageAttrs({
+        src: nextSrc,
+        width: displayWidth,
+        height: null,
+        crop: false,
+        cropX: 50,
+        cropY: 50,
+        cropTop: 0,
+        cropRight: 0,
+        cropBottom: 0,
+        cropLeft: 0
+      });
+    } catch (error) {
+      console.warn("No se pudo materializar el recorte de imagen.", error);
+      this.cropApplying = false;
+      this.render();
+    }
+  }
+
+  private startResize(event: PointerEvent, direction: string) {
+    if (this.isReadOnly() || this.cropApplying || event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.cleanupDrag?.();
+
+    const attrs = normalizeImageNodeAttrs(this.node.attrs);
+    const rect = this.frame.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startWidth = attrs.width ?? Math.round(rect.width || this.image.naturalWidth || 320);
+    const startHeight = attrs.height ?? Math.round(rect.height || defaultCropHeight(startWidth));
+    const croppedAspect = attrs.crop ? startHeight / Math.max(startWidth, 1) : null;
+    let nextWidth = startWidth;
+    let nextHeight = startHeight;
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+      const delta = direction === "se" ? Math.max(deltaX, deltaY) : deltaX;
+      nextWidth = clampInteger(startWidth + delta, IMAGE_MIN_WIDTH, IMAGE_MAX_WIDTH);
+      this.frame.style.width = `${nextWidth}px`;
+      if (croppedAspect !== null) {
+        nextHeight = clampInteger(nextWidth * croppedAspect, IMAGE_MIN_HEIGHT, IMAGE_MAX_HEIGHT);
+        this.frame.style.height = `${nextHeight}px`;
+      }
+    };
+
+    const handleUp = () => {
+      this.cleanupDrag?.();
+      this.cleanupDrag = null;
+      this.setImageAttrs(croppedAspect === null ? { width: nextWidth } : { width: nextWidth, height: nextHeight });
+    };
+
+    document.addEventListener("pointermove", handleMove);
+    document.addEventListener("pointerup", handleUp, { once: true });
+    this.cleanupDrag = () => {
+      document.removeEventListener("pointermove", handleMove);
+      document.removeEventListener("pointerup", handleUp);
+    };
+  }
+
+  private startCropResize(event: PointerEvent, direction: string) {
+    if (this.isReadOnly() || this.cropApplying || !this.cropEditing || event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.cleanupDrag?.();
+
+    const rect = this.frame.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startWidth = this.cropSessionWidth ?? Math.round(rect.width || this.image.naturalWidth || 320);
+    const startHeight = this.cropSessionHeight ?? Math.round(rect.height || defaultCropHeight(startWidth));
+    const startDraft = this.cropDraft;
+    let nextCropTop = startDraft.top;
+    let nextCropRight = startDraft.right;
+    let nextCropBottom = startDraft.bottom;
+    let nextCropLeft = startDraft.left;
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
+      const deltaX = ((moveEvent.clientX - startX) / Math.max(startWidth, 1)) * 100;
+      const deltaY = ((moveEvent.clientY - startY) / Math.max(startHeight, 1)) * 100;
+      if (direction.includes("e")) {
+        nextCropRight = clampCropInset(startDraft.right - deltaX, startDraft.left);
+      } else if (direction.includes("w")) {
+        nextCropLeft = clampCropInset(startDraft.left + deltaX, startDraft.right);
+      }
+      if (direction.includes("s")) {
+        nextCropBottom = clampCropInset(startDraft.bottom - deltaY, startDraft.top);
+      } else if (direction.includes("n")) {
+        nextCropTop = clampCropInset(startDraft.top + deltaY, startDraft.bottom);
+      }
+      this.cropBox.style.top = `${nextCropTop}%`;
+      this.cropBox.style.right = `${nextCropRight}%`;
+      this.cropBox.style.bottom = `${nextCropBottom}%`;
+      this.cropBox.style.left = `${nextCropLeft}%`;
+    };
+
+    const handleUp = () => {
+      this.cleanupDrag?.();
+      this.cleanupDrag = null;
+      this.cropDraft = {
+        top: nextCropTop,
+        right: nextCropRight,
+        bottom: nextCropBottom,
+        left: nextCropLeft
+      };
+      this.render();
+    };
+
+    document.addEventListener("pointermove", handleMove);
+    document.addEventListener("pointerup", handleUp, { once: true });
+    this.cleanupDrag = () => {
+      document.removeEventListener("pointermove", handleMove);
+      document.removeEventListener("pointerup", handleUp);
+    };
+  }
+
+  private stopImageClickWhenCropped = (event: MouseEvent) => {
+    if (!this.cropEditing) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  private finishCropSession() {
+    this.cropEditing = false;
+    this.cropApplying = false;
+    this.cropSessionWidth = null;
+    this.cropSessionHeight = null;
+    this.cropDraft = createEmptyCropInsets();
+    this.render();
+  }
+
+  private setImageAttrs(attrs: Partial<ImageNodeAttrs>) {
+    const position = typeof this.getPos === "function" ? this.getPos() : undefined;
+    if (position === undefined) {
+      return;
+    }
+
+    const currentNode = this.view.state.doc.nodeAt(position);
+    if (!currentNode || currentNode.type !== this.node.type) {
+      return;
+    }
+
+    this.view.dispatch(
+      this.view.state.tr
+        .setNodeMarkup(position, undefined, {
+          ...currentNode.attrs,
+          ...attrs
+        })
+        .scrollIntoView()
+    );
+  }
+}
+
+function normalizeImageNodeAttrs(attrs: ProseMirrorNode["attrs"]): ImageNodeAttrs {
+  return {
+    src: String(attrs.src ?? ""),
+    alt: typeof attrs.alt === "string" && attrs.alt.trim() ? attrs.alt : null,
+    title: typeof attrs.title === "string" && attrs.title.trim() ? attrs.title : null,
+    width: parseOptionalImageNumber(attrs.width, IMAGE_MIN_WIDTH, IMAGE_MAX_WIDTH),
+    height: parseOptionalImageNumber(attrs.height, IMAGE_MIN_HEIGHT, IMAGE_MAX_HEIGHT),
+    crop: Boolean(attrs.crop),
+    cropX: parseImagePercent(attrs.cropX, 50),
+    cropY: parseImagePercent(attrs.cropY, 50),
+    cropTop: parseImagePercent(attrs.cropTop, 0),
+    cropRight: parseImagePercent(attrs.cropRight, 0),
+    cropBottom: parseImagePercent(attrs.cropBottom, 0),
+    cropLeft: parseImagePercent(attrs.cropLeft, 0)
+  };
+}
+
+function parseOptionalImageNumber(value: unknown, min: number, max: number) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const numericValue = typeof value === "number" ? value : Number.parseFloat(String(value));
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+  return clampInteger(numericValue, min, max);
+}
+
+function parseImagePercent(value: unknown, fallback: number) {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+  const numericValue = typeof value === "number" ? value : Number.parseFloat(String(value));
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+  return clampInteger(numericValue, 0, 100);
+}
+
+function defaultCropHeight(width: number) {
+  return clampInteger(width * 0.62, IMAGE_MIN_HEIGHT, IMAGE_MAX_HEIGHT);
+}
+
+function clampCropInset(value: number, oppositeInset: number) {
+  return Math.max(0, Math.min(85 - oppositeInset, Math.round(value)));
+}
+
+function createEmptyCropInsets(): ImageCropInsets {
+  return {
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0
+  };
+}
+
+function imageAttrsToCropInsets(attrs: ImageNodeAttrs): ImageCropInsets {
+  if (!attrs.crop) {
+    return createEmptyCropInsets();
+  }
+  return {
+    top: attrs.cropTop,
+    right: attrs.cropRight,
+    bottom: attrs.cropBottom,
+    left: attrs.cropLeft
+  };
+}
+
+function hasCropInsets(insets: ImageCropInsets) {
+  return insets.top > 0 || insets.right > 0 || insets.bottom > 0 || insets.left > 0;
+}
+
+function cropWidthRatio(insets: ImageCropInsets) {
+  return Math.max(0.15, (100 - insets.left - insets.right) / 100);
+}
+
+function composeCropInsets(base: ImageCropInsets, draft: ImageCropInsets): ImageCropInsets {
+  const baseWidth = 100 - base.left - base.right;
+  const baseHeight = 100 - base.top - base.bottom;
+  return {
+    top: clampInteger(base.top + baseHeight * draft.top / 100, 0, 100),
+    right: clampInteger(base.right + baseWidth * draft.right / 100, 0, 100),
+    bottom: clampInteger(base.bottom + baseHeight * draft.bottom / 100, 0, 100),
+    left: clampInteger(base.left + baseWidth * draft.left / 100, 0, 100)
+  };
+}
+
+function applyCroppedImageStyle(image: HTMLImageElement, attrs: ImageNodeAttrs) {
+  const cropWidth = Math.max(15, 100 - attrs.cropLeft - attrs.cropRight);
+  const cropHeight = Math.max(15, 100 - attrs.cropTop - attrs.cropBottom);
+  image.style.width = `${10000 / cropWidth}%`;
+  image.style.height = `${10000 / cropHeight}%`;
+  image.style.objectFit = "fill";
+  image.style.objectPosition = "";
+  image.style.transformOrigin = "top left";
+  image.style.transform = `translate(-${attrs.cropLeft}%, -${attrs.cropTop}%)`;
+}
+
+async function materializeCroppedImage(src: string, insets: ImageCropInsets, filename: string) {
+  const sourceImage = await loadImageForCanvas(src);
+  const sourceWidth = sourceImage.naturalWidth || sourceImage.width;
+  const sourceHeight = sourceImage.naturalHeight || sourceImage.height;
+  if (sourceWidth <= 0 || sourceHeight <= 0) {
+    throw new Error("La imagen no tiene dimensiones validas.");
+  }
+
+  const cropLeft = Math.round(sourceWidth * insets.left / 100);
+  const cropTop = Math.round(sourceHeight * insets.top / 100);
+  const cropRight = Math.round(sourceWidth * insets.right / 100);
+  const cropBottom = Math.round(sourceHeight * insets.bottom / 100);
+  const cropWidth = Math.max(1, sourceWidth - cropLeft - cropRight);
+  const cropHeight = Math.max(1, sourceHeight - cropTop - cropBottom);
+  const canvas = document.createElement("canvas");
+  canvas.width = cropWidth;
+  canvas.height = cropHeight;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("El navegador no pudo preparar el lienzo de recorte.");
+  }
+
+  context.drawImage(sourceImage, cropLeft, cropTop, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  const blob = await canvasToBlob(canvas, "image/png");
+  const dataUrl = await blobToDataUrl(blob);
+  return {
+    blob,
+    dataUrl,
+    filename
+  };
+}
+
+function loadImageForCanvas(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    if (!src.startsWith("data:") && !src.startsWith("blob:")) {
+      image.crossOrigin = "anonymous";
+    }
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("No se pudo cargar la imagen para recortarla."));
+    image.src = src;
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("No se pudo crear la imagen recortada."));
+        return;
+      }
+      resolve(blob);
+    }, type);
+  });
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("No se pudo serializar la imagen recortada."));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("No se pudo serializar la imagen recortada."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function buildCroppedImageFilename(attrs: ImageNodeAttrs) {
+  const sourceName = attrs.title ?? attrs.alt ?? attrs.src.split("/").pop()?.split("?")[0] ?? "imagen";
+  const basename = sourceName.replace(/\.[a-z0-9]+$/i, "").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
+  return `${basename || "imagen"}-recorte.png`;
 }
 
 class ListItemNodeView implements NodeView {

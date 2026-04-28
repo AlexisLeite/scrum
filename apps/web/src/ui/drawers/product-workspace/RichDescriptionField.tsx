@@ -305,6 +305,11 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   }, [scheduleHeightSync]);
 
   const placeCaretAfterImage = React.useCallback((imageUrl: string, remainingAttempts = 8) => {
+    if (editorRef.current?.placeSelectionAfterImage(imageUrl)) {
+      scheduleHeightSync();
+      return;
+    }
+
     const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
     if (!content) {
       return;
@@ -586,6 +591,19 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       }
     }
   }, [placeCaretAfterImage, replaceRenderedImageSource, syncControlledValue, updateEditorMarkdown]);
+
+  const handleImageCropUpload = React.useCallback(async (payload: { blob: Blob; filename: string }) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", payload.blob, payload.filename);
+      const response = await apiClient.postForm<{ url: string }>("/media/images", formData);
+      setUploadError("");
+      return response.url;
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "No se pudo subir la imagen recortada.");
+      throw error;
+    }
+  }, []);
 
   const handleVideoUpload = React.useCallback(async (file: File) => {
     if (!editorRef.current) {
@@ -892,6 +910,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         className="rich-description-editor"
         contentEditableClassName="rich-description-content"
         readOnly={editorInteractionDisabled}
+        onImageCrop={handleImageCropUpload}
         collaboration={collaboration}
         collaborationDisabled={collaborationDisabled}
         user={store.session.user}

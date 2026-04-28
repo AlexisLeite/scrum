@@ -43,6 +43,21 @@ type MarkdownContentBlock =
       type: "video";
       src: string;
       title?: string;
+    }
+  | {
+      type: "image";
+      src: string;
+      alt?: string;
+      title?: string;
+      width?: number;
+      height?: number;
+      crop?: boolean;
+      cropX?: number;
+      cropY?: number;
+      cropTop?: number;
+      cropRight?: number;
+      cropBottom?: number;
+      cropLeft?: number;
     };
 
 export function MarkdownPreview(props: MarkdownPreviewProps) {
@@ -81,6 +96,47 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
                 controls
                 preload="metadata"
               />
+            );
+          }
+
+          if (block.type === "image") {
+            const safeSrc = defaultUrlTransform(block.src);
+            if (!safeSrc) {
+              return null;
+            }
+
+            const buttonStyle: React.CSSProperties = {
+              width: block.width ? `${block.width}px` : undefined,
+              height: block.crop && block.height ? `${block.height}px` : undefined,
+              maxWidth: "100%"
+            };
+            let imageStyle: React.CSSProperties | undefined;
+            if (block.crop && block.height) {
+              imageStyle = buildCroppedPreviewImageStyle(block);
+            } else if (block.width) {
+              imageStyle = {
+                width: "100%",
+                height: "auto",
+                objectFit: "contain"
+              };
+            }
+
+            return (
+              <button
+                key={`image-${index}-${block.src}`}
+                type="button"
+                className={`markdown-preview-image-button${block.crop ? " is-cropped" : ""}`}
+                style={buttonStyle}
+                aria-label={`Ver imagen ${block.alt?.trim() || ""}`.trim()}
+                onClick={() => setLightboxImage({ src: safeSrc, alt: block.alt })}
+              >
+                <img
+                  src={safeSrc}
+                  alt={block.alt ?? "Imagen de markdown"}
+                  title={block.title}
+                  style={imageStyle}
+                />
+              </button>
             );
           }
 
@@ -247,11 +303,11 @@ function extractTextContent(node: React.ReactNode): string {
 
 function splitMarkdownMediaBlocks(markdown: string): MarkdownContentBlock[] {
   const blocks: MarkdownContentBlock[] = [];
-  const videoPattern = /<video\b([^>]*)><\/video>/gi;
+  const mediaPattern = /<video\b([^>]*)><\/video>|<img\b([^>]*)\/?>/gi;
   let lastIndex = 0;
   let match: RegExpExecArray | null = null;
 
-  while ((match = videoPattern.exec(markdown)) !== null) {
+  while ((match = mediaPattern.exec(markdown)) !== null) {
     const preceding = markdown.slice(lastIndex, match.index);
     if (preceding) {
       blocks.push({
@@ -260,20 +316,9 @@ function splitMarkdownMediaBlocks(markdown: string): MarkdownContentBlock[] {
       });
     }
 
-    const attributes = match[1] ?? "";
-    const src = extractHtmlAttribute(attributes, "src");
-    if (!src) {
-      blocks.push({
-        type: "markdown",
-        content: match[0]
-      });
-    } else {
-      blocks.push({
-        type: "video",
-        src,
-        title: extractHtmlAttribute(attributes, "title") ?? undefined
-      });
-    }
+    const videoAttributes = match[1];
+    const imageAttributes = match[2];
+    blocks.push(resolveMediaBlock(match[0], videoAttributes, imageAttributes));
 
     lastIndex = match.index + match[0].length;
   }
@@ -289,6 +334,66 @@ function splitMarkdownMediaBlocks(markdown: string): MarkdownContentBlock[] {
   return blocks;
 }
 
+function resolveMediaBlock(rawMarkdown: string, videoAttributes: string | undefined, imageAttributes: string | undefined): MarkdownContentBlock {
+  if (videoAttributes !== undefined) {
+    const src = extractHtmlAttribute(videoAttributes, "src");
+    return src
+      ? {
+          type: "video",
+          src,
+          title: extractHtmlAttribute(videoAttributes, "title") ?? undefined
+        }
+      : {
+          type: "markdown",
+          content: rawMarkdown
+        };
+  }
+
+  const attributes = imageAttributes ?? "";
+  const src = extractHtmlAttribute(attributes, "src");
+  if (!src) {
+    return {
+      type: "markdown",
+      content: rawMarkdown
+    };
+  }
+
+  const style = parseStyleAttribute(extractHtmlAttribute(attributes, "style"));
+  const objectPosition = parseObjectPosition(style.get("object-position"));
+  const crop = parseBooleanAttribute(extractHtmlAttribute(attributes, "data-crop")) || style.get("object-fit") === "cover";
+  return {
+    type: "image",
+    src,
+    alt: extractHtmlAttribute(attributes, "alt") ?? undefined,
+    title: extractHtmlAttribute(attributes, "title") ?? undefined,
+    width: parseOptionalNumber(extractHtmlAttribute(attributes, "width") ?? extractHtmlAttribute(attributes, "data-width") ?? style.get("width")),
+    height: parseOptionalNumber(extractHtmlAttribute(attributes, "height") ?? extractHtmlAttribute(attributes, "data-height") ?? style.get("height")),
+    crop,
+    cropX: parsePercent(extractHtmlAttribute(attributes, "data-crop-x"), objectPosition.x),
+    cropY: parsePercent(extractHtmlAttribute(attributes, "data-crop-y"), objectPosition.y),
+    cropTop: parsePercent(extractHtmlAttribute(attributes, "data-crop-top"), 0),
+    cropRight: parsePercent(extractHtmlAttribute(attributes, "data-crop-right"), 0),
+    cropBottom: parsePercent(extractHtmlAttribute(attributes, "data-crop-bottom"), 0),
+    cropLeft: parsePercent(extractHtmlAttribute(attributes, "data-crop-left"), 0)
+  };
+}
+
+function buildCroppedPreviewImageStyle(block: Extract<MarkdownContentBlock, { type: "image" }>): React.CSSProperties {
+  const cropLeft = block.cropLeft ?? 0;
+  const cropRight = block.cropRight ?? 0;
+  const cropTop = block.cropTop ?? 0;
+  const cropBottom = block.cropBottom ?? 0;
+  const cropWidth = Math.max(15, 100 - cropLeft - cropRight);
+  const cropHeight = Math.max(15, 100 - cropTop - cropBottom);
+  return {
+    width: `${10000 / cropWidth}%`,
+    height: `${10000 / cropHeight}%`,
+    objectFit: "fill",
+    transformOrigin: "top left",
+    transform: `translate(-${cropLeft}%, -${cropTop}%)`
+  };
+}
+
 function extractHtmlAttribute(attributes: string, name: string) {
   const match = new RegExp(`${name}=\"([^\"]*)\"`, "i").exec(attributes);
   if (!match) {
@@ -300,6 +405,60 @@ function extractHtmlAttribute(attributes: string, name: string) {
     .replaceAll("&amp;", "&")
     .replaceAll("&lt;", "<")
     .replaceAll("&gt;", ">");
+}
+
+function parseStyleAttribute(value: string | null | undefined) {
+  const entries = new Map<string, string>();
+  (value ?? "").split(";").forEach((part) => {
+    const separatorIndex = part.indexOf(":");
+    if (separatorIndex < 0) {
+      return;
+    }
+    const name = part.slice(0, separatorIndex).trim().toLowerCase();
+    const styleValue = part.slice(separatorIndex + 1).trim();
+    if (name) {
+      entries.set(name, styleValue);
+    }
+  });
+  return entries;
+}
+
+function parseObjectPosition(value: string | null | undefined) {
+  const parts = (value ?? "").split(/\s+/).map((part) => parsePercent(part, Number.NaN));
+  return {
+    x: Number.isFinite(parts[0]) ? parts[0] : 50,
+    y: Number.isFinite(parts[1]) ? parts[1] : 50
+  };
+}
+
+function parseOptionalNumber(value: string | null | undefined) {
+  if (!value) {
+    return undefined;
+  }
+  const numericValue = Number.parseFloat(value);
+  if (!Number.isFinite(numericValue)) {
+    return undefined;
+  }
+  return Math.max(1, Math.round(numericValue));
+}
+
+function parsePercent(value: string | number | null | undefined, fallback: number) {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+  const numericValue = typeof value === "number" ? value : Number.parseFloat(value);
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+  return Math.max(0, Math.min(100, Math.round(numericValue)));
+}
+
+function parseBooleanAttribute(value: string | null | undefined) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  const normalizedValue = value.trim().toLowerCase();
+  return normalizedValue === "" || normalizedValue === "true" || normalizedValue === "1" || normalizedValue === "yes";
 }
 
 function extractMarkdownCodeBlocks(markdown: string): string[] {

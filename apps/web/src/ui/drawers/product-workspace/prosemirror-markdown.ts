@@ -33,7 +33,7 @@ const taskListItemSpec: NodeSpec = {
   }
 };
 
-const videoNodeSpec = {
+const videoNodeSpec: NodeSpec = {
   inline: true,
   group: "inline",
   atom: true,
@@ -63,9 +63,40 @@ const videoNodeSpec = {
   }
 };
 
+const imageNodeSpec: NodeSpec = {
+  inline: true,
+  group: "inline",
+  atom: true,
+  draggable: true,
+  attrs: {
+    src: { default: "" },
+    alt: { default: null },
+    title: { default: null },
+    width: { default: null },
+    height: { default: null },
+    crop: { default: false },
+    cropX: { default: 50 },
+    cropY: { default: 50 },
+    cropTop: { default: 0 },
+    cropRight: { default: 0 },
+    cropBottom: { default: 0 },
+    cropLeft: { default: 0 }
+  },
+  parseDOM: [{
+    tag: "img[src]",
+    getAttrs(dom: HTMLElement) {
+      return parseImageElement(dom);
+    }
+  }],
+  toDOM(node: ProseMirrorNode) {
+    return ["img", buildImageDomAttributes(node.attrs)];
+  }
+};
+
 export const markdownSchema = new Schema({
   nodes: baseMarkdownSchema.spec.nodes
     .update("list_item", taskListItemSpec)
+    .update("image", imageNodeSpec)
     .append({
       video: videoNodeSpec
     })
@@ -97,6 +128,25 @@ export const markdownParser = new MarkdownParser(markdownSchema, markdownIt, {
       return { checked: parseTaskListCheckedValue(token.attrGet?.("data-checked") ?? null) };
     }
   },
+  image: {
+    node: "image",
+    getAttrs(token: { attrGet: (name: string) => string | null; children?: Array<{ content?: string }> | null }) {
+      return {
+        src: token.attrGet("src") ?? "",
+        title: token.attrGet("title") || null,
+        alt: token.attrGet("alt") || token.children?.[0]?.content || null,
+        width: parseImageDimension(token.attrGet("width") ?? token.attrGet("data-width")),
+        height: parseImageDimension(token.attrGet("height") ?? token.attrGet("data-height")),
+        crop: parseBooleanAttribute(token.attrGet("data-crop")),
+        cropX: parsePercentAttribute(token.attrGet("data-crop-x"), 50),
+        cropY: parsePercentAttribute(token.attrGet("data-crop-y"), 50),
+        cropTop: parsePercentAttribute(token.attrGet("data-crop-top"), 0),
+        cropRight: parsePercentAttribute(token.attrGet("data-crop-right"), 0),
+        cropBottom: parsePercentAttribute(token.attrGet("data-crop-bottom"), 0),
+        cropLeft: parsePercentAttribute(token.attrGet("data-crop-left"), 0)
+      };
+    }
+  },
   table: { block: "table" },
   thead: { ignore: true },
   tbody: { ignore: true },
@@ -124,6 +174,14 @@ export const markdownSerializer = new MarkdownSerializer({
       }
       return `${node.attrs.bullet || "*"} ${child.attrs.checked ? "[x]" : "[ ]"} `;
     });
+  },
+  image(state, node, parent, index) {
+    if (!hasCustomImageAttributes(node)) {
+      defaultNodes.image(state, node, parent, index);
+      return;
+    }
+
+    state.write(buildImageHtml(node));
   },
   video(state, node) {
     state.write(buildVideoMarkdown(node.attrs.title || "Video", node.attrs.src || ""));
@@ -212,7 +270,7 @@ function serializeTableCell(cell: ProseMirrorNode) {
 }
 
 function normalizeUnsupportedHtml(markdown: string) {
-  return markdown.replace(/<(?!\/?video\b|br\b)[^>\n]+>/gi, (match) => match.replace(/</g, "&lt;").replace(/>/g, "&gt;"));
+  return markdown.replace(/<(?!\/?(?:video|img|br)\b)[^>\n]+>/gi, (match) => match.replace(/</g, "&lt;").replace(/>/g, "&gt;"));
 }
 
 type MarkdownToken = {
@@ -220,9 +278,13 @@ type MarkdownToken = {
   content: string;
   tag?: string;
   nesting?: number;
-  children?: unknown[];
+  children?: MarkdownToken[] | null;
   markup?: string;
+  attrs?: Array<[string, string]> | null;
+  block?: boolean;
+  map?: [number, number] | null;
   attrSet?: (name: string, value: string) => void;
+  attrGet?: (name: string) => string | null;
 };
 
 function normalizeTaskListTokens(tokens: MarkdownToken[]) {
@@ -290,13 +352,24 @@ function removeLeadingInlineChildText(token: MarkdownToken, length: number) {
 }
 
 function normalizeHtmlTokens(tokens: MarkdownToken[]) {
-  tokens.forEach((token) => {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
     if (Array.isArray(token.children)) {
-      normalizeHtmlTokens(token.children as MarkdownToken[]);
+      normalizeHtmlTokens(token.children);
     }
     if ((token.type === "html_inline" || token.type === "html_block") && parseVideoMarkdown(token.content).src) {
       token.type = "scrum_video";
-      return;
+      continue;
+    }
+    const imageAttrs = parseImageMarkdown(token.content);
+    if ((token.type === "html_inline" || token.type === "html_block") && imageAttrs.src) {
+      if (token.type === "html_block") {
+        tokens.splice(index, 1, ...createImageParagraphTokens(token, imageAttrs));
+        index += 2;
+        continue;
+      }
+      applyImageAttrsToToken(token, imageAttrs);
+      continue;
     }
     if (token.type === "html_inline" && /^<br\s*\/?>$/i.test(token.content.trim())) {
       token.type = "hardbreak";
@@ -305,7 +378,70 @@ function normalizeHtmlTokens(tokens: MarkdownToken[]) {
       token.content = "";
       token.markup = "\\";
     }
+  }
+}
+
+function createImageParagraphTokens(referenceToken: MarkdownToken, imageAttrs: ReturnType<typeof parseImageMarkdown>) {
+  const paragraphOpen = createMarkdownToken(referenceToken, "paragraph_open", "p", 1);
+  paragraphOpen.block = true;
+  paragraphOpen.map = referenceToken.map ?? null;
+
+  const inlineToken = createMarkdownToken(referenceToken, "inline", "", 0);
+  inlineToken.block = true;
+  inlineToken.content = referenceToken.content;
+  inlineToken.map = referenceToken.map ?? null;
+  inlineToken.children = [createImageToken(referenceToken, imageAttrs)];
+
+  const paragraphClose = createMarkdownToken(referenceToken, "paragraph_close", "p", -1);
+  paragraphClose.block = true;
+
+  return [paragraphOpen, inlineToken, paragraphClose];
+}
+
+function createImageToken(referenceToken: MarkdownToken, imageAttrs: ReturnType<typeof parseImageMarkdown>) {
+  const imageToken = createMarkdownToken(referenceToken, "image", "img", 0);
+  applyImageAttrsToToken(imageToken, imageAttrs);
+  return imageToken;
+}
+
+function applyImageAttrsToToken(token: MarkdownToken, imageAttrs: ReturnType<typeof parseImageMarkdown>) {
+  token.type = "image";
+  token.tag = "img";
+  token.nesting = 0;
+  token.content = imageAttrs.alt ?? "";
+  token.children = [createTextToken(token, imageAttrs.alt ?? "")];
+  token.attrs = [];
+  Object.entries(imageAttrs).forEach(([name, value]) => {
+    if (value !== null && value !== undefined) {
+      setMarkdownTokenAttribute(token, name, String(value));
+    }
   });
+}
+
+function createTextToken(referenceToken: MarkdownToken, content: string) {
+  const textToken = createMarkdownToken(referenceToken, "text", "", 0);
+  textToken.content = content;
+  return textToken;
+}
+
+function createMarkdownToken(referenceToken: MarkdownToken, type: string, tag: string, nesting: number) {
+  const TokenConstructor = referenceToken.constructor as new (type: string, tag: string, nesting: number) => MarkdownToken;
+  return new TokenConstructor(type, tag, nesting);
+}
+
+function setMarkdownTokenAttribute(token: MarkdownToken, name: string, value: string) {
+  if (token.attrSet) {
+    token.attrSet(name, value);
+    return;
+  }
+
+  token.attrs ??= [];
+  const existingIndex = token.attrs.findIndex(([attrName]) => attrName === name);
+  if (existingIndex >= 0) {
+    token.attrs[existingIndex][1] = value;
+    return;
+  }
+  token.attrs.push([name, value]);
 }
 
 function parseTaskListItemElement(element: HTMLElement) {
@@ -334,6 +470,225 @@ function parseTaskListCheckedValue(value: string | null) {
     return false;
   }
   return null;
+}
+
+function parseImageElement(element: HTMLElement) {
+  const style = parseStyleAttribute(element.getAttribute("style"));
+  const objectPosition = parseObjectPosition(style.get("object-position"));
+  const crop = parseBooleanAttribute(element.getAttribute("data-crop")) || style.get("object-fit") === "cover";
+  return {
+    src: element.getAttribute("src") ?? "",
+    alt: element.getAttribute("alt") || null,
+    title: element.getAttribute("title") || null,
+    width: parseImageDimension(element.getAttribute("width") ?? element.getAttribute("data-width") ?? style.get("width")),
+    height: parseImageDimension(element.getAttribute("height") ?? element.getAttribute("data-height") ?? style.get("height")),
+    crop,
+    cropX: parsePercentAttribute(element.getAttribute("data-crop-x"), objectPosition.x),
+    cropY: parsePercentAttribute(element.getAttribute("data-crop-y"), objectPosition.y),
+    cropTop: parsePercentAttribute(element.getAttribute("data-crop-top"), 0),
+    cropRight: parsePercentAttribute(element.getAttribute("data-crop-right"), 0),
+    cropBottom: parsePercentAttribute(element.getAttribute("data-crop-bottom"), 0),
+    cropLeft: parsePercentAttribute(element.getAttribute("data-crop-left"), 0)
+  };
+}
+
+function parseImageMarkdown(value: string) {
+  const match = /^<img\b([^>]*)\/?>$/i.exec(value.trim());
+  if (!match) {
+    return {
+      src: "",
+      alt: null,
+      title: null,
+      width: null,
+      height: null,
+      "data-crop": null,
+      "data-crop-x": 50,
+      "data-crop-y": 50,
+      "data-crop-top": 0,
+      "data-crop-right": 0,
+      "data-crop-bottom": 0,
+      "data-crop-left": 0
+    };
+  }
+
+  const attributes = match[1] ?? "";
+  const style = parseStyleAttribute(extractHtmlAttribute(attributes, "style"));
+  const objectPosition = parseObjectPosition(style.get("object-position"));
+  const crop = parseBooleanAttribute(extractHtmlAttribute(attributes, "data-crop")) || style.get("object-fit") === "cover";
+
+  return {
+    src: extractHtmlAttribute(attributes, "src") ?? "",
+    alt: extractHtmlAttribute(attributes, "alt"),
+    title: extractHtmlAttribute(attributes, "title"),
+    width: parseImageDimension(extractHtmlAttribute(attributes, "width") ?? extractHtmlAttribute(attributes, "data-width") ?? style.get("width")),
+    height: parseImageDimension(extractHtmlAttribute(attributes, "height") ?? extractHtmlAttribute(attributes, "data-height") ?? style.get("height")),
+    "data-crop": crop ? "true" : null,
+    "data-crop-x": parsePercentAttribute(extractHtmlAttribute(attributes, "data-crop-x"), objectPosition.x),
+    "data-crop-y": parsePercentAttribute(extractHtmlAttribute(attributes, "data-crop-y"), objectPosition.y),
+    "data-crop-top": parsePercentAttribute(extractHtmlAttribute(attributes, "data-crop-top"), 0),
+    "data-crop-right": parsePercentAttribute(extractHtmlAttribute(attributes, "data-crop-right"), 0),
+    "data-crop-bottom": parsePercentAttribute(extractHtmlAttribute(attributes, "data-crop-bottom"), 0),
+    "data-crop-left": parsePercentAttribute(extractHtmlAttribute(attributes, "data-crop-left"), 0)
+  };
+}
+
+function buildImageDomAttributes(attrs: ProseMirrorNode["attrs"]) {
+  const normalized = normalizeImageAttributes(attrs);
+  const domAttrs: Record<string, string> = {
+    src: normalized.src
+  };
+  if (normalized.alt) domAttrs.alt = normalized.alt;
+  if (normalized.title) domAttrs.title = normalized.title;
+  if (normalized.width !== null) {
+    domAttrs.width = String(normalized.width);
+    domAttrs["data-width"] = String(normalized.width);
+  }
+  if (normalized.height !== null) {
+    domAttrs.height = String(normalized.height);
+    domAttrs["data-height"] = String(normalized.height);
+  }
+  if (normalized.crop) {
+    domAttrs["data-crop"] = "true";
+    domAttrs["data-crop-x"] = String(normalized.cropX);
+    domAttrs["data-crop-y"] = String(normalized.cropY);
+    domAttrs["data-crop-top"] = String(normalized.cropTop);
+    domAttrs["data-crop-right"] = String(normalized.cropRight);
+    domAttrs["data-crop-bottom"] = String(normalized.cropBottom);
+    domAttrs["data-crop-left"] = String(normalized.cropLeft);
+  }
+  return domAttrs;
+}
+
+function hasCustomImageAttributes(node: ProseMirrorNode) {
+  const attrs = normalizeImageAttributes(node.attrs);
+  return attrs.width !== null ||
+    attrs.height !== null ||
+    attrs.crop ||
+    attrs.cropX !== 50 ||
+    attrs.cropY !== 50 ||
+    attrs.cropTop !== 0 ||
+    attrs.cropRight !== 0 ||
+    attrs.cropBottom !== 0 ||
+    attrs.cropLeft !== 0;
+}
+
+function buildImageHtml(node: ProseMirrorNode) {
+  const attrs = normalizeImageAttributes(node.attrs);
+  const htmlAttributes = [
+    `src="${escapeHtmlAttribute(attrs.src)}"`
+  ];
+  if (attrs.alt) htmlAttributes.push(`alt="${escapeHtmlAttribute(attrs.alt)}"`);
+  if (attrs.title) htmlAttributes.push(`title="${escapeHtmlAttribute(attrs.title)}"`);
+  if (attrs.width !== null) {
+    htmlAttributes.push(`width="${attrs.width}"`);
+    htmlAttributes.push(`data-width="${attrs.width}"`);
+  }
+  if (attrs.height !== null) {
+    htmlAttributes.push(`height="${attrs.height}"`);
+    htmlAttributes.push(`data-height="${attrs.height}"`);
+  }
+  if (attrs.crop) {
+    htmlAttributes.push("data-crop=\"true\"");
+    htmlAttributes.push(`data-crop-x="${attrs.cropX}"`);
+    htmlAttributes.push(`data-crop-y="${attrs.cropY}"`);
+    htmlAttributes.push(`data-crop-top="${attrs.cropTop}"`);
+    htmlAttributes.push(`data-crop-right="${attrs.cropRight}"`);
+    htmlAttributes.push(`data-crop-bottom="${attrs.cropBottom}"`);
+    htmlAttributes.push(`data-crop-left="${attrs.cropLeft}"`);
+  }
+
+  const style = buildImageStyleAttribute(attrs);
+  if (style) {
+    htmlAttributes.push(`style="${escapeHtmlAttribute(style)}"`);
+  }
+
+  return `<img ${htmlAttributes.join(" ")}>`;
+}
+
+function normalizeImageAttributes(attrs: ProseMirrorNode["attrs"]) {
+  return {
+    src: String(attrs.src ?? ""),
+    alt: typeof attrs.alt === "string" && attrs.alt.trim() ? attrs.alt : null,
+    title: typeof attrs.title === "string" && attrs.title.trim() ? attrs.title : null,
+    width: parseImageDimension(attrs.width),
+    height: parseImageDimension(attrs.height),
+    crop: Boolean(attrs.crop),
+    cropX: parsePercentAttribute(attrs.cropX, 50),
+    cropY: parsePercentAttribute(attrs.cropY, 50),
+    cropTop: parsePercentAttribute(attrs.cropTop, 0),
+    cropRight: parsePercentAttribute(attrs.cropRight, 0),
+    cropBottom: parsePercentAttribute(attrs.cropBottom, 0),
+    cropLeft: parsePercentAttribute(attrs.cropLeft, 0)
+  };
+}
+
+function buildImageStyleAttribute(attrs: ReturnType<typeof normalizeImageAttributes>) {
+  const parts: string[] = [];
+  if (attrs.width !== null) {
+    parts.push(`width: ${attrs.width}px`);
+  }
+  if (attrs.crop && attrs.height !== null) {
+    parts.push(`height: ${attrs.height}px`);
+    parts.push("object-fit: cover");
+    parts.push(`object-position: ${attrs.cropX}% ${attrs.cropY}%`);
+  } else if (attrs.width !== null) {
+    parts.push("height: auto");
+  }
+  return parts.join("; ");
+}
+
+function parseStyleAttribute(value: string | null | undefined) {
+  const entries = new Map<string, string>();
+  (value ?? "").split(";").forEach((part) => {
+    const separatorIndex = part.indexOf(":");
+    if (separatorIndex < 0) {
+      return;
+    }
+    const name = part.slice(0, separatorIndex).trim().toLowerCase();
+    const styleValue = part.slice(separatorIndex + 1).trim();
+    if (name) {
+      entries.set(name, styleValue);
+    }
+  });
+  return entries;
+}
+
+function parseObjectPosition(value: string | null | undefined) {
+  const parts = (value ?? "").split(/\s+/).map((part) => parsePercentAttribute(part, Number.NaN));
+  return {
+    x: Number.isFinite(parts[0]) ? parts[0] : 50,
+    y: Number.isFinite(parts[1]) ? parts[1] : 50
+  };
+}
+
+function parseImageDimension(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const numericValue = typeof value === "number" ? value : Number.parseFloat(String(value));
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+  return Math.max(40, Math.min(1600, Math.round(numericValue)));
+}
+
+function parsePercentAttribute(value: unknown, fallback: number) {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+  const numericValue = typeof value === "number" ? value : Number.parseFloat(String(value));
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+  return Math.max(0, Math.min(100, Math.round(numericValue)));
+}
+
+function parseBooleanAttribute(value: string | null | undefined) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  const normalizedValue = value.trim().toLowerCase();
+  return normalizedValue === "" || normalizedValue === "true" || normalizedValue === "1" || normalizedValue === "yes";
 }
 
 function parseVideoMarkdown(value: string) {
