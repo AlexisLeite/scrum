@@ -1,6 +1,6 @@
 ---
 name: scrum-task-implementation
-description: Implementa tareas Scrum de punta a punta en el repo actual usando las herramientas del tablero Scrum. Usa este skill cuando haya que tomar una tarea pendiente, asignar la tarea solicitada por el usuario que no tenga responsable, pasarla a In Progress, implementar exactamente lo pedido en la descripcion, validar el resultado, probar tambien la UI o el flujo afectado con Playwright contra el entorno watch cuando corresponda, hacer commit de los cambios con el id de la tarea, cerrar la tarea en Done y publicar un comentario final exhaustivo en markdown con resumen, validaciones, pruebas y archivos tocados. Asume que es muy probable que haya otros agentes trabajando en paralelo y extrema el cuidado con el estado del repositorio antes, durante y despues de cada edicion.
+description: Implementa tareas Scrum de punta a punta en el repo actual usando las herramientas del tablero Scrum. Usa este skill cuando haya que tomar una tarea pendiente, asignar la tarea solicitada por el usuario que no tenga responsable, pasarla a In Progress, implementar exactamente lo pedido en la descripcion o en sus actividades checkbox, validar el resultado, probar tambien la UI o el flujo afectado con Playwright contra el entorno watch cuando corresponda, hacer commit de los cambios con el id de la tarea, cerrar la tarea en Done y publicar un comentario final exhaustivo en markdown con resumen, validaciones, pruebas, actividades y archivos tocados. Asume que es muy probable que haya otros agentes trabajando en paralelo y extrema el cuidado con el estado del repositorio antes, durante y despues de cada edicion.
 ---
 
 # Scrum Task Implementation
@@ -15,13 +15,14 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 4. Cambia su estado a `In Progress`.
 5. Lee los detalles en profundidad de la tarea antes de editar codigo.
 6. Incluye en esa lectura la historia, la tarea, los ultimos mensajes y cualquier tarea padre o mensaje padre cuando exista para reconstruir el contexto completo.
-7. Implementa solo lo que pida la tarea, respetando el estado actual del worktree.
-8. Ejecuta validaciones razonables para el cambio: pruebas focalizadas, lint o build parcial si aplica.
-9. Prueba con el MCP de Playwright el flujo afectado en `https://vmi3181573.contaboserver.net:5443/` siempre que el cambio tenga impacto verificable desde UI o navegador.
-10. Antes de usar Playwright o probar manualmente en navegador, lee `.codex/local/credentials.toml`, elige `default_role` salvo que la tarea requiera otro rol y usa ese `email` / `password` para iniciar sesion.
-11. Haz un commit al finalizar cualquier tarea con cambios de codigo o archivos, incluyendo el id de la tarea en el mensaje de commit.
-12. Cambia la tarea a `Done` cuando la implementacion, la validacion y el commit esten terminados.
-13. Publica un comentario final en markdown valido, exhaustivo y autocontenido con resumen, justificacion, validaciones, pruebas, archivos tocados y el id del commit generado.
+7. Si la tarea incluye `activities`, tratalas como la lista ordenada de acciones a ejecutar antes del cierre global.
+8. Implementa solo lo que pida la tarea y sus actividades pendientes, respetando el estado actual del worktree.
+9. Ejecuta validaciones razonables para el cambio: pruebas focalizadas, lint o build parcial si aplica.
+10. Prueba con el MCP de Playwright el flujo afectado en `https://vmi3181573.contaboserver.net:5443/` siempre que el cambio tenga impacto verificable desde UI o navegador.
+11. Antes de usar Playwright o probar manualmente en navegador, lee `.codex/local/credentials.toml`, elige `default_role` salvo que la tarea requiera otro rol y usa ese `email` / `password` para iniciar sesion.
+12. Haz un commit al finalizar cualquier tarea con cambios de codigo o archivos, incluyendo el id de la tarea en el mensaje de commit.
+13. Cambia la tarea a `Done` cuando la implementacion, la validacion y el commit esten terminados.
+14. Publica un comentario final en markdown valido, exhaustivo y autocontenido con resumen, justificacion, validaciones, pruebas, actividades, archivos tocados y el id del commit generado.
 
 ## Reglas Operativas
 
@@ -39,6 +40,10 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 - Manten el diff minimo y localizado para reducir conflictos con trabajo concurrente.
 - Si la descripcion de la tarea entra en conflicto con el codigo existente o no alcanza para implementar algo con seguridad, deja un comentario explicando el bloqueo en vez de improvisar.
 - No marques la tarea como `Done` si no llegaste a implementar o validar el cambio principal.
+- Si `readTasks` o `get_task_details` devuelve `activities`, usa cada `activity.id` como referencia unica para esa tarea.
+- No marques una actividad como finalizada hasta completar y validar esa accion concreta.
+- Cuando una actividad termine bien, llama a `change_task_activity_status` con `checked: true`.
+- Si una actividad falla o queda bloqueada, dejala pendiente y publica un comentario indicando el `activity.id`, el texto de la actividad y el motivo.
 - Si el cambio afecta una experiencia navegable, usa el MCP de Playwright para probarla contra `https://vmi3181573.contaboserver.net:5443/`.
 - Ese entorno corre en modo watch con HMR; aprovecha ese comportamiento para revalidar rapido despues de cada ajuste relevante.
 - Las credenciales del entorno de validacion viven en `.codex/local/credentials.toml`, archivo local ignorado por git.
@@ -49,6 +54,8 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 
 - Usa el contenido de la tarea como fuente de verdad para el alcance.
 - Antes de tocar codigo, relee siempre el detalle profundo de la tarea y el contexto conversacional asociado.
+- Si la tarea tiene actividades checkbox pendientes, ejecutalas en orden de `itemIndex` respetando `parentActivityId` y `depth`; las ya finalizadas pueden considerarse contexto y no deben reabrirse salvo que la tarea lo pida.
+- Tras completar cada actividad pendiente, actualiza su estado con `change_task_activity_status` antes de pasar a la siguiente.
 - Si la tarea deriva de otra tarea o de un mensaje, navega tambien esos padres antes de decidir la implementacion.
 - Inspecciona primero los archivos y modulos relacionados antes de editar.
 - Manten los cambios acotados al problema descrito.
@@ -57,6 +64,15 @@ Sigue este flujo completo sin pedir confirmacion adicional salvo que la tarea se
 - Cuando corresponda, valida el flujo afectado de punta a punta con Playwright navegando el entorno remoto en modo watch.
 - Documenta en tus notas y en el comentario final que probaste con Playwright, que flujo cubriste y cual fue el resultado.
 - Si haces una suposicion relevante, documentala en la respuesta final y en el comentario de la tarea.
+
+## Actividades Checklist
+
+- Las actividades vienen en `task.activities` con `id`, `itemIndex`, `checked`, `text`, `line`, `depth`, `parentActivityId` y `childActivityIds`.
+- Trata cada actividad pendiente como una accion verificable dentro de la tarea principal.
+- Si `parentActivityId` no es `null`, la actividad es hija de otra actividad y debe interpretarse como un subpaso dentro de esa accion padre.
+- Usa `activity.id` al comentar bloqueos o resultados parciales para que otra persona pueda ubicar el checkbox exacto.
+- Si no hay actividades, sigue el flujo normal de tarea unica.
+- El comentario final debe resumir actividades finalizadas, pendientes o bloqueadas, incluso cuando todas hayan salido bien.
 
 ## Credenciales Locales
 
@@ -84,6 +100,11 @@ El comentario final debe ser markdown valido, autocontenido y exhaustivo. Debe e
 
 - Implementacion 1
 - Implementacion 2
+
+## Actividades
+
+- `activity-id` finalizada: resumen breve
+- `activity-id` pendiente o bloqueada: motivo, si aplica
 
 ## Decisiones tecnicas
 

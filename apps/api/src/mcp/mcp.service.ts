@@ -60,6 +60,26 @@ type FlatMessageNode = {
   }>;
 };
 
+type TaskActivity = {
+  id: string;
+  taskId: string;
+  itemIndex: number;
+  checked: boolean;
+  text: string;
+  line: number;
+  depth: number;
+  parentActivityId: string | null;
+  childActivityIds: string[];
+};
+
+type TaskActivitySummary = {
+  total: number;
+  completed: number;
+  pending: number;
+  root: number;
+  child: number;
+};
+
 const MCP_PROTOCOL_VERSION = "2025-03-26";
 const READ_TASKS_TYPE_TO_STATUS = {
   todo: "Todo",
@@ -67,6 +87,7 @@ const READ_TASKS_TYPE_TO_STATUS = {
   blocked: "Blocked",
   done: "Done"
 } as const;
+const TASK_CHECKLIST_ACTIVITY_PATTERN = /^(\s*)((?:[-+*]|\d+[.)])\s+\[)([ xX])(\]\s*)(.*)$/gm;
 
 const DEFAULT_READ_TASKS_STATUSES = Object.values(READ_TASKS_TYPE_TO_STATUS);
 
@@ -196,6 +217,29 @@ export class McpService {
                     actualHours: {
                       type: "number",
                       description: "Horas reales opcionales al cerrar o actualizar la tarea."
+                    }
+                  }
+                }
+              },
+              {
+                name: "change_task_activity_status",
+                description: "Cambia el estado de una actividad checkbox de una tarea asignada al usuario autenticado.",
+                inputSchema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["taskId", "activityId", "checked"],
+                  properties: {
+                    taskId: {
+                      type: "string",
+                      description: "ID de la tarea."
+                    },
+                    activityId: {
+                      type: "string",
+                      description: "ID unico de la actividad, devuelto por readTasks o get_task_details."
+                    },
+                    checked: {
+                      type: "boolean",
+                      description: "true para marcar la actividad como finalizada, false para dejarla pendiente."
                     }
                   }
                 }
@@ -406,6 +450,47 @@ export class McpService {
           }
         };
       }
+      case "change_task_activity_status": {
+        const taskId = this.readStringArgument(args, "taskId");
+        const activityId = this.readStringArgument(args, "activityId");
+        const checked = this.readBooleanArgument(args, "checked");
+        const detail = await this.tasksService.getDetail(taskId, user);
+        if (detail.assigneeId !== user.sub) {
+          throw new ForbiddenException("Only tasks assigned to the current user can change activity status via MCP");
+        }
+
+        const activities = this.extractTaskActivities(taskId, detail.description);
+        const activity = activities.find((entry) => entry.id === activityId);
+        if (!activity) {
+          throw new BadRequestException("Task activity not found");
+        }
+
+        const updated = await this.tasksService.updateChecklistItem(
+          taskId,
+          { itemIndex: activity.itemIndex, checked },
+          user
+        );
+        const updatedActivities = this.extractTaskActivities(taskId, updated.description);
+        const updatedActivity = updatedActivities.find((entry) => entry.itemIndex === activity.itemIndex) ?? {
+          ...activity,
+          checked
+        };
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `La actividad ${activityId} de la tarea ${taskId} quedo ${checked ? "finalizada" : "pendiente"}.`
+            }
+          ],
+          structuredContent: {
+            task: updated,
+            activity: updatedActivity,
+            activitySummary: this.buildActivitySummary(updatedActivities),
+            activities: updatedActivities
+          }
+        };
+      }
       case "comment_task": {
         const taskId = this.readStringArgument(args, "taskId");
         const body = this.readStringArgument(args, "body");
@@ -433,6 +518,7 @@ export class McpService {
         const history = this.flattenMessages(detail.conversation as TaskMessageNode[]);
         const recentMessages = history.slice(-4);
         const hasMoreMessages = history.length > recentMessages.length;
+        const activities = this.extractTaskActivities(detail.id, detail.description);
         const summary = {
           story: detail.story
             ? {
@@ -459,6 +545,8 @@ export class McpService {
             parentMessageId: detail.sourceMessage?.id ?? detail.sourceMessageId ?? null,
             parentMessage: detail.sourceMessage ?? null,
             childSummary: detail.childSummary,
+            activitySummary: this.buildActivitySummary(activities),
+            activities,
             childTasks: (detail.childTasks ?? []).map((childTask) => ({
               id: childTask.id,
               title: childTask.title,
@@ -608,6 +696,14 @@ export class McpService {
     return value;
   }
 
+  private readBooleanArgument(args: Record<string, unknown>, key: string) {
+    const value = args[key];
+    if (typeof value !== "boolean") {
+      throw new BadRequestException(`Missing argument: ${key}`);
+    }
+    return value;
+  }
+
   private readOptionalIntegerArgument(args: Record<string, unknown>, key: string) {
     const value = this.readOptionalNumberArgument(args, key);
     if (value === undefined) {
@@ -670,6 +766,7 @@ export class McpService {
     const { columnName, task } = entry;
     const assignee = task.assignee as ({ id: string; name: string; email?: string | null } | null);
     const story = task.story as ({ id: string; title: string; status?: string | null } | null);
+    const activities = this.extractTaskActivities(task.id, task.description);
     return {
       id: task.id,
       title: task.title,
@@ -718,7 +815,70 @@ export class McpService {
             status: task.parentTask.status
           }
         : null,
-      parentMessageId: task.parentMessageId ?? null
+      parentMessageId: task.parentMessageId ?? null,
+      activitySummary: this.buildActivitySummary(activities),
+      activities
+    };
+  }
+
+  private extractTaskActivities(taskId: string, description: string | null | undefined): TaskActivity[] {
+    const markdown = description ?? "";
+    const pattern = new RegExp(TASK_CHECKLIST_ACTIVITY_PATTERN.source, TASK_CHECKLIST_ACTIVITY_PATTERN.flags);
+    const activities: TaskActivity[] = [];
+    const parentStack: Array<{ indentWidth: number; activity: TaskActivity }> = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(markdown)) !== null) {
+      const itemIndex = activities.length;
+      const indentWidth = this.measureActivityIndent(match[1] ?? "");
+      const marker = match[3] ?? " ";
+      const text = (match[5] ?? "").replace(/\s+/g, " ").trim();
+      const line = markdown.slice(0, match.index).split("\n").length;
+
+      while (parentStack.length > 0 && parentStack[parentStack.length - 1].indentWidth >= indentWidth) {
+        parentStack.pop();
+      }
+
+      const parentActivity = parentStack[parentStack.length - 1]?.activity ?? null;
+      const activity: TaskActivity = {
+        id: this.buildTaskActivityId(taskId, itemIndex),
+        taskId,
+        itemIndex,
+        checked: marker.toLowerCase() === "x",
+        text,
+        line,
+        depth: parentActivity ? parentActivity.depth + 1 : 0,
+        parentActivityId: parentActivity?.id ?? null,
+        childActivityIds: []
+      };
+
+      if (parentActivity) {
+        parentActivity.childActivityIds.push(activity.id);
+      }
+
+      activities.push(activity);
+      parentStack.push({ indentWidth, activity });
+    }
+
+    return activities;
+  }
+
+  private measureActivityIndent(indent: string) {
+    return indent.replace(/\t/g, "  ").length;
+  }
+
+  private buildTaskActivityId(taskId: string, itemIndex: number) {
+    return `${taskId}:activity:${itemIndex}`;
+  }
+
+  private buildActivitySummary(activities: TaskActivity[]): TaskActivitySummary {
+    const completed = activities.filter((activity) => activity.checked).length;
+    return {
+      total: activities.length,
+      completed,
+      pending: activities.length - completed,
+      root: activities.filter((activity) => activity.parentActivityId === null).length,
+      child: activities.filter((activity) => activity.parentActivityId !== null).length
     };
   }
 
@@ -795,7 +955,10 @@ export class McpService {
       parentTask?: { id: string; title: string; status: string } | null;
       parentMessage?: { id: string; body: string } | null;
       childTasks?: Array<{ id: string; title: string; status: string; descriptionPreview: string }>;
+      activitySummary?: TaskActivitySummary;
+      activities?: TaskActivity[];
     };
+    const activitySummary = task.activitySummary ?? { total: 0, completed: 0, pending: 0, root: 0, child: 0 };
 
     const lines = [
       "Historia:",
@@ -804,6 +967,7 @@ export class McpService {
         : "- Sin historia asociada",
       "Tarea:",
       `- ${task.id} | ${task.title} | status=${task.status} | description=${this.toSingleLine(task.description, 160)}`,
+      `- activities=${activitySummary.completed}/${activitySummary.total} completed | pending=${activitySummary.pending} | child=${activitySummary.child}`,
       `- parentTask=${task.parentTask ? `${task.parentTask.id} ${task.parentTask.title} (${task.parentTask.status})` : "none"}`,
       `- parentMessage=${task.parentMessage ? `${task.parentMessage.id} ${this.toSingleLine(task.parentMessage.body, 120)}` : "none"}`,
       `- childTasks=${task.childTasks?.length ?? 0}`,
@@ -812,11 +976,23 @@ export class McpService {
 
     if ((task.childTasks?.length ?? 0) > 0) {
       lines.splice(
-        6,
+        8,
         0,
         ...task.childTasks!.map(
           (childTask) =>
             `- child=[${childTask.id}] ${childTask.title} | status=${childTask.status} | description=${childTask.descriptionPreview}`
+        )
+      );
+    }
+
+    if ((task.activities?.length ?? 0) > 0) {
+      lines.splice(
+        5,
+        0,
+        "Actividades:",
+        ...task.activities!.map(
+          (activity) =>
+            `${"  ".repeat(activity.depth)}- [${activity.checked ? "x" : " "}] ${activity.id} | itemIndex=${activity.itemIndex} | line=${activity.line} | parent=${activity.parentActivityId ?? "none"} | ${this.toSingleLine(activity.text, 160)}`
         )
       );
     }
@@ -850,7 +1026,12 @@ export class McpService {
     ) => {
       const connector = depth === 0 ? "" : isLast ? "\\- " : "|- ";
       const marker = node.id === hierarchy.taskId ? " <consultada>" : "";
-      lines.push(`${prefix}${connector}[${node.id}] ${node.title} | status=${node.status}${marker}`);
+      const activities = this.extractTaskActivities(node.id, node.description);
+      const activitySummary = this.buildActivitySummary(activities);
+      const activitySuffix = activitySummary.total > 0
+        ? ` | activities=${activitySummary.completed}/${activitySummary.total} child=${activitySummary.child}`
+        : "";
+      lines.push(`${prefix}${connector}[${node.id}] ${node.title} | status=${node.status}${activitySuffix}${marker}`);
 
       const childPrefix = depth === 0 ? "" : `${prefix}${isLast ? "   " : "|  "}`;
       node.children.forEach((child, index) => {
