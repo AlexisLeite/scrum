@@ -189,10 +189,10 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     const maxHeight = isMaximized
       ? viewportAllowance
       : Math.min(Math.round(window.innerHeight * 0.75), viewportAllowance);
-    content.style.height = "auto";
+    const contentHeight = measureRichDescriptionContentHeight(content);
     const nextHeight = isMaximized
       ? maxHeight
-      : Math.min(Math.max(content.scrollHeight, minHeight), maxHeight);
+      : Math.min(Math.max(contentHeight, minHeight), maxHeight);
     content.style.height = `${nextHeight}px`;
   }, [isMaximized, minHeight]);
 
@@ -1088,6 +1088,37 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
 
   return editorField;
 });
+
+function measureRichDescriptionContentHeight(content: HTMLElement) {
+  const currentHeight = content.getBoundingClientRect().height;
+  const liveHeight = content.scrollHeight;
+  if (liveHeight > Math.ceil(currentHeight)) {
+    return liveHeight;
+  }
+  return measureRichDescriptionContentHeightWithClone(content);
+}
+
+function measureRichDescriptionContentHeightWithClone(content: HTMLElement) {
+  const contentRect = content.getBoundingClientRect();
+  const clone = content.cloneNode(true) as HTMLElement;
+  clone.setAttribute("aria-hidden", "true");
+  clone.contentEditable = "false";
+  clone.style.position = "absolute";
+  clone.style.visibility = "hidden";
+  clone.style.pointerEvents = "none";
+  clone.style.left = "-10000px";
+  clone.style.top = "0";
+  clone.style.width = `${contentRect.width}px`;
+  clone.style.height = "auto";
+  clone.style.minHeight = "0";
+  clone.style.maxHeight = "none";
+  clone.style.overflow = "hidden";
+
+  document.body.appendChild(clone);
+  const measuredHeight = clone.scrollHeight;
+  clone.remove();
+  return measuredHeight || content.scrollHeight;
+}
 
 function buildUploadingImageMarkdown(alt: string, previewUrl: string) {
   return `![${escapeMarkdownLabel(alt)}](${previewUrl})`;

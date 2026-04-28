@@ -211,6 +211,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
           class: contentEditableClassName,
           tabindex: "0"
         },
+        handleScrollToSelection: preserveVisibleSelectionScroll,
         nodeViews: {
           list_item: (node, view, getPos) => new ListItemNodeView(
             node,
@@ -613,6 +614,50 @@ function focusEditorView(view: EditorView, readOnly: boolean) {
     return;
   }
   view.focus();
+}
+
+const SELECTION_SCROLL_TOLERANCE_PX = 96;
+
+type VerticalRect = Pick<DOMRect, "top" | "bottom">;
+
+function preserveVisibleSelectionScroll(view: EditorView) {
+  const selection = view.state.selection;
+  if (!selection.empty) {
+    return false;
+  }
+
+  let selectionRect: VerticalRect;
+  try {
+    selectionRect = view.coordsAtPos(selection.head, 1);
+  } catch {
+    return false;
+  }
+
+  return isRectVisibleInScrollChain(selectionRect, view.dom);
+}
+
+function isRectVisibleInScrollChain(rect: VerticalRect, startElement: HTMLElement) {
+  for (let element: HTMLElement | null = startElement; element; element = element.parentElement) {
+    if (!isScrollableElement(element)) {
+      continue;
+    }
+    if (!isRectVerticallyNearContainer(rect, element.getBoundingClientRect())) {
+      return false;
+    }
+  }
+
+  return isRectVerticallyNearContainer(rect, new DOMRect(0, 0, window.innerWidth, window.innerHeight));
+}
+
+function isScrollableElement(element: HTMLElement) {
+  const style = window.getComputedStyle(element);
+  const overflowY = style.overflowY;
+  return (overflowY === "auto" || overflowY === "scroll") && element.scrollHeight > element.clientHeight;
+}
+
+function isRectVerticallyNearContainer(rect: VerticalRect, containerRect: VerticalRect) {
+  return rect.bottom >= containerRect.top - SELECTION_SCROLL_TOLERANCE_PX &&
+    rect.top <= containerRect.bottom + SELECTION_SCROLL_TOLERANCE_PX;
 }
 
 function serializeSelectionMarkdown(state: EditorState) {

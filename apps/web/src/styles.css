@@ -3614,6 +3614,7 @@ html .drawer-content .card {
 
 html {
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 
 body {
