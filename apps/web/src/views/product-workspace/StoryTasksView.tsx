@@ -19,6 +19,7 @@ import {
 import {
   buildStatusOptions,
   getErrorMessage,
+  isStoryClosedStatus,
   normalizeSearchValue,
   SprintItem,
   StoryItem,
@@ -43,6 +44,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
   const stories = store.stories.getItems(productScopeKey) as StoryItem[];
   const storiesLoading = store.stories.isLoadingScope(productScopeKey);
   const currentStory = stories.find((story) => story.id === storyId);
+  const canCreateTaskForCurrentStory = canManageTasks && !isStoryClosedStatus(currentStory?.status);
   usePageTitle(currentStory ? `Tareas de historia: ${currentStory.title}` : "Tareas de historia");
   const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
   const sprintsLoading = store.sprints.isLoadingScope(productScopeKey);
@@ -120,8 +122,8 @@ export const StoryTasksView = observer(function StoryTasksView() {
         controller,
         productId,
         stories: task
-          ? stories.map((story) => ({ id: story.id, title: story.title }))
-          : [{ id: storyId, title: currentStory?.title ?? "Historia actual" }],
+          ? stories.map((story) => ({ id: story.id, title: story.title, status: story.status }))
+          : [{ id: storyId, title: currentStory?.title ?? "Historia actual", status: currentStory?.status }],
         sprints,
         assignees: assignableUsers,
         statusOptions,
@@ -148,7 +150,7 @@ export const StoryTasksView = observer(function StoryTasksView() {
       <section className="card">
         <div className="stack-h pb-3">
           <h3>Tareas de la historia</h3>
-          {canManageTasks ? (
+          {canCreateTaskForCurrentStory ? (
             <button type="button" className="sm btn btn-primary btn-icon" onClick={() => openTaskDrawer()} aria-label="Crear tarea">
               +
             </button>

@@ -103,15 +103,17 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
           >
             <FiEdit3 aria-hidden="true" focusable="false" />
           </button>
-          <button
-            type="button"
-            className="btn btn-secondary btn-icon story-list-icon-button"
-            aria-label={`Crear tarea para ${story.title}`}
-            onClick={() => onCreateTask(story)}
-            disabled={!canManageTasks}
-          >
-            <FiPlus aria-hidden="true" focusable="false" />
-          </button>
+          {!canReopenStory ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-icon story-list-icon-button"
+              aria-label={`Crear tarea para ${story.title}`}
+              onClick={() => onCreateTask(story)}
+              disabled={!canManageTasks}
+            >
+              <FiPlus aria-hidden="true" focusable="false" />
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn btn-secondary btn-icon story-list-icon-button"

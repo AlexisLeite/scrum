@@ -16,7 +16,7 @@ import { ActivityTimeline } from "./ActivityTimeline";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { RichDescriptionField } from "./RichDescriptionField";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
-import { buildStatusOptions, getStoryStatusLabel } from "../../../views/product-workspace/ProductWorkspaceViewShared";
+import { buildStatusOptions, getStoryStatusLabel, isStoryClosedStatus } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 
 type EditableStory = {
   id: string;
@@ -193,6 +193,7 @@ export function StoryUpsertionForm(props: {
   const statusOptions = buildStatusOptions(...tasks.map((task) => task.status));
   const orderedTasks = React.useMemo(() => [...tasks].sort(compareStoryTasks), [tasks]);
   const backlogTasks = orderedTasks.filter((task) => !task.sprintId);
+  const canCreateTaskForStory = Boolean(story && !isStoryClosedStatus(story.status));
   const sprintTaskGroups = orderedTasks.reduce<Array<{ sprintId: string; sprintName: string; tasks: StoryTask[] }>>(
     (groups, task) => {
       if (!task.sprintId) {
@@ -320,7 +321,7 @@ export function StoryUpsertionForm(props: {
       new TaskUpsertionDrawer({
         controller,
         productId,
-        stories: [{ id: story.id, title: title.trim() || story.title }],
+        stories: [{ id: story.id, title: title.trim() || story.title, status: story.status }],
         sprints,
         assignees,
         statusOptions,
@@ -547,14 +548,16 @@ export function StoryUpsertionForm(props: {
         <section className="card">
           <div className="section-head">
             <h4>Tareas de la historia</h4>
-            <button
-              type="button"
-              className="btn btn-primary btn-icon"
-              onClick={() => openTaskDrawer()}
-              aria-label="Crear tarea de la historia"
-            >
-              +
-            </button>
+            {canCreateTaskForStory ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-icon"
+                onClick={() => openTaskDrawer()}
+                aria-label="Crear tarea de la historia"
+              >
+                +
+              </button>
+            ) : null}
           </div>
           <p className="muted">
             Orden visible: primero backlog y luego tareas comprometidas en sprint. Cada tarjeta resume estado,

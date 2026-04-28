@@ -90,7 +90,7 @@ export const SprintBoardView = observer(function SprintBoardView() {
       new TaskUpsertionDrawer({
         controller,
         productId,
-        stories: stories.map((story) => ({ id: story.id, title: story.title })),
+        stories: stories.map((story) => ({ id: story.id, title: story.title, status: story.status })),
         sprints,
         assignees: boardAssignees,
         statusOptions,

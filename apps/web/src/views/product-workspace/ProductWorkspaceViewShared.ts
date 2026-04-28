@@ -98,7 +98,7 @@ export type BoardTask = {
   unfinishedSprintCount?: number;
   isHistoricalUnfinished?: boolean;
   assignee?: { id: string; name: string } | null;
-  story?: { id: string; title: string } | null;
+  story?: { id: string; title: string; status?: string | null } | null;
 };
 
 export type TaskDetail = {
@@ -115,7 +115,7 @@ export type TaskDetail = {
   actualHours?: number | null;
   unfinishedSprintCount?: number;
   assignee?: { id: string; name: string } | null;
-  story?: { id: string; title: string } | null;
+  story?: { id: string; title: string; status?: string | null } | null;
   sprint?: { id: string; name: string } | null;
 };
 

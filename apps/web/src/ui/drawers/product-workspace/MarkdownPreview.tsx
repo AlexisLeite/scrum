@@ -567,7 +567,11 @@ async function openInternalReference(
           .map((entry) => ({ id: entry.id, name: entry.name }));
 
         const statusOptions = buildStatusOptions(detail.status);
-        const storyOptions = (stories as Array<{ id: string; title: string }>).map((entry) => ({ id: entry.id, title: entry.title }));
+        const storyOptions = (stories as Array<{ id: string; title: string; status?: string | null }>).map((entry) => ({
+          id: entry.id,
+          title: entry.title,
+          status: entry.status
+        }));
         const sprintOptions = (sprints as Array<{ id: string; name: string }>).map((entry) => ({ id: entry.id, name: entry.name }));
 
         store.drawers.add(new TaskUpsertionDrawer({

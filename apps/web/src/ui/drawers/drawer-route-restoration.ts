@@ -234,9 +234,10 @@ export async function openDrawerFromRouteDescriptor(
         ]);
 
         return {
-          stories: (stories as Array<{ id: string; title: string }>).map((story) => ({
+          stories: (stories as Array<{ id: string; title: string; status?: string | null }>).map((story) => ({
             id: story.id,
-            title: story.title
+            title: story.title,
+            status: story.status
           })),
           sprints: sprints as Array<{ id: string; name: string; teamId?: string | null }>,
           assignees: (assignableUsers as Array<{
@@ -259,7 +260,8 @@ export async function openDrawerFromRouteDescriptor(
             const minimalStories = editableTask.storyId
               ? [{
                   id: editableTask.storyId,
-                  title: taskDetail.story?.title ?? "Historia actual"
+                  title: taskDetail.story?.title ?? "Historia actual",
+                  status: taskDetail.story?.status
                 }]
               : [];
             const minimalSprints = editableTask.sprintId

@@ -31,7 +31,7 @@ type PendingTask = {
   createdAt: string;
   status: string;
   unfinishedSprintCount?: number;
-  story?: { id: string; title: string } | null;
+  story?: { id: string; title: string; status?: string | null } | null;
   assignee?: { id: string; name: string } | null;
 };
 
@@ -321,7 +321,7 @@ export function SprintUpsertionForm(props: {
   const openTaskDetail = React.useCallback(
     (task: PendingTask) => {
       const canEditTask = canEditTaskFields(user, productId);
-      const relatedStory = task.story ? [{ id: task.story.id, title: task.story.title }] : [];
+      const relatedStory = task.story ? [{ id: task.story.id, title: task.story.title, status: task.story.status }] : [];
       const relatedSprint = sprint ? [{ id: sprint.id, name: sprint.name }] : [];
       const relatedAssignee = task.assignee ? [{ id: task.assignee.id, name: task.assignee.name }] : [];
 

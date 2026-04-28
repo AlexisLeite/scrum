@@ -202,7 +202,8 @@ export class TasksService {
               }
             : {
                 id: true,
-                title: true
+                title: true,
+                status: true
               }
         },
         sprint: {
@@ -399,10 +400,14 @@ export class TasksService {
   }
 
   async create(storyId: string, dto: CreateTaskDto, user: AuthUser) {
-    const story = await this.prisma.userStory.findUnique({ where: { id: storyId } });
+    const story = await this.prisma.userStory.findUnique({
+      where: { id: storyId },
+      select: { id: true, productId: true, status: true }
+    });
     if (!story) {
       throw new BadRequestException("Story not found");
     }
+    this.assertStoryAcceptsNewTasks(story.status);
     const canCreateBacklogTask = this.permissionsService.hasProductPermission(
       user,
       story.productId,
@@ -518,7 +523,7 @@ export class TasksService {
     if (hasStoryId && dto.storyId !== current.storyId) {
       const story = await this.prisma.userStory.findUnique({
         where: { id: dto.storyId },
-        select: { id: true, productId: true }
+        select: { id: true, productId: true, status: true }
       });
       if (!story) {
         throw new BadRequestException("Story not found");
@@ -526,6 +531,7 @@ export class TasksService {
       if (story.productId !== current.productId) {
         throw new BadRequestException("Story does not belong to task product");
       }
+      this.assertStoryAcceptsNewTasks(story.status);
     }
 
     let targetTeamId: string | null | undefined;
@@ -951,6 +957,7 @@ export class TasksService {
 
   async createFromMessage(taskId: string, messageId: string, dto: CreateTaskFromMessageDto, user: AuthUser) {
     const task = await this.getTaskWithAccess(taskId, user, { withChildren: false, withMessages: false });
+    this.assertStoryAcceptsNewTasks(task.story.status);
     await this.assertSprintIsMutable(task.sprintId, user);
     if (
       !this.permissionsService.hasProductPermission(user, task.productId, "product.admin.story.task.create")
@@ -1067,13 +1074,17 @@ export class TasksService {
       throw new ForbiddenException("Insufficient product permission");
     }
 
-    const story = await this.prisma.userStory.findUnique({ where: { id: dto.storyId } });
+    const story = await this.prisma.userStory.findUnique({
+      where: { id: dto.storyId },
+      select: { id: true, productId: true, status: true }
+    });
     if (!story) {
       throw new BadRequestException("Story not found");
     }
     if (story.productId !== sprint.productId) {
       throw new BadRequestException("Story does not belong to sprint product");
     }
+    this.assertStoryAcceptsNewTasks(story.status);
     const lineage = await this.resolveTaskLineage(sprint.productId, dto.storyId, dto.parentTaskId, dto.sourceMessageId);
 
     return this.createTaskRecord({
@@ -1176,6 +1187,12 @@ export class TasksService {
     });
 
     return task;
+  }
+
+  private assertStoryAcceptsNewTasks(status: StoryStatus) {
+    if (status === StoryStatus.CLOSED) {
+      throw new BadRequestException("Closed stories cannot be selected for tasks");
+    }
   }
 
   private async resolveTaskLineage(

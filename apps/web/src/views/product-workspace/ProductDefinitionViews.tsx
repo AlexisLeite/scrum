@@ -554,7 +554,7 @@ export const SprintDefinitionView = observer(function SprintDefinitionView() {
       new TaskUpsertionDrawer({
         controller,
         productId,
-        stories: stories.map((story) => ({ id: story.id, title: story.title })),
+        stories: stories.map((story) => ({ id: story.id, title: story.title, status: story.status })),
         sprints,
         assignees: resolveTaskAssigneeOptions(task),
         statusOptions,
@@ -1263,7 +1263,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
         new TaskUpsertionDrawer({
           controller,
           productId,
-          stories: stories.map((story) => ({ id: story.id, title: story.title })),
+          stories: stories.map((story) => ({ id: story.id, title: story.title, status: story.status })),
           sprints,
           assignees,
           statusOptions,
@@ -1323,7 +1323,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
       new TaskUpsertionDrawer({
         controller,
         productId,
-        stories: stories.map((story) => ({ id: story.id, title: story.title })),
+        stories: stories.map((story) => ({ id: story.id, title: story.title, status: story.status })),
         sprints,
         assignees,
         statusOptions,
@@ -1352,7 +1352,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
       new TaskUpsertionDrawer({
         controller,
         productId,
-        stories: stories.map((story) => ({ id: story.id, title: story.title })),
+        stories: stories.map((story) => ({ id: story.id, title: story.title, status: story.status })),
         sprints,
         assignees,
         statusOptions,
@@ -1473,7 +1473,7 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
             options={{
               controller,
               productId,
-              stories: stories.map((story) => ({ id: story.id, title: story.title })),
+              stories: stories.map((story) => ({ id: story.id, title: story.title, status: story.status })),
               sprints,
               assignees,
               statusOptions,

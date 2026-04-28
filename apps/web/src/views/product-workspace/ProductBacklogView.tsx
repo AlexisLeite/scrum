@@ -380,7 +380,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
         new TaskUpsertionDrawer({
           controller,
           productId,
-          stories: availableStories.map((entry) => ({ id: entry.id, title: entry.title })),
+          stories: availableStories.map((entry) => ({ id: entry.id, title: entry.title, status: entry.status })),
           sprints,
           assignees,
           statusOptions: buildStatusOptions(),
@@ -410,7 +410,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
         new TaskUpsertionDrawer({
           controller,
           productId,
-          stories: availableStories.map((entry) => ({ id: entry.id, title: entry.title })),
+          stories: availableStories.map((entry) => ({ id: entry.id, title: entry.title, status: entry.status })),
           sprints,
           assignees,
           statusOptions: buildStatusOptions(taskDetail.status),

@@ -10,7 +10,7 @@ import { RichDescriptionField } from "./RichDescriptionField";
 import { TaskMessageThread, type TaskMessageNode } from "./TaskMessageThread";
 import { isTaskTerminalStatus } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 
-type StoryOption = { id: string; title: string };
+type StoryOption = { id: string; title: string; status?: string | null };
 type SprintOption = { id: string; name: string; teamId?: string | null };
 type AssigneeOption = { id: string; name: string; teamIds?: string[]; sprintIds?: string[] };
 type RootSortOrder = "desc" | "asc";

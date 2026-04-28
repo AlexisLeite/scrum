@@ -17,6 +17,7 @@ import { TaskCollaborationPanel, type TaskCollaborationDetail } from "./TaskColl
 import { RichDescriptionField } from "./RichDescriptionField";
 import { TaskCompletionDialog } from "./TaskCompletionDialog";
 import { StoryUpsertionDrawer } from "./StoryUpsertionDrawer";
+import { isStoryClosedStatus } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 import "./task-upsertion-form.css";
 
 type EditableTask = {
@@ -33,7 +34,7 @@ type EditableTask = {
   unfinishedSprintCount?: number;
 };
 
-type TaskStoryOption = { id: string; title: string };
+type TaskStoryOption = { id: string; title: string; status?: string | null };
 type TaskSprintOption = { id: string; name: string; teamId?: string | null };
 type TaskAssigneeOption = { id: string; name: string; teamIds?: string[]; sprintIds?: string[] };
 type TaskCloseSnapshot = {
@@ -323,6 +324,10 @@ function getInitialEffortPoints(task?: EditableTask) {
   return task ? "" : DEFAULT_NEW_TASK_EFFORT_POINTS;
 }
 
+function getSelectableTaskStories(stories: TaskStoryOption[]) {
+  return stories.filter((story) => !isStoryClosedStatus(story.status));
+}
+
 function CompactOptionGroup(props: {
   ariaLabel: string;
   values: Array<number | string>;
@@ -420,7 +425,7 @@ export function TaskUpsertionForm(props: {
   }));
   const [catalogLoading, setCatalogLoading] = React.useState(false);
   const [catalogError, setCatalogError] = React.useState("");
-  const [storyOptions, setStoryOptions] = React.useState(initialStories);
+  const [storyOptions, setStoryOptions] = React.useState(() => getSelectableTaskStories(initialStories));
   const { stories, sprints, assignees } = catalog;
   const [taskDrawerData, setTaskDrawerData] = React.useState<PrefetchedTaskDrawerData | undefined>(
     () => options.prefetchedTaskDrawerData
@@ -606,7 +611,7 @@ export function TaskUpsertionForm(props: {
   }, [controller, options.prefetchedTaskDrawerData, task?.id]);
 
   React.useEffect(() => {
-    setStoryOptions(stories);
+    setStoryOptions(getSelectableTaskStories(stories));
   }, [stories]);
 
   React.useEffect(() => {
@@ -737,7 +742,9 @@ export function TaskUpsertionForm(props: {
 
   const handleStoryCreated = React.useCallback(async (savedStory: TaskStoryOption) => {
     const latestStories = await controller.loadStories(options.productId) as TaskStoryOption[];
-    const nextStoryOptions = latestStories.map((story) => ({ id: story.id, title: story.title }));
+    const nextStoryOptions = getSelectableTaskStories(
+      latestStories.map((story) => ({ id: story.id, title: story.title, status: story.status }))
+    );
     setStoryOptions(nextStoryOptions);
     setForm((current) => ({ ...current, storyId: savedStory.id }));
   }, [controller, options.productId, setForm]);

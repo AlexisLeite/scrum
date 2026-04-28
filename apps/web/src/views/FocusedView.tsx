@@ -44,7 +44,7 @@ type FocusedTask = {
   storyId?: string | null;
   assigneeId?: string | null;
   assignee?: { id: string; name: string } | null;
-  story?: { id: string; title: string } | null;
+  story?: { id: string; title: string; status?: string | null } | null;
   sprint?: { id: string; name: string; teamId?: string | null } | null;
   product?: { id: string; key?: string | null; name: string } | null;
   effortPoints?: number | null;
@@ -72,7 +72,7 @@ type FocusedBoard = {
   }>;
 };
 
-type StoryItem = { id: string; title: string };
+type StoryItem = { id: string; title: string; status?: string | null };
 type SprintItem = { id: string; name: string; teamId?: string | null };
 type DrawerOption = { id: string; name: string };
 type TaskDrawerAssigneeOption = DrawerOption & {
@@ -652,7 +652,8 @@ export const FocusedView = observer(function FocusedView() {
       if (!stories) {
         stories = (await productController.loadStories(productId, { syncStore: false }) as StoryItem[]).map((story) => ({
           id: story.id,
-          title: story.title
+          title: story.title,
+          status: story.status
         }));
         taskDrawerCatalogRef.current.storiesByProductId.set(productId, stories);
       }
@@ -770,7 +771,7 @@ export const FocusedView = observer(function FocusedView() {
       const canCreateLinkedTask = canCreateTaskFromMessage(user, productId);
 
       const minimalStories: StoryItem[] = task.story?.id
-        ? [{ id: task.story.id, title: task.story.title ?? "Historia actual" }]
+        ? [{ id: task.story.id, title: task.story.title ?? "Historia actual", status: task.story.status }]
         : task.storyId
           ? [{ id: task.storyId, title: "Historia actual" }]
           : [];
