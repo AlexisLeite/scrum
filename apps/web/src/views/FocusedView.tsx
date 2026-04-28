@@ -641,6 +641,13 @@ export const FocusedView = observer(function FocusedView() {
     setSelectedContextKey(value);
   }, []);
 
+  const updateTaskDrawerStoryCatalog = React.useCallback((productId: string, stories: StoryItem[]) => {
+    taskDrawerCatalogRef.current.storiesByProductId.set(
+      productId,
+      stories.map((story) => ({ id: story.id, title: story.title, status: story.status }))
+    );
+  }, []);
+
   const ensureTaskDrawerCatalog = React.useCallback(
     async (productId: string): Promise<TaskDrawerCatalog> => {
       const cachedStories = taskDrawerCatalogRef.current.storiesByProductId.get(productId);
@@ -826,6 +833,7 @@ export const FocusedView = observer(function FocusedView() {
             allowTaskCreation: canCreateLinkedTask,
             allowMessageCreation: canCommentOnVisibleTask(user, task, user?.id, productId),
             deferredCatalogLoader: loadDeferredCatalog,
+            onStoryCatalogRefreshed: (stories) => updateTaskDrawerStoryCatalog(productId, stories),
             task: {
               id: task.id,
               title: task.title,
@@ -857,6 +865,7 @@ export const FocusedView = observer(function FocusedView() {
           definitionReadOnly: !canEditFocusedTask,
           allowTaskCreation: canCreateLinkedTask,
           allowMessageCreation: canCommentOnVisibleTask(user, task, user?.id, productId),
+          onStoryCatalogRefreshed: (stories) => updateTaskDrawerStoryCatalog(productId, stories),
           task: {
             id: task.id,
             title: task.title,
@@ -874,7 +883,16 @@ export const FocusedView = observer(function FocusedView() {
         })
       );
     },
-    [allAssignableUsers, ensureTaskDrawerCatalog, productController, reloadBoard, statusOptions, store.drawers, user]
+    [
+      allAssignableUsers,
+      ensureTaskDrawerCatalog,
+      productController,
+      reloadBoard,
+      statusOptions,
+      store.drawers,
+      updateTaskDrawerStoryCatalog,
+      user
+    ]
   );
 
   const openFocusedCreationDrawer = React.useCallback(
@@ -896,9 +914,9 @@ export const FocusedView = observer(function FocusedView() {
             fixedSprintId: creationContext.sprintId,
             allowSprintChange: false,
             showCreationPlacementSelector: true,
+            onStoryCatalogRefreshed: (stories) => updateTaskDrawerStoryCatalog(creationContext.productId, stories),
             onDone: async () => {
               await reloadBoard();
-              await productController.loadStories(creationContext.productId, { syncStore: false });
             }
           })
         );
@@ -906,7 +924,7 @@ export const FocusedView = observer(function FocusedView() {
         setError(getErrorMessage(loadError));
       }
     },
-    [ensureTaskDrawerCatalog, productController, reloadBoard, statusOptions, store.drawers]
+    [ensureTaskDrawerCatalog, productController, reloadBoard, statusOptions, store.drawers, updateTaskDrawerStoryCatalog]
   );
 
   const handleCreateTask = React.useCallback(

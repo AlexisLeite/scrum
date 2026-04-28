@@ -104,6 +104,7 @@ export type TaskUpsertionDrawerOptions = {
   deferredTaskLoader?: () => Promise<DeferredTaskDrawerLoadResult>;
   deferredCatalogLoader?: () => Promise<DeferredTaskDrawerCatalog>;
   prefetchedTaskDrawerData?: PrefetchedTaskDrawerData;
+  onStoryCatalogRefreshed?: (stories: TaskStoryOption[]) => Promise<void> | void;
   onDone?: () => Promise<void> | void;
 };
 
@@ -406,6 +407,7 @@ export function TaskUpsertionForm(props: {
     allowMessageCreation = true,
     definitionReadOnly = readOnly,
     deferredCatalogLoader,
+    onStoryCatalogRefreshed,
     onDone
   } = options;
 
@@ -742,12 +744,14 @@ export function TaskUpsertionForm(props: {
 
   const handleStoryCreated = React.useCallback(async (savedStory: TaskStoryOption) => {
     const latestStories = await controller.loadStories(options.productId) as TaskStoryOption[];
-    const nextStoryOptions = getSelectableTaskStories(
-      latestStories.map((story) => ({ id: story.id, title: story.title, status: story.status }))
-    );
-    setStoryOptions(nextStoryOptions);
+    const nextStories = latestStories.map((story) => ({ id: story.id, title: story.title, status: story.status }));
+    setCatalog((current) => ({ ...current, stories: nextStories }));
+    setStoryOptions(getSelectableTaskStories(nextStories));
     setForm((current) => ({ ...current, storyId: savedStory.id }));
-  }, [controller, options.productId, setForm]);
+    if (onStoryCatalogRefreshed) {
+      await onStoryCatalogRefreshed(nextStories);
+    }
+  }, [controller, onStoryCatalogRefreshed, options.productId, setForm]);
 
   const openCreateStoryDrawer = React.useCallback(() => {
     setForm((current) => ({ ...current, storyId: "" }));
@@ -1133,6 +1137,7 @@ export function TaskUpsertionForm(props: {
             allowMessageCreation={allowMessageCreation}
             initialDetail={taskDrawerData?.detail}
             initialMessageDraft={taskDrawerData?.messageDraft}
+            onStoryCatalogRefreshed={onStoryCatalogRefreshed}
             onChanged={onDone}
           />
         ) : null}

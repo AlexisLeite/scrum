@@ -121,6 +121,7 @@ export function TaskCollaborationPanel(props: {
   allowMessageCreation?: boolean;
   initialDetail?: TaskCollaborationDetail | null;
   initialMessageDraft?: DraftDto | null;
+  onStoryCatalogRefreshed?: (stories: StoryOption[]) => Promise<void> | void;
   onChanged?: () => Promise<void> | void;
 }) {
   const {
@@ -137,6 +138,7 @@ export function TaskCollaborationPanel(props: {
     allowMessageCreation = true,
     initialDetail,
     initialMessageDraft,
+    onStoryCatalogRefreshed,
     onChanged
   } = props;
   const store = useRootStore();
@@ -268,6 +270,7 @@ export function TaskCollaborationPanel(props: {
           definitionReadOnly: readOnlyForTarget,
           allowTaskCreation,
           allowMessageCreation: allowMessagesForTarget,
+          onStoryCatalogRefreshed,
           task: {
             id: taskDetail.id,
             title: taskDetail.title,
@@ -296,6 +299,7 @@ export function TaskCollaborationPanel(props: {
       statusOptions,
       stories,
       store.drawers,
+      onStoryCatalogRefreshed,
       viewer
     ]
   );
@@ -330,6 +334,7 @@ export function TaskCollaborationPanel(props: {
         definitionReadOnly: readOnly,
         allowTaskCreation,
         allowMessageCreation,
+        onStoryCatalogRefreshed,
         onDone: refresh
       })
     );
@@ -345,7 +350,8 @@ export function TaskCollaborationPanel(props: {
     sprints,
     statusOptions,
     stories,
-    store.drawers
+    store.drawers,
+    onStoryCatalogRefreshed
   ]);
 
   const openChildTaskDrawer = React.useCallback(async (childTaskId: string) => {
@@ -372,6 +378,7 @@ export function TaskCollaborationPanel(props: {
         definitionReadOnly: readOnly,
         allowTaskCreation,
         allowMessageCreation,
+        onStoryCatalogRefreshed,
         onDone: refresh
       })
     );
@@ -387,7 +394,8 @@ export function TaskCollaborationPanel(props: {
     sprints,
     statusOptions,
     stories,
-    store.drawers
+    store.drawers,
+    onStoryCatalogRefreshed
   ]);
 
   const submitMessage = React.useCallback(async () => {
