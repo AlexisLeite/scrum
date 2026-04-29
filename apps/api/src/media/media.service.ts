@@ -63,3 +63,13 @@ export function resolveMediaRoot() {
 
   return resolve("/root/repos/scrum/shared/media");
 }
+
+export function buildPublicMediaUrl(publicPath: string) {
+  const base = process.env.PUBLIC_API_URL;
+
+  if (!base) {
+    throw new Error("PUBLIC_API_URL is not defined");
+  }
+
+  return `${base}${publicPath}`;
+}

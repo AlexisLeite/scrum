@@ -1,15 +1,18 @@
-import { HttpException, ValidationPipe, type INestApplication } from "@nestjs/common";
+import { BadRequestException, HttpException, ValidationPipe, type INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { ExpressAdapter } from "@nestjs/platform-express";
 import cookieParser from "cookie-parser";
 import express, { type Express } from "express";
 import type { NextFunction } from "express";
 import { static as serveStatic } from "express";
-import { Request, Response } from "express";
+import type { Request, Response } from "express";
+import { Readable } from "node:stream";
 import { AppModule } from "./app.module";
 import { CollaborationService } from "./collaboration/collaboration.service";
 import { resolveMediaRoot } from "./media/media.service";
 import { McpService } from "./mcp/mcp.service";
+import type { ReportIncidentDto } from "./reports/reports.dto";
+import type { IncidentReportImage } from "./reports/reports.service";
 import { ReportsService } from "./reports/reports.service";
 
 function normalizeOrigins(rawOrigins: string | undefined): string[] {
@@ -76,8 +79,7 @@ export async function configureApp(app: INestApplication): Promise<void> {
       });
     }
 
-    void reportsService
-      .createIncident(req.body ?? {}, extractApiKeyFromRequest(req))
+    void createIncidentFromRequest(reportsService, req)
       .then((result) => res.status(201).json(result))
       .catch((error) => {
         if (error instanceof HttpException) {
@@ -112,6 +114,105 @@ function extractApiKeyFromRequest(req: Request) {
   }
 
   return undefined;
+}
+
+async function createIncidentFromRequest(reportsService: ReportsService, req: Request) {
+  const parsedRequest = await parseReportRequest(req);
+  return reportsService.createIncident(
+    parsedRequest.body,
+    extractApiKeyFromRequest(req),
+    parsedRequest.images
+  );
+}
+
+async function parseReportRequest(req: Request): Promise<{
+  body: ReportIncidentDto;
+  images: IncidentReportImage[];
+}> {
+  if (!isMultipartRequest(req)) {
+    return {
+      body: req.body ?? {},
+      images: []
+    };
+  }
+
+  try {
+    const formData = await readRequestFormData(req);
+    const body = {
+      apiKey: getTextFormValue(formData, "apiKey"),
+      title: getTextFormValue(formData, "title"),
+      body: getTextFormValue(formData, "body")
+    } satisfies Partial<ReportIncidentDto>;
+
+    return {
+      body: body as ReportIncidentDto,
+      images: await getImageFiles(formData)
+    };
+  } catch (error) {
+    if (error instanceof HttpException) {
+      throw error;
+    }
+
+    throw new BadRequestException("Invalid multipart report request");
+  }
+}
+
+function isMultipartRequest(req: Request) {
+  return req.is("multipart/form-data") === "multipart/form-data";
+}
+
+async function readRequestFormData(req: Request) {
+  const requestInit = {
+    method: req.method,
+    headers: buildWebHeaders(req),
+    body: Readable.toWeb(req) as ReadableStream<Uint8Array>,
+    duplex: "half"
+  } satisfies RequestInit & { duplex: "half" };
+  const url = `${req.protocol}://${req.get("host") ?? "localhost"}${req.originalUrl}`;
+  return new Request(url, requestInit).formData();
+}
+
+function buildWebHeaders(req: Request) {
+  const headers = new Headers();
+  Object.entries(req.headers).forEach(([name, value]) => {
+    if (typeof value === "string") {
+      headers.set(name, value);
+      return;
+    }
+
+    value?.forEach((entry) => headers.append(name, entry));
+  });
+  return headers;
+}
+
+function getTextFormValue(formData: FormData, name: string) {
+  const value = formData.get(name);
+  if (value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new BadRequestException(`Report field "${name}" must be text`);
+  }
+
+  return value;
+}
+
+async function getImageFiles(formData: FormData): Promise<IncidentReportImage[]> {
+  const entries = formData.getAll("images");
+  return Promise.all(
+    entries.map(async (entry) => {
+      if (typeof entry === "string") {
+        throw new BadRequestException("Report images must be uploaded files");
+      }
+
+      return {
+        originalname: entry.name,
+        mimetype: entry.type,
+        buffer: Buffer.from(await entry.arrayBuffer())
+      };
+    })
+  );
 }
 
 export async function createHttpApp(): Promise<INestApplication> {
