@@ -362,6 +362,27 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       return () => window.removeEventListener("resize", handleResize);
     }, [sourceModeActive, syncSourceTextareaHeight]);
 
+    const handleSourceTextareaChange = React.useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const nextMarkdown = event.target.value;
+      setSourceMarkdown(nextMarkdown);
+
+      const view = viewRef.current;
+      if (!view) {
+        if (nextMarkdown !== lastMarkdownRef.current) {
+          lastMarkdownRef.current = nextMarkdown;
+          onChangeRef.current(nextMarkdown);
+        }
+        return;
+      }
+
+      const currentMarkdown = serializeMarkdown(view.state.doc);
+      if (currentMarkdown === nextMarkdown) {
+        return;
+      }
+
+      replaceDocumentMarkdown(view, nextMarkdown);
+    }, []);
+
     const runCommand = React.useCallback((command: (state: EditorState, dispatch?: EditorView["dispatch"], view?: EditorView) => boolean) => {
       const view = viewRef.current;
       if (!view || readOnlyRef.current || sourceModeActiveRef.current) {
@@ -623,9 +644,10 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
               className="prosemirror-source-textarea"
               value={sourceMarkdown}
               rows={1}
-              readOnly
+              readOnly={readOnly}
               aria-label="Source markdown"
               spellCheck={false}
+              onChange={handleSourceTextareaChange}
             />
           </div>
         ) : null}
