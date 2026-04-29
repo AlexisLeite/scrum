@@ -916,79 +916,83 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         user={store.session.user}
         allowReadOnlyTaskCheckboxToggle={allowReadOnlyTaskCheckboxToggle}
         onTaskCheckboxToggle={onTaskCheckboxToggle}
-        toolbarExtras={(
-          <>
-            <ToolbarButton
-              label="Autogenerar markdown"
-              onMouseDown={(event) => {
-                if (editorInteractionDisabled) {
-                  return;
-                }
+        toolbarExtras={({ sourceModeActive }) => {
+          const richEditorActionDisabled = editorInteractionDisabled || sourceModeActive;
 
-                event.preventDefault();
-                captureGenerationSelection();
-              }}
-              onClick={() => {
-                if (editorInteractionDisabled) {
-                  return;
-                }
-
-                if (!generationSelectionRef.current) {
-                  captureGenerationSelection();
-                }
-                setGenerationError("");
-                setGenerationDialogOpen(true);
-              }}
-              disabled={editorInteractionDisabled}
-            >
-              <LuWandSparkles aria-hidden="true" />
-            </ToolbarButton>
-            <ToolbarButton
-              label="Insertar video"
-              onClick={() => {
-                if (!editorInteractionDisabled) {
-                  videoInputRef.current?.click();
-                }
-              }}
-              disabled={editorInteractionDisabled}
-            >
-              <FiVideo aria-hidden="true" />
-            </ToolbarButton>
-            <span className="prosemirror-toolbar-separator" />
-            {onPrint ? (
+          return (
+            <>
               <ToolbarButton
-                label="Imprimir"
-                onClick={() => {
-                  void onPrint();
-                }}
-                disabled={printDisabled || isGeneratingMarkdown}
-              >
-                <FiPrinter aria-hidden="true" />
-              </ToolbarButton>
-            ) : null}
-            {onSave ? (
-              <ToolbarButton
-                label="Guardar"
-                onClick={() => {
-                  if (saveDisabled || editorInteractionDisabled) {
+                label="Autogenerar markdown"
+                onMouseDown={(event) => {
+                  if (richEditorActionDisabled) {
                     return;
                   }
-                  void onSave();
+
+                  event.preventDefault();
+                  captureGenerationSelection();
                 }}
-                disabled={saveDisabled || editorInteractionDisabled}
+                onClick={() => {
+                  if (richEditorActionDisabled) {
+                    return;
+                  }
+
+                  if (!generationSelectionRef.current) {
+                    captureGenerationSelection();
+                  }
+                  setGenerationError("");
+                  setGenerationDialogOpen(true);
+                }}
+                disabled={richEditorActionDisabled}
               >
-                <FiSave aria-hidden="true" />
+                <LuWandSparkles aria-hidden="true" />
               </ToolbarButton>
-            ) : null}
-            <ToolbarButton
-              label={isMaximized ? "Salir de pantalla completa" : "Pantalla completa"}
-              pressed={isMaximized}
-              onClick={() => setMaximized((current) => !current)}
-            >
-              {isMaximized ? <FiMinimize2 aria-hidden="true" /> : <FiMaximize2 aria-hidden="true" />}
-            </ToolbarButton>
-          </>
-        )}
+              <ToolbarButton
+                label="Insertar video"
+                onClick={() => {
+                  if (!richEditorActionDisabled) {
+                    videoInputRef.current?.click();
+                  }
+                }}
+                disabled={richEditorActionDisabled}
+              >
+                <FiVideo aria-hidden="true" />
+              </ToolbarButton>
+              <span className="prosemirror-toolbar-separator" />
+              {onPrint ? (
+                <ToolbarButton
+                  label="Imprimir"
+                  onClick={() => {
+                    void onPrint();
+                  }}
+                  disabled={printDisabled || isGeneratingMarkdown}
+                >
+                  <FiPrinter aria-hidden="true" />
+                </ToolbarButton>
+              ) : null}
+              {onSave ? (
+                <ToolbarButton
+                  label="Guardar"
+                  onClick={() => {
+                    if (saveDisabled || editorInteractionDisabled) {
+                      return;
+                    }
+                    void onSave();
+                  }}
+                  disabled={saveDisabled || editorInteractionDisabled}
+                >
+                  <FiSave aria-hidden="true" />
+                </ToolbarButton>
+              ) : null}
+              <ToolbarButton
+                label={isMaximized ? "Salir de pantalla completa" : "Pantalla completa"}
+                pressed={isMaximized}
+                onClick={() => setMaximized((current) => !current)}
+              >
+                {isMaximized ? <FiMinimize2 aria-hidden="true" /> : <FiMaximize2 aria-hidden="true" />}
+              </ToolbarButton>
+            </>
+          );
+        }}
       />
       <input
         ref={videoInputRef}

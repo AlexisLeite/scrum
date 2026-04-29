@@ -258,6 +258,10 @@
   cursor: text;
 }
 
+.prosemirror-editor-host.is-source-hidden {
+  display: none;
+}
+
 .rich-description-field.is-maximized .prosemirror-editor-host {
   flex: 1;
   min-height: 0;
@@ -282,6 +286,59 @@
   --rich-heading-4-size: 1.40625rem;
   --rich-heading-5-size: 1.1875rem;
   --rich-heading-6-size: 1rem;
+}
+
+.prosemirror-source-host {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow: auto;
+}
+
+.prosemirror-source-textarea {
+  display: block;
+  width: min(100%, 920px);
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-main);
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  overflow: visible !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  resize: none;
+  scrollbar-gutter: auto;
+  transition: none;
+}
+
+.prosemirror-source-textarea:focus,
+.prosemirror-source-textarea:focus-visible {
+  border-color: transparent;
+  outline: none;
+  box-shadow: none !important;
+}
+
+.prosemirror-source-host>.prosemirror-source-textarea {
+  margin: 0 auto !important;
+  overflow: visible !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+}
+
+.rich-description-field.is-maximized .prosemirror-source-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
 }
 
 .rich-description-content.ProseMirror {

@@ -88,6 +88,12 @@ export type ProseMirrorMarkdownEditorHandle = {
   getContentElement: () => HTMLElement | null;
 };
 
+type MarkdownEditorMode = "normal" | "source";
+
+type ToolbarExtrasRenderState = {
+  sourceModeActive: boolean;
+};
+
 type ProseMirrorMarkdownEditorProps = {
   markdown: string;
   onChange: (markdown: string) => void;
@@ -100,7 +106,7 @@ type ProseMirrorMarkdownEditorProps = {
   user?: { id?: string; name?: string; email?: string } | null;
   allowReadOnlyTaskCheckboxToggle?: boolean;
   onTaskCheckboxToggle?: (payload: { itemIndex: number; checked: boolean; text: string }) => Promise<void> | void;
-  toolbarExtras?: React.ReactNode;
+  toolbarExtras?: React.ReactNode | ((state: ToolbarExtrasRenderState) => React.ReactNode);
 };
 
 export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEditorHandle, ProseMirrorMarkdownEditorProps>(
@@ -121,6 +127,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     } = props;
     const shellRef = React.useRef<HTMLDivElement | null>(null);
     const toolbarRef = React.useRef<HTMLDivElement | null>(null);
+    const sourceTextareaRef = React.useRef<HTMLTextAreaElement | null>(null);
     const activeToolbarItemRef = React.useRef<HTMLElement | null>(null);
     const viewRef = React.useRef<EditorView | null>(null);
     const readOnlyRef = React.useRef(readOnly);
@@ -136,13 +143,18 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     const [connectionStatus, setConnectionStatus] = React.useState<"connecting" | "connected" | "disconnected" | null>(null);
     const [tableRows, setTableRows] = React.useState(3);
     const [tableColumns, setTableColumns] = React.useState(3);
+    const [editorMode, setEditorMode] = React.useState<MarkdownEditorMode>("normal");
+    const [sourceMarkdown, setSourceMarkdown] = React.useState(markdownValue);
     const collaborationName = collaboration?.entityId && !collaborationDisabled ? buildDocumentName(collaboration) : "";
+    const sourceModeActive = editorMode === "source";
+    const sourceModeActiveRef = React.useRef(sourceModeActive);
 
     readOnlyRef.current = readOnly;
     onImageCropRef.current = onImageCrop;
     allowReadOnlyTaskCheckboxToggleRef.current = allowReadOnlyTaskCheckboxToggle;
     onTaskCheckboxToggleRef.current = onTaskCheckboxToggle;
     onChangeRef.current = onChange;
+    sourceModeActiveRef.current = sourceModeActive;
 
     React.useEffect(() => {
       initialMarkdownRef.current = markdownValue;
@@ -232,6 +244,9 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
           const nextMarkdown = serializeMarkdown(nextState.doc);
           if (nextMarkdown !== lastMarkdownRef.current) {
             lastMarkdownRef.current = nextMarkdown;
+            if (sourceModeActiveRef.current) {
+              setSourceMarkdown(nextMarkdown);
+            }
             onChangeRef.current(nextMarkdown);
           }
           setStateVersion((current) => current + 1);
@@ -239,6 +254,9 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       });
       viewRef.current = view;
       lastMarkdownRef.current = serializeMarkdown(view.state.doc);
+      if (sourceModeActiveRef.current) {
+        setSourceMarkdown(lastMarkdownRef.current);
+      }
 
       const cleanupStatus = provider?.onStatus((status) => {
         setConnectionStatus(status);
@@ -285,11 +303,68 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       }
       replaceDocumentMarkdown(view, markdownValue);
       lastMarkdownRef.current = markdownValue;
+      if (sourceModeActiveRef.current) {
+        setSourceMarkdown(markdownValue);
+      }
     }, [collaborationName, markdownValue]);
+
+    const readCurrentMarkdown = React.useCallback(() => {
+      return viewRef.current ? serializeMarkdown(viewRef.current.state.doc) : markdownValue;
+    }, [markdownValue]);
+
+    const activateNormalMode = React.useCallback(() => {
+      setEditorMode("normal");
+      window.requestAnimationFrame(() => {
+        const view = viewRef.current;
+        if (view) {
+          focusEditorView(view, readOnlyRef.current);
+        }
+      });
+    }, []);
+
+    const toggleSourceMode = React.useCallback(() => {
+      if (sourceModeActiveRef.current) {
+        activateNormalMode();
+        return;
+      }
+
+      setSourceMarkdown(readCurrentMarkdown());
+      setEditorMode("source");
+      window.requestAnimationFrame(() => sourceTextareaRef.current?.focus({ preventScroll: true }));
+    }, [activateNormalMode, readCurrentMarkdown]);
+
+    const syncSourceTextareaHeight = React.useCallback(() => {
+      const textarea = sourceTextareaRef.current;
+      if (!textarea) {
+        return;
+      }
+
+      textarea.style.height = "auto";
+      const parentHeight = textarea.parentElement?.clientHeight ?? 0;
+      textarea.style.height = `${Math.max(parentHeight, textarea.scrollHeight)}px`;
+    }, []);
+
+    React.useLayoutEffect(() => {
+      if (!sourceModeActive) {
+        return;
+      }
+
+      syncSourceTextareaHeight();
+    }, [sourceMarkdown, sourceModeActive, syncSourceTextareaHeight]);
+
+    React.useEffect(() => {
+      if (!sourceModeActive) {
+        return undefined;
+      }
+
+      const handleResize = () => syncSourceTextareaHeight();
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
+    }, [sourceModeActive, syncSourceTextareaHeight]);
 
     const runCommand = React.useCallback((command: (state: EditorState, dispatch?: EditorView["dispatch"], view?: EditorView) => boolean) => {
       const view = viewRef.current;
-      if (!view || readOnlyRef.current) {
+      if (!view || readOnlyRef.current || sourceModeActiveRef.current) {
         return;
       }
       command(view.state, view.dispatch, view);
@@ -298,7 +373,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
 
     const insertMarkdownAtSelection = React.useCallback((markdown: string) => {
       const view = viewRef.current;
-      if (!view || readOnlyRef.current) {
+      if (!view || readOnlyRef.current || sourceModeActiveRef.current) {
         return false;
       }
       const fragment = parseMarkdownSlice(markdown);
@@ -316,6 +391,12 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
 
     const handleToolbarKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === "Tab" && !event.shiftKey) {
+        if (sourceModeActiveRef.current) {
+          event.preventDefault();
+          sourceTextareaRef.current?.focus({ preventScroll: true });
+          return;
+        }
+
         const view = viewRef.current;
         if (view) {
           event.preventDefault();
@@ -415,6 +496,8 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
 
     const currentState = viewRef.current?.state ?? null;
     const selectedBlock = currentState ? resolveSelectedBlock(currentState) : "paragraph";
+    const editorCommandDisabled = readOnly || sourceModeActive;
+    const toolbarExtrasNode = typeof toolbarExtras === "function" ? toolbarExtras({ sourceModeActive }) : toolbarExtras;
     void stateVersion;
 
     return (
@@ -428,17 +511,21 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
           onFocusCapture={handleToolbarFocusCapture}
           onKeyDown={handleToolbarKeyDown}
         >
-          <ToolbarButton label="Deshacer" disabled={readOnly} onClick={() => runCommand(collaborationName ? yUndoCommand : undo)}>
+          <ToolbarButton label="Modo source" pressed={sourceModeActive} onClick={toggleSourceMode}>
+            <FiCode aria-hidden="true" />
+          </ToolbarButton>
+          <span className="prosemirror-toolbar-separator" />
+          <ToolbarButton label="Deshacer" disabled={editorCommandDisabled} onClick={() => runCommand(collaborationName ? yUndoCommand : undo)}>
             <FiRotateCcw aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarButton label="Rehacer" disabled={readOnly} onClick={() => runCommand(collaborationName ? yRedoCommand : redo)}>
+          <ToolbarButton label="Rehacer" disabled={editorCommandDisabled} onClick={() => runCommand(collaborationName ? yRedoCommand : redo)}>
             <FiRotateCw aria-hidden="true" />
           </ToolbarButton>
           <span className="prosemirror-toolbar-separator" />
           <select
             className="prosemirror-toolbar-select"
             value={selectedBlock}
-            disabled={readOnly}
+            disabled={editorCommandDisabled}
             aria-label="Tipo de bloque"
             onChange={(event) => {
               const value = event.target.value;
@@ -456,26 +543,26 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
             <option value="code_block">Codigo</option>
           </select>
           <span className="prosemirror-toolbar-separator" />
-          <ToolbarButton label="Negrita" disabled={readOnly} pressed={currentState ? markIsActive(currentState, "strong") : false} onClick={() => runCommand(toggleMark(markdownSchema.marks.strong))}>
+          <ToolbarButton label="Negrita" disabled={editorCommandDisabled} pressed={currentState ? markIsActive(currentState, "strong") : false} onClick={() => runCommand(toggleMark(markdownSchema.marks.strong))}>
             <FiBold aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarButton label="Italica" disabled={readOnly} pressed={currentState ? markIsActive(currentState, "em") : false} onClick={() => runCommand(toggleMark(markdownSchema.marks.em))}>
+          <ToolbarButton label="Italica" disabled={editorCommandDisabled} pressed={currentState ? markIsActive(currentState, "em") : false} onClick={() => runCommand(toggleMark(markdownSchema.marks.em))}>
             <FiItalic aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarButton label="Codigo inline" disabled={readOnly} pressed={currentState ? markIsActive(currentState, "code") : false} onClick={() => runCommand(toggleMark(markdownSchema.marks.code))}>
+          <ToolbarButton label="Codigo inline" disabled={editorCommandDisabled} pressed={currentState ? markIsActive(currentState, "code") : false} onClick={() => runCommand(toggleMark(markdownSchema.marks.code))}>
             <FiCode aria-hidden="true" />
           </ToolbarButton>
           <span className="prosemirror-toolbar-separator" />
-          <ToolbarButton label="Lista" disabled={readOnly} onClick={() => runCommand(wrapInList(markdownSchema.nodes.bullet_list))}>
+          <ToolbarButton label="Lista" disabled={editorCommandDisabled} onClick={() => runCommand(wrapInList(markdownSchema.nodes.bullet_list))}>
             <FiList aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarButton label="Lista checkbox" disabled={readOnly} onClick={() => insertMarkdownAtSelection("\n\n- [ ] \n\n")}>
+          <ToolbarButton label="Lista checkbox" disabled={editorCommandDisabled} onClick={() => insertMarkdownAtSelection("\n\n- [ ] \n\n")}>
             <FiCheckSquare aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarButton label="Lista ordenada" disabled={readOnly} onClick={() => runCommand(wrapInList(markdownSchema.nodes.ordered_list))}>
+          <ToolbarButton label="Lista ordenada" disabled={editorCommandDisabled} onClick={() => runCommand(wrapInList(markdownSchema.nodes.ordered_list))}>
             <LuListOrdered aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarButton label="Cita" disabled={readOnly} onClick={() => runCommand(wrapIn(markdownSchema.nodes.blockquote))}>
+          <ToolbarButton label="Cita" disabled={editorCommandDisabled} onClick={() => runCommand(wrapIn(markdownSchema.nodes.blockquote))}>
             <LuQuote aria-hidden="true" />
           </ToolbarButton>
           <span className="prosemirror-toolbar-separator" />
@@ -485,7 +572,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
               value={tableRows}
               min={MIN_TABLE_SIZE}
               max={MAX_TABLE_SIZE}
-              disabled={readOnly}
+              disabled={editorCommandDisabled}
               onChange={setTableRows}
             />
             <span className="prosemirror-table-control-divider" aria-hidden="true">x</span>
@@ -494,31 +581,31 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
               value={tableColumns}
               min={MIN_TABLE_SIZE}
               max={MAX_TABLE_SIZE}
-              disabled={readOnly}
+              disabled={editorCommandDisabled}
               onChange={setTableColumns}
             />
             <ToolbarButton
               label={`Insertar tabla ${tableRows} por ${tableColumns}`}
-              disabled={readOnly}
+              disabled={editorCommandDisabled}
               onClick={() => insertMarkdownAtSelection(buildTableMarkdown(tableRows, tableColumns))}
             >
               <FiTable aria-hidden="true" />
             </ToolbarButton>
           </div>
-          <ToolbarButton label="Insertar bloque de codigo" disabled={readOnly} onClick={() => insertMarkdownAtSelection("\n\n```txt\n\n```\n\n")}>
+          <ToolbarButton label="Insertar bloque de codigo" disabled={editorCommandDisabled} onClick={() => insertMarkdownAtSelection("\n\n```txt\n\n```\n\n")}>
             <FiCode aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarButton label="Linea horizontal" disabled={readOnly} onClick={() => insertMarkdownAtSelection("\n\n---\n\n")}>
+          <ToolbarButton label="Linea horizontal" disabled={editorCommandDisabled} onClick={() => insertMarkdownAtSelection("\n\n---\n\n")}>
             <FiMinus aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarButton label="Enlace" disabled={readOnly} onClick={() => {
+          <ToolbarButton label="Enlace" disabled={editorCommandDisabled} onClick={() => {
             const href = window.prompt("URL del enlace");
             if (!href) return;
             runCommand(toggleMark(markdownSchema.marks.link, { href }));
           }}>
             <FiLink aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarButton label="Insertar imagen por URL" disabled={readOnly} onClick={() => {
+          <ToolbarButton label="Insertar imagen por URL" disabled={editorCommandDisabled} onClick={() => {
             const src = window.prompt("URL de la imagen");
             if (!src) return;
             const alt = window.prompt("Texto alternativo") ?? "Imagen";
@@ -526,10 +613,28 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
           }}>
             <FiImage aria-hidden="true" />
           </ToolbarButton>
-          {toolbarExtras}
+          {toolbarExtrasNode}
         </div>
         {connectionStatus ? <span className={`prosemirror-collab-status is-${connectionStatus}`}>{collaborationStatusLabel(connectionStatus)}</span> : null}
-        <div ref={shellRef} className="prosemirror-editor-host" onMouseDown={handleEditorHostMouseDown} />
+        {sourceModeActive ? (
+          <div className="rich-description-content prosemirror-source-host">
+            <textarea
+              ref={sourceTextareaRef}
+              className="prosemirror-source-textarea"
+              value={sourceMarkdown}
+              rows={1}
+              readOnly
+              aria-label="Source markdown"
+              spellCheck={false}
+            />
+          </div>
+        ) : null}
+        <div
+          ref={shellRef}
+          className={`prosemirror-editor-host${sourceModeActive ? " is-source-hidden" : ""}`}
+          onMouseDown={handleEditorHostMouseDown}
+          aria-hidden={sourceModeActive ? "true" : undefined}
+        />
       </div>
     );
   }
