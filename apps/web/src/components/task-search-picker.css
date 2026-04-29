@@ -112,13 +112,16 @@
 
 .task-search-picker-table th:nth-child(2),
 .task-search-picker-table td:nth-child(2) {
-  width: 4rem;
+  width: var(--crud-icon-column-width);
+  min-width: var(--crud-icon-column-width);
+  max-width: var(--crud-icon-column-width);
   white-space: nowrap;
 }
 
 .task-search-picker-table th:last-child,
 .task-search-picker-table td:last-child {
   width: 7.6rem;
+  min-width: 7.6rem;
   white-space: nowrap;
 }
 

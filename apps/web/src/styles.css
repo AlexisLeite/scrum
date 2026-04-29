@@ -1550,7 +1550,10 @@ a.btn-secondary,
 .sprint-task-table td:nth-child(3),
 .sprint-task-table th:last-child,
 .sprint-task-table td:last-child {
-  width: 4rem;
+  width: 60px;
+  min-width: 60px;
+  max-width: 60px;
+  padding-inline: 0.35rem;
   white-space: nowrap;
 }
 
@@ -1716,6 +1719,9 @@ a.btn-secondary,
 }
 
 .table {
+  --crud-icon-column-width: 60px;
+  --crud-single-action-column-width: 7rem;
+
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
@@ -1746,6 +1752,16 @@ a.btn-secondary,
 
 .table tr:last-child td {
   border-bottom: none;
+}
+
+.products-backoffice-table th:last-child,
+.products-backoffice-table td:last-child {
+  min-width: 14rem;
+  white-space: nowrap;
+}
+
+.products-backoffice-table .row-actions {
+  flex-wrap: wrap;
 }
 
 .story-priority-cell {
@@ -2458,12 +2474,15 @@ a.btn-secondary,
 }
 
 .pill {
+  display: inline-flex;
+  align-items: center;
   border-radius: var(--radius-pill);
   border: 1px solid var(--pill-border);
   padding: 0.22rem 0.56rem;
   font-size: 0.8rem;
   color: var(--pill-text);
   background: var(--pill-bg);
+  white-space: nowrap;
 }
 
 .admin-user-list-item-meta {
@@ -2929,7 +2948,8 @@ html .drawer-content .card {
 
 .api-key-table th:last-child,
 .api-key-table td:last-child {
-  width: 1%;
+  width: var(--crud-single-action-column-width);
+  min-width: var(--crud-single-action-column-width);
   white-space: nowrap;
 }
 
@@ -2948,6 +2968,12 @@ html .drawer-content .card {
 .api-key-table th:nth-child(5),
 .api-key-table td:nth-child(5) {
   min-width: 11rem;
+}
+
+.api-key-table th:nth-child(6),
+.api-key-table td:nth-child(6) {
+  min-width: 7rem;
+  white-space: nowrap;
 }
 
 .api-key-primary-cell {
@@ -4348,6 +4374,19 @@ th {
   .markdown-preview {
     margin: auto;
   }
+}
+
+.story__tasks__table th:last-child,
+.story__tasks__table td:last-child {
+  width: var(--crud-single-action-column-width);
+  min-width: var(--crud-single-action-column-width);
+  white-space: nowrap;
+}
+
+.story__tasks__table th:nth-child(5),
+.story__tasks__table td:nth-child(5) {
+  width: 7rem;
+  min-width: 7rem;
 }
 
 .navigation__separate {

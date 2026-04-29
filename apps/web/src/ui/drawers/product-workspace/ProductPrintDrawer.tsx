@@ -1100,7 +1100,7 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
           <div className="product-print-table-shell">
             <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
               <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-                <table className="table sprint-task-table product-print-table">
+                <table className="table product-print-table">
                   <thead>
                     <tr>
                       <th>Orden</th>

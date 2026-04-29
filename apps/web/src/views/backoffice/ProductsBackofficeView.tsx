@@ -90,7 +90,7 @@ export const ProductsBackofficeView = observer(function ProductsBackofficeView()
           />
         </label>
 
-        <table className="table">
+        <table className="table products-backoffice-table">
           <thead>
             <tr>
               <th>Key</th>

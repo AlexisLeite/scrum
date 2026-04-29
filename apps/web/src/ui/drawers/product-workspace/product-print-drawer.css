@@ -402,7 +402,9 @@
 
 .table.product-print-table {
   width: 100%;
+  min-width: 54rem;
   border: none;
+  table-layout: fixed;
 }
 
 .product-print-table th,
@@ -414,10 +416,20 @@
 .product-print-table th:first-child,
 .product-print-table td:first-child,
 .product-print-table th:nth-child(3),
-.product-print-table td:nth-child(3),
+.product-print-table td:nth-child(3) {
+  width: var(--crud-icon-column-width);
+  min-width: var(--crud-icon-column-width);
+  max-width: var(--crud-icon-column-width);
+  padding-inline: 0.35rem;
+  white-space: nowrap;
+}
+
 .product-print-table th:last-child,
 .product-print-table td:last-child {
-  width: 1%;
+  width: 6.5rem;
+  min-width: 6.5rem;
+  max-width: 6.5rem;
+  padding-inline: 0.35rem;
   white-space: nowrap;
 }
 
@@ -478,7 +490,6 @@
 }
 
 .product-print-actions-cell {
-  width: 1%;
   padding-inline: 0.35rem;
 }
 
