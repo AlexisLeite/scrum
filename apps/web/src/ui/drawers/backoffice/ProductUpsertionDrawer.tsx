@@ -316,6 +316,7 @@ export function ProductUpsertionForm(props: {
         onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
         rows={4}
         disabled={editorDisabled}
+        printTitle={name}
         onSave={() => submit({ closeAfterSave: false })}
         saveDisabled={formDisabled}
         uriStateKey={descriptionUriStateKey}

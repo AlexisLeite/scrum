@@ -594,6 +594,7 @@ function SortablePrintItemRow(props: {
                 onChange={(nextValue) => onDraftChange(item.id, nextValue)}
                 rows={12}
                 productId={productId}
+                printTitle={item.title}
                 onSave={() => onSaveContent(item)}
                 saveDisabled={!isDirty || contentState?.saving}
                 uriStateKey={`product-print-content:${productId}:${item.id}`}

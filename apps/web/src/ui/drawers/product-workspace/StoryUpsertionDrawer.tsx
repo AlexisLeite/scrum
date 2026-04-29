@@ -484,6 +484,7 @@ export function StoryUpsertionForm(props: {
         onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
         disabled={editorDisabled}
         productId={productId}
+        printTitle={title}
         onSave={() => submit({ closeAfterSave: false })}
         saveDisabled={formDisabled || !title.trim()}
         uriStateKey={descriptionUriStateKey}

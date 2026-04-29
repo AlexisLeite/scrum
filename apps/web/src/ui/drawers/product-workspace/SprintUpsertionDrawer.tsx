@@ -395,6 +395,7 @@ export function SprintUpsertionForm(props: {
         value={goal}
         onChange={setGoal}
         rows={4}
+        printTitle={name}
         onSave={() => submit(undefined, { closeAfterSave: false })}
         saveDisabled={saving}
         uriStateKey={goalUriStateKey}

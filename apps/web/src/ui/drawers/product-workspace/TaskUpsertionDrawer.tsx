@@ -6,7 +6,6 @@ import { useDraftPersistence } from "../../../hooks/useDraftPersistence";
 import { productTaskDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { filterAssignableUsersBySprintScope } from "../../../lib/assignable-users";
-import { downloadTaskDocument } from "../../../util/product-print-pdf";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import type { TaskDrawerRouteDescriptor } from "../drawer-route-state";
@@ -417,8 +416,6 @@ export function TaskUpsertionForm(props: {
   const customHoursInputRef = React.useRef<HTMLInputElement | null>(null);
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
-  const [printing, setPrinting] = React.useState(false);
-  const [printError, setPrintError] = React.useState("");
   const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false);
   const [catalog, setCatalog] = React.useState<DeferredTaskDrawerCatalog>(() => ({
     stories: initialStories,
@@ -815,7 +812,6 @@ export function TaskUpsertionForm(props: {
   );
   const hasUnsavedChanges = !readOnly && !isHydratingRemote && !taskCloseSnapshotsEqual(currentCloseSnapshot, closeBaseline);
   const saveActionDisabled = readOnly || isHydratingRemote || saving || !hasUnsavedChanges;
-  const canPrintTask = !saving && !isHydratingRemote && !printing && Boolean(title.trim());
   const taskDrawerDeferredSectionsReady = !task || taskDrawerData !== undefined || taskDrawerDataFailed;
 
   useDrawerCloseGuard({
@@ -823,28 +819,6 @@ export function TaskUpsertionForm(props: {
     drawerId,
     when: hasUnsavedChanges
   });
-
-  const handlePrint = async () => {
-    const taskTitle = title.trim();
-    if (!taskTitle) {
-      setPrintError("El titulo es obligatorio para descargar el PDF.");
-      return;
-    }
-
-    setPrintError("");
-    setPrinting(true);
-
-    try {
-      await downloadTaskDocument({
-        title: taskTitle,
-        description
-      });
-    } catch (downloadError) {
-      setPrintError(downloadError instanceof Error ? downloadError.message : "No se pudo descargar el PDF de la tarea.");
-    } finally {
-      setPrinting(false);
-    }
-  };
 
   return (
     <>
@@ -916,8 +890,8 @@ export function TaskUpsertionForm(props: {
           onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
           disabled={editorDisabled}
           productId={options.productId}
-          onPrint={() => void handlePrint()}
-          printDisabled={!canPrintTask}
+          printTitle={title}
+          printDisabled={saving || isHydratingRemote}
           onSave={!readOnly ? () => void persistTask() : undefined}
           saveDisabled={saveActionDisabled}
           uriStateKey={descriptionUriStateKey}
@@ -1102,7 +1076,7 @@ export function TaskUpsertionForm(props: {
             {readOnly ? "Cerrar" : closeLabel}
           </button>
         </div>
-        <DrawerErrorBanner messages={[saveError, error, printError, catalogError]} />
+        <DrawerErrorBanner messages={[saveError, error, catalogError]} />
         {task && !taskDrawerDeferredSectionsReady ? (
           <section className="card">
             <h4>Historial de actividad</h4>

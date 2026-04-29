@@ -249,6 +249,106 @@
   background: #ef4444;
 }
 
+.markdown-print-modal {
+  display: grid;
+  gap: 1rem;
+}
+
+.markdown-print-modal-head {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.markdown-print-modal-head h3 {
+  margin: 0;
+}
+
+.markdown-print-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.markdown-print-form label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.markdown-print-form input[type="text"],
+.markdown-print-form input:not([type]),
+.markdown-print-form textarea {
+  width: 100%;
+}
+
+.markdown-print-toggle {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  width: fit-content;
+}
+
+.markdown-print-toggle input {
+  width: 1rem;
+  height: 1rem;
+  min-height: 1rem;
+}
+
+.markdown-print-levels {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.markdown-print-levels legend {
+  padding: 0 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.markdown-print-level-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.markdown-print-level-grid label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 36px;
+  padding: 0 0.55rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-soft) 72%, transparent);
+  cursor: pointer;
+}
+
+.markdown-print-level-grid label.is-selected {
+  border-color: color-mix(in srgb, var(--accent-a) 70%, var(--border));
+  background: color-mix(in srgb, var(--accent-a) 14%, var(--bg-soft));
+}
+
+.markdown-print-level-grid input {
+  width: 0.95rem;
+  height: 0.95rem;
+  min-height: 0.95rem;
+}
+
+.markdown-print-levels:disabled .markdown-print-level-grid label {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.markdown-print-actions {
+  justify-content: flex-end;
+}
+
 .prosemirror-editor-host {
   flex: 1 1 auto;
   min-width: 0;

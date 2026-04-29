@@ -20,6 +20,8 @@ export type ProductPrintDocumentItem = {
   level: number;
 };
 
+export type MarkdownPrintTocLevel = 1 | 2 | 3 | 4 | 5 | 6;
+
 type InlineFormatting = {
   bold?: boolean;
   italics?: boolean;
@@ -43,6 +45,7 @@ type InlineContent = string | InlineTextRun;
 
 type RenderContext = {
   pendingTocItem: boolean;
+  tocHeadingLevels?: ReadonlySet<number>;
 };
 
 type PdfContentNode = Record<string, unknown>;
@@ -69,6 +72,12 @@ const PRINT_DOCUMENT_STYLES = {
     margin: [0, 18, 0, 0],
     fontSize: 12,
     color: "#4f6378"
+  },
+  coverDescription: {
+    margin: [0, 22, 0, 0],
+    fontSize: 12,
+    lineHeight: 1.4,
+    color: "#31475d"
   },
   tocTitle: {
     fontSize: 20,
@@ -1108,13 +1117,15 @@ function renderBlockTokens(tokens: Token[] | undefined, context: RenderContext):
       case "heading": {
         const headingToken = token as Tokens.Heading;
         const headingText = asTextContent(headingToken.tokens) as unknown as ContentTocItem["text"];
+        const headingLevel = clampHeadingLevel(headingToken.depth);
         const baseHeadingNode: ContentText = {
           text: headingText as ContentText["text"],
-          style: `heading${clampHeadingLevel(headingToken.depth)}`,
+          style: `heading${headingLevel}`,
           margin: [0, headingToken.depth <= 2 ? 18 : 12, 0, 8]
         };
+        const shouldIncludeInToc = context.pendingTocItem || context.tocHeadingLevels?.has(headingLevel);
 
-        if (context.pendingTocItem) {
+        if (shouldIncludeInToc) {
           const tocHeadingNode: ContentTocItem = {
             ...baseHeadingNode,
             text: headingText,
@@ -1262,6 +1273,17 @@ function formatPrintDate(now: Date) {
   });
 }
 
+function normalizeMarkdownPrintTocLevels(levels: MarkdownPrintTocLevel[] | undefined): MarkdownPrintTocLevel[] {
+  const normalizedLevels = new Set<MarkdownPrintTocLevel>();
+
+  for (const level of levels ?? [2, 3]) {
+    const resolvedLevel = clampHeadingLevel(level) as MarkdownPrintTocLevel;
+    normalizedLevels.add(resolvedLevel);
+  }
+
+  return [...normalizedLevels].sort((left, right) => left - right);
+}
+
 function slugify(value: string) {
   return value
     .normalize("NFD")
@@ -1375,12 +1397,99 @@ export function buildTaskPrintDocument(args: {
   };
 }
 
+export function buildMarkdownPrintDocument(args: {
+  title: string;
+  coverDescription?: string;
+  markdown: string;
+  includeToc: boolean;
+  tocLevels?: MarkdownPrintTocLevel[];
+  now?: Date;
+}): TDocumentDefinitions {
+  const now = args.now ?? new Date();
+  const title = args.title.trim() || "Documento markdown";
+  const description = args.coverDescription?.trim() ?? "";
+  const tocLevels = normalizeMarkdownPrintTocLevels(args.tocLevels);
+  const tokens = marked.lexer(args.markdown.trim(), {
+    gfm: true,
+    breaks: true
+  });
+  const documentContent = renderBlockTokens(tokens, {
+    pendingTocItem: false,
+    tocHeadingLevels: args.includeToc ? new Set<number>(tocLevels) : undefined
+  });
+
+  return {
+    pageSize: "A4",
+    pageMargins: [48, 56, 48, 60],
+    defaultStyle: PRINT_DOCUMENT_DEFAULT_STYLE,
+    content: [
+      {
+        stack: [
+          {
+            text: title,
+            style: "coverTitle"
+          },
+          {
+            text: formatPrintDate(now),
+            style: "coverDate"
+          },
+          ...(description
+            ? [{
+                text: description,
+                style: "coverDescription"
+              }]
+            : [])
+        ],
+        alignment: "center",
+        margin: [0, 205, 0, 0],
+        pageBreak: "after"
+      },
+      ...(args.includeToc
+        ? [{
+            stack: [
+              {
+                text: "Tabla de contenidos",
+                style: "tocTitle"
+              },
+              {
+                toc: {},
+                margin: [0, 14, 0, 0]
+              }
+            ],
+            pageBreak: "after"
+          }]
+        : []),
+      ...(documentContent.length > 0
+        ? documentContent
+        : [{
+            text: "Sin contenido markdown.",
+            color: "#4f6378",
+            italics: true
+          }])
+    ],
+    styles: PRINT_DOCUMENT_STYLES
+  };
+}
+
 export async function printProductDocument(args: {
   productName: string;
   items: ProductPrintDocumentItem[];
 }) {
   const pdfMake = await loadPdfMake();
   const document = buildProductPrintDocument(args);
+  await inlineDocumentImages(document.content, new Map());
+  await pdfMake.createPdf(document).print();
+}
+
+export async function printMarkdownDocument(args: {
+  title: string;
+  coverDescription?: string;
+  markdown: string;
+  includeToc: boolean;
+  tocLevels?: MarkdownPrintTocLevel[];
+}) {
+  const pdfMake = await loadPdfMake();
+  const document = buildMarkdownPrintDocument(args);
   await inlineDocumentImages(document.content, new Map());
   await pdfMake.createPdf(document).print();
 }

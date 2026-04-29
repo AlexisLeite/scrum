@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { FiMaximize2, FiMinimize2, FiPrinter, FiSave, FiVideo } from "react-icons/fi";
+import { FiMaximize2, FiMinimize2, FiSave, FiVideo } from "react-icons/fi";
 import { LuWandSparkles } from "react-icons/lu";
 import { useSearchParams } from "react-router-dom";
 import { apiClient } from "../../../api/client";
@@ -32,7 +32,7 @@ type RichDescriptionFieldProps = {
   rows?: number;
   disabled?: boolean;
   productId?: string;
-  onPrint?: (() => Promise<void> | void) | undefined;
+  printTitle?: string;
   printDisabled?: boolean;
   onSave?: (() => Promise<void> | void) | undefined;
   saveDisabled?: boolean;
@@ -89,7 +89,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     rows = 6,
     disabled = false,
     productId,
-    onPrint,
+    printTitle,
     printDisabled = false,
     onSave,
     saveDisabled = false,
@@ -916,6 +916,8 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         user={store.session.user}
         allowReadOnlyTaskCheckboxToggle={allowReadOnlyTaskCheckboxToggle}
         onTaskCheckboxToggle={onTaskCheckboxToggle}
+        printTitle={printTitle ?? label}
+        printDisabled={printDisabled || isGeneratingMarkdown}
         toolbarExtras={({ sourceModeActive }) => {
           const richEditorActionDisabled = editorInteractionDisabled || sourceModeActive;
 
@@ -958,17 +960,6 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
                 <FiVideo aria-hidden="true" />
               </ToolbarButton>
               <span className="prosemirror-toolbar-separator" />
-              {onPrint ? (
-                <ToolbarButton
-                  label="Imprimir"
-                  onClick={() => {
-                    void onPrint();
-                  }}
-                  disabled={printDisabled || isGeneratingMarkdown}
-                >
-                  <FiPrinter aria-hidden="true" />
-                </ToolbarButton>
-              ) : null}
               {onSave ? (
                 <ToolbarButton
                   label="Guardar"

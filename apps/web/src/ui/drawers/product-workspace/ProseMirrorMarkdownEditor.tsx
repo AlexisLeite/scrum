@@ -1,5 +1,5 @@
 import React from "react";
-import { FiBold, FiCheckSquare, FiCode, FiImage, FiItalic, FiLink, FiList, FiMinus, FiRotateCcw, FiRotateCw, FiTable } from "react-icons/fi";
+import { FiBold, FiCheckSquare, FiCode, FiImage, FiItalic, FiLink, FiList, FiMinus, FiPrinter, FiRotateCcw, FiRotateCw, FiTable } from "react-icons/fi";
 import { LuListOrdered, LuQuote } from "react-icons/lu";
 import { EditorState, Plugin, TextSelection } from "prosemirror-state";
 import { EditorView, type NodeView, type ViewMutationRecord } from "prosemirror-view";
@@ -55,11 +55,16 @@ import {
   parseMarkdownSlice,
   serializeMarkdown
 } from "./prosemirror-markdown";
+import { Modal, type ModalRenderContext } from "../../modals/Modal";
+import { ModalsController } from "../../modals/ModalsController";
+import { printMarkdownDocument, type MarkdownPrintTocLevel } from "../../../util/product-print-pdf";
 import "prosemirror-view/style/prosemirror.css";
 
 const YDOC_FRAGMENT_NAME = "prosemirror";
 const MIN_TABLE_SIZE = 1;
 const MAX_TABLE_SIZE = 12;
+const DEFAULT_PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [2, 3];
+const PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [1, 2, 3, 4, 5, 6];
 
 const CODE_LANGUAGE_OPTIONS = [
   { value: "txt", label: "Text" },
@@ -106,6 +111,8 @@ type ProseMirrorMarkdownEditorProps = {
   user?: { id?: string; name?: string; email?: string } | null;
   allowReadOnlyTaskCheckboxToggle?: boolean;
   onTaskCheckboxToggle?: (payload: { itemIndex: number; checked: boolean; text: string }) => Promise<void> | void;
+  printTitle?: string;
+  printDisabled?: boolean;
   toolbarExtras?: React.ReactNode | ((state: ToolbarExtrasRenderState) => React.ReactNode);
 };
 
@@ -123,6 +130,8 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       user,
       allowReadOnlyTaskCheckboxToggle = false,
       onTaskCheckboxToggle,
+      printTitle,
+      printDisabled = false,
       toolbarExtras
     } = props;
     const shellRef = React.useRef<HTMLDivElement | null>(null);
@@ -311,6 +320,16 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     const readCurrentMarkdown = React.useCallback(() => {
       return viewRef.current ? serializeMarkdown(viewRef.current.state.doc) : markdownValue;
     }, [markdownValue]);
+
+    const openPrintOptions = React.useCallback(() => {
+      const currentMarkdown = readCurrentMarkdown();
+      ModalsController.add(
+        new MarkdownPrintOptionsModal({
+          markdown: currentMarkdown,
+          defaultTitle: resolveDefaultPrintTitle(printTitle, currentMarkdown)
+        })
+      );
+    }, [printTitle, readCurrentMarkdown]);
 
     const activateNormalMode = React.useCallback(() => {
       setEditorMode("normal");
@@ -634,6 +653,10 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
           }}>
             <FiImage aria-hidden="true" />
           </ToolbarButton>
+          <span className="prosemirror-toolbar-separator" />
+          <ToolbarButton label="Imprimir" disabled={printDisabled} onClick={openPrintOptions}>
+            <FiPrinter aria-hidden="true" />
+          </ToolbarButton>
           {toolbarExtrasNode}
         </div>
         {connectionStatus ? <span className={`prosemirror-collab-status is-${connectionStatus}`}>{collaborationStatusLabel(connectionStatus)}</span> : null}
@@ -661,6 +684,194 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     );
   }
 );
+
+class MarkdownPrintOptionsModal extends Modal {
+  constructor(private readonly options: {
+    markdown: string;
+    defaultTitle: string;
+  }) {
+    super("Imprimir markdown", { size: "md" });
+  }
+
+  render(context: ModalRenderContext): React.ReactNode {
+    return (
+      <MarkdownPrintOptionsModalBody
+        markdown={this.options.markdown}
+        defaultTitle={this.options.defaultTitle}
+        close={context.close}
+        requestClose={context.requestClose}
+      />
+    );
+  }
+}
+
+function MarkdownPrintOptionsModalBody(props: {
+  markdown: string;
+  defaultTitle: string;
+  close: () => void;
+  requestClose: () => Promise<boolean>;
+}) {
+  const { markdown, defaultTitle, close, requestClose } = props;
+  const [title, setTitle] = React.useState(defaultTitle);
+  const [description, setDescription] = React.useState("");
+  const [includeToc, setIncludeToc] = React.useState(true);
+  const [tocLevels, setTocLevels] = React.useState<MarkdownPrintTocLevel[]>(DEFAULT_PRINT_TOC_LEVELS);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const toggleTocLevel = React.useCallback((level: MarkdownPrintTocLevel) => {
+    setTocLevels((current) => {
+      if (current.includes(level)) {
+        return current.filter((entry) => entry !== level);
+      }
+
+      return [...current, level].sort((left, right) => left - right);
+    });
+  }, []);
+
+  const handlePrint = React.useCallback(async () => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      setError("Ingresa un titulo para la portada.");
+      return;
+    }
+
+    if (includeToc && tocLevels.length === 0) {
+      setError("Selecciona al menos un nivel para la tabla de contenidos.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    try {
+      await printMarkdownDocument({
+        title: trimmedTitle,
+        coverDescription: description,
+        markdown,
+        includeToc,
+        tocLevels: includeToc ? tocLevels : []
+      });
+      close();
+    } catch (printError) {
+      setError(printError instanceof Error ? printError.message : "No se pudo preparar la impresion.");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [close, description, includeToc, markdown, title, tocLevels]);
+
+  return (
+    <div className="markdown-print-modal">
+      <div className="markdown-print-modal-head">
+        <p className="workspace-context">Documento markdown</p>
+        <h3>Imprimir</h3>
+      </div>
+      <div className="markdown-print-form">
+        <label>
+          Titulo del documento
+          <input
+            data-modal-autofocus
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            disabled={submitting}
+          />
+        </label>
+        <label>
+          Descripcion del documento
+          <textarea
+            value={description}
+            rows={3}
+            onChange={(event) => setDescription(event.target.value)}
+            disabled={submitting}
+          />
+        </label>
+        <label className="markdown-print-toggle">
+          <input
+            type="checkbox"
+            checked={includeToc}
+            onChange={(event) => setIncludeToc(event.target.checked)}
+            disabled={submitting}
+          />
+          <span>Incluir pagina con tabla de contenidos</span>
+        </label>
+        <fieldset className="markdown-print-levels" disabled={!includeToc || submitting}>
+          <legend>Niveles de encabezado</legend>
+          <div className="markdown-print-level-grid">
+            {PRINT_TOC_LEVELS.map((level) => (
+              <label key={level} className={tocLevels.includes(level) ? "is-selected" : ""}>
+                <input
+                  type="checkbox"
+                  checked={tocLevels.includes(level)}
+                  onChange={() => toggleTocLevel(level)}
+                />
+                <span>{`H${level}`}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </div>
+      {error ? <p className="error-text">{error}</p> : null}
+      <div className="row-actions compact markdown-print-actions">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={submitting}
+          onClick={() => {
+            void handlePrint();
+          }}
+        >
+          {submitting ? "Preparando..." : "Imprimir"}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={submitting}
+          onClick={() => {
+            void requestClose();
+          }}
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function resolveDefaultPrintTitle(printTitle: string | undefined, markdown: string) {
+  const explicitTitle = printTitle?.trim();
+  if (explicitTitle) {
+    return explicitTitle;
+  }
+
+  const markdownHeading = findFirstMarkdownHeading(markdown);
+  if (markdownHeading) {
+    return markdownHeading;
+  }
+
+  return "Documento markdown";
+}
+
+function findFirstMarkdownHeading(markdown: string) {
+  let insideFence = false;
+
+  for (const line of markdown.split("\n")) {
+    if (/^(```|~~~)/.test(line.trim())) {
+      insideFence = !insideFence;
+      continue;
+    }
+
+    if (insideFence) {
+      continue;
+    }
+
+    const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+    const heading = match?.[2]?.trim();
+    if (heading) {
+      return heading;
+    }
+  }
+
+  return "";
+}
 
 function buildPlugins(args: {
   provider: ScrumYjsProvider | null;
