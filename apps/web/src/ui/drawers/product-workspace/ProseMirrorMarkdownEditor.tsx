@@ -1,7 +1,7 @@
 import React from "react";
 import { FiBold, FiCheckSquare, FiCode, FiImage, FiItalic, FiLink, FiList, FiMinus, FiPrinter, FiRotateCcw, FiRotateCw, FiTable } from "react-icons/fi";
 import { LuListOrdered, LuQuote } from "react-icons/lu";
-import { EditorState, Plugin, TextSelection } from "prosemirror-state";
+import { EditorState, Plugin, TextSelection, type Selection, type Transaction } from "prosemirror-state";
 import { EditorView, type NodeView, type ViewMutationRecord } from "prosemirror-view";
 import { Node as ProseMirrorNode, Slice } from "prosemirror-model";
 import { baseKeymap, chainCommands, createParagraphNear, lift, setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
@@ -95,6 +95,7 @@ export type ProseMirrorMarkdownEditorHandle = {
 };
 
 type MarkdownEditorMode = "normal" | "source";
+type MarkdownListKind = "bullet" | "ordered" | "task";
 
 type ToolbarExtrasRenderState = {
   sourceModeActive: boolean;
@@ -596,13 +597,13 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
             <FiCode aria-hidden="true" />
           </ToolbarButton>
           <span className="prosemirror-toolbar-separator" />
-          <ToolbarButton label="Lista" disabled={editorCommandDisabled} onClick={() => runCommand(wrapInList(markdownSchema.nodes.bullet_list))}>
+          <ToolbarButton label="Lista" disabled={editorCommandDisabled} onClick={() => runCommand(convertSelectionToList("bullet"))}>
             <FiList aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarButton label="Lista checkbox" disabled={editorCommandDisabled} onClick={() => insertMarkdownAtSelection("\n\n- [ ] \n\n")}>
+          <ToolbarButton label="Lista checkbox" disabled={editorCommandDisabled} onClick={() => runCommand(convertSelectionToList("task"))}>
             <FiCheckSquare aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarButton label="Lista ordenada" disabled={editorCommandDisabled} onClick={() => runCommand(wrapInList(markdownSchema.nodes.ordered_list))}>
+          <ToolbarButton label="Lista ordenada" disabled={editorCommandDisabled} onClick={() => runCommand(convertSelectionToList("ordered"))}>
             <LuListOrdered aria-hidden="true" />
           </ToolbarButton>
           <ToolbarButton label="Cita" disabled={editorCommandDisabled} onClick={() => runCommand(wrapIn(markdownSchema.nodes.blockquote))}>
@@ -1017,6 +1018,172 @@ function resolveSelectedBlock(state: EditorState) {
     return "code_block";
   }
   return "paragraph";
+}
+
+function convertSelectionToList(kind: MarkdownListKind) {
+  return (state: EditorState, dispatch?: EditorView["dispatch"], view?: EditorView) => {
+    const selectedLists = findSelectedListTargets(state.doc, state.selection);
+    if (selectedLists.length > 0) {
+      if (dispatch) {
+        const transaction = state.tr;
+        applyListConversion(transaction, selectedLists, kind);
+        if (transaction.docChanged) {
+          dispatch(transaction.scrollIntoView());
+        }
+      }
+      return true;
+    }
+
+    return wrapSelectionInList(kind, state, dispatch, view);
+  };
+}
+
+type SelectedListTarget = {
+  node: ProseMirrorNode;
+  position: number;
+  itemPositions: Array<{
+    node: ProseMirrorNode;
+    position: number;
+  }>;
+};
+
+function findSelectedListTargets(doc: ProseMirrorNode, selection: Selection): SelectedListTarget[] {
+  if (selection.empty) {
+    const target = findNearestListTarget(selection);
+    return target ? [target] : [];
+  }
+
+  const targets: SelectedListTarget[] = [];
+  doc.descendants((node, position) => {
+    if (!isListNode(node)) {
+      return true;
+    }
+
+    if (!rangesOverlap(position, position + node.nodeSize, selection.from, selection.to)) {
+      return false;
+    }
+
+    const selectedItems = getDirectListItemPositions(node, position).filter((item) =>
+      rangesOverlap(item.position, item.position + item.node.nodeSize, selection.from, selection.to)
+    );
+    if (selectedItems.length > 0) {
+      targets.push({
+        node,
+        position,
+        itemPositions: getDirectListItemPositions(node, position)
+      });
+    }
+
+    return true;
+  });
+
+  return targets;
+}
+
+function findNearestListTarget(selection: Selection): SelectedListTarget | null {
+  const { $from } = selection;
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    const node = $from.node(depth);
+    if (!isListNode(node)) {
+      continue;
+    }
+
+    const position = $from.before(depth);
+    return {
+      node,
+      position,
+      itemPositions: getDirectListItemPositions(node, position)
+    };
+  }
+
+  return null;
+}
+
+function wrapSelectionInList(
+  kind: MarkdownListKind,
+  state: EditorState,
+  dispatch?: EditorView["dispatch"],
+  view?: EditorView
+) {
+  return wrapInList(resolveListNodeType(kind), buildListAttrs(kind, null))(state, dispatch
+    ? (transaction) => {
+      if (kind === "task") {
+        applyListConversion(transaction, findSelectedListTargets(transaction.doc, transaction.selection), kind);
+      }
+      dispatch(transaction.scrollIntoView());
+    }
+    : undefined, view);
+}
+
+function applyListConversion(transaction: Transaction, targets: SelectedListTarget[], kind: MarkdownListKind) {
+  const targetListType = resolveListNodeType(kind);
+  targets.forEach((target) => {
+    const listAttrs = buildListAttrs(kind, target.node);
+    if (target.node.type !== targetListType || !shallowAttrsEqual(target.node.attrs, listAttrs)) {
+      transaction.setNodeMarkup(target.position, targetListType, listAttrs);
+    }
+
+    target.itemPositions.forEach((item) => {
+      const checked = resolveListItemChecked(kind, item.node);
+      if (item.node.attrs.checked !== checked) {
+        transaction.setNodeMarkup(item.position, undefined, {
+          ...item.node.attrs,
+          checked
+        });
+      }
+    });
+  });
+}
+
+function resolveListNodeType(kind: MarkdownListKind) {
+  return kind === "ordered" ? markdownSchema.nodes.ordered_list : markdownSchema.nodes.bullet_list;
+}
+
+function buildListAttrs(kind: MarkdownListKind, node: ProseMirrorNode | null) {
+  const tight = typeof node?.attrs.tight === "boolean" ? node.attrs.tight : false;
+  if (kind === "ordered") {
+    const order = typeof node?.attrs.order === "number" ? node.attrs.order : 1;
+    return { order, tight };
+  }
+
+  return { tight };
+}
+
+function resolveListItemChecked(kind: MarkdownListKind, node: ProseMirrorNode) {
+  if (kind !== "task") {
+    return null;
+  }
+  return typeof node.attrs.checked === "boolean" ? node.attrs.checked : false;
+}
+
+function getDirectListItemPositions(node: ProseMirrorNode, listPosition: number) {
+  const positions: SelectedListTarget["itemPositions"] = [];
+  node.forEach((child, offset) => {
+    if (child.type === markdownSchema.nodes.list_item) {
+      positions.push({
+        node: child,
+        position: listPosition + 1 + offset
+      });
+    }
+  });
+  return positions;
+}
+
+function isListNode(node: ProseMirrorNode) {
+  return node.type === markdownSchema.nodes.bullet_list || node.type === markdownSchema.nodes.ordered_list;
+}
+
+function rangesOverlap(leftFrom: number, leftTo: number, rightFrom: number, rightTo: number) {
+  return leftFrom < rightTo && leftTo > rightFrom;
+}
+
+function shallowAttrsEqual(left: ProseMirrorNode["attrs"], right: ProseMirrorNode["attrs"]) {
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
+  }
+  return leftEntries.every(([key, value]) => right[key] === value);
 }
 
 function insertTableCellLineBreak(state: EditorState, dispatch?: EditorView["dispatch"]) {
