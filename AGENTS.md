@@ -12,6 +12,7 @@
 - Antes de consultar la consola, lee `dev_current_port` para saber qué puerto está en uso en ese momento.
 - Usa `read()` para leer las ultimas 10 lineas y `read(n)` para pedir mas contexto cuando haga falta.
 - Ejemplo de consulta: `PORT="$(tr -d '\n' < dev_current_port)" && printf 'read(25)\n' | nc 127.0.0.1 "$PORT"`
+- Si el server live no está tomando los cambios, usa `restart()` sobre ese mismo puerto TCP antes de intentar otros reinicios: `PORT="$(tr -d '\n' < dev_current_port)" && printf 'restart()\n' | nc 127.0.0.1 "$PORT"`. Ese comando borra el historial expuesto por `read()` y reinicia el comando watch envuelto por `scripts/run_bash.js`.
 - Solo ejecuta chequeos adicionales de TypeScript si el usuario los pide explicitamente o si el watch remoto no esta disponible.
 
 ## Credenciales locales

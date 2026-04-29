@@ -9,6 +9,7 @@ const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 7777;
 const DEFAULT_READ_LINES = 10;
 const HISTORY_LIMIT = 100;
+const RESTART_FORCE_KILL_TIMEOUT_MS = 5000;
 const CURRENT_PORT_FILE = resolve(__dirname, "..", "dev_current_port");
 
 function printUsage() {
@@ -24,11 +25,13 @@ function printUsage() {
       `  - The active TCP port is written to ${CURRENT_PORT_FILE}.`,
       `  - Connect to the active port and send 'read()' or 'read(<n>)' followed by a newline.`,
       `  - 'read()' returns the last ${DEFAULT_READ_LINES} lines.`,
+      "  - Send 'restart()' to clear the history and restart the wrapped command.",
       `  - The in-memory history keeps at most the last ${HISTORY_LIMIT} lines.`,
       "",
       "Examples:",
       "  node scripts/run_bash.js -- pnpm dev",
       `  printf 'read(25)\\n' | nc ${DEFAULT_HOST} ${DEFAULT_PORT}`,
+      `  printf 'restart()\\n' | nc ${DEFAULT_HOST} ${DEFAULT_PORT}`,
       "  node scripts/run_bash.js --port 4010 -- pnpm dev"
     ].join("\n")
   );
@@ -128,7 +131,15 @@ function clampReadAmount(requested) {
   return Math.min(Math.max(requested, 0), HISTORY_LIMIT);
 }
 
-function parseReadRequest(rawRequest) {
+function readAmountFromRequest(parsed) {
+  if (parsed.offset == null) {
+    return DEFAULT_READ_LINES;
+  }
+
+  return clampReadAmount(parsePositiveInteger(parsed.offset, "offset"));
+}
+
+function parseTcpRequest(rawRequest) {
   const request = rawRequest.trim();
 
   if (!request) {
@@ -137,27 +148,45 @@ function parseReadRequest(rawRequest) {
 
   if (request.startsWith("{")) {
     const parsed = JSON.parse(request);
-    if (parsed?.method !== "read") {
-      throw new Error("Unsupported JSON method");
+
+    if (parsed?.method === "read") {
+      return {
+        type: "read",
+        amount: readAmountFromRequest(parsed)
+      };
     }
 
-    if (parsed.offset == null) {
-      return DEFAULT_READ_LINES;
+    if (parsed?.method === "restart") {
+      return {
+        type: "restart"
+      };
     }
 
-    return clampReadAmount(parsePositiveInteger(parsed.offset, "offset"));
+    throw new Error("Unsupported JSON method");
   }
 
-  const match = /^read(?:\((\d*)\))?$/.exec(request);
-  if (!match) {
-    throw new Error("Unsupported command. Use read() or read(<n>)");
+  const readMatch = /^read(?:\((\d*)\))?$/.exec(request);
+  if (readMatch) {
+    if (readMatch[1] == null || readMatch[1] === "") {
+      return {
+        type: "read",
+        amount: DEFAULT_READ_LINES
+      };
+    }
+
+    return {
+      type: "read",
+      amount: clampReadAmount(parsePositiveInteger(readMatch[1], "offset"))
+    };
   }
 
-  if (match[1] == null || match[1] === "") {
-    return DEFAULT_READ_LINES;
+  if (request === "restart()") {
+    return {
+      type: "restart"
+    };
   }
 
-  return clampReadAmount(parsePositiveInteger(match[1], "offset"));
+  throw new Error("Unsupported command. Use read(), read(<n>) or restart()");
 }
 
 function createHistoryWindow() {
@@ -172,6 +201,9 @@ function createHistoryWindow() {
     },
     read(count) {
       return lines.slice(-count);
+    },
+    clear() {
+      lines.length = 0;
     },
     size() {
       return lines.length;
@@ -224,17 +256,14 @@ function main() {
   const configuredPort = parsed.options.port;
   const configuredHost = parsed.options.host;
   const SERVER_STARTUP_CANCELLED = "SERVER_STARTUP_CANCELLED";
-  const child = spawn(command, args, {
-    cwd: parsed.options.cwd,
-    env: process.env,
-    stdio: ["inherit", "pipe", "pipe"],
-    shell: process.platform === "win32"
-  });
 
   let server = null;
   let activePort = configuredPort;
+  let child = null;
+  let childPendingRestart = null;
   let ownsCurrentPortFile = false;
   let isServerStartupCancelled = false;
+  let isRestartInProgress = false;
 
   function writeCurrentPortFile(port) {
     writeFileSync(CURRENT_PORT_FILE, `${port}\n`, "utf8");
@@ -302,6 +331,14 @@ function main() {
     }
   }
 
+  function clearHistoryAndBuffers() {
+    history.clear();
+
+    for (const source of Object.keys(streamBuffers)) {
+      streamBuffers[source] = "";
+    }
+  }
+
   function closeServerAndClients() {
     isServerStartupCancelled = true;
     clearCurrentPortFile();
@@ -324,23 +361,137 @@ function main() {
     return error;
   }
 
-  if (child.stdout) {
-    child.stdout.on("data", (chunk) => {
-      handleChunk("stdout", chunk);
+  function killCurrentChild(signal) {
+    const targetChild = child ?? childPendingRestart;
+    if (targetChild && !targetChild.killed) {
+      targetChild.kill(signal);
+    }
+  }
+
+  function startChildProcess() {
+    const childProcess = spawn(command, args, {
+      cwd: parsed.options.cwd,
+      env: process.env,
+      stdio: ["inherit", "pipe", "pipe"],
+      shell: process.platform === "win32"
+    });
+
+    child = childProcess;
+
+    if (childProcess.stdout) {
+      childProcess.stdout.on("data", (chunk) => {
+        if (childProcess === child) {
+          handleChunk("stdout", chunk);
+        }
+      });
+    }
+
+    if (childProcess.stderr) {
+      childProcess.stderr.on("data", (chunk) => {
+        if (childProcess === child) {
+          handleChunk("stderr", chunk);
+        }
+      });
+    }
+
+    childProcess.on("error", (error) => {
+      if (childProcess !== child) {
+        return;
+      }
+
+      console.error(`[run_bash] Failed to start child process: ${error.message}`);
+      closeServerAndClients();
+      process.exit(1);
+    });
+
+    childProcess.on("exit", (code, signal) => {
+      if (childProcess !== child) {
+        return;
+      }
+
+      flushPartialLines();
+      closeServerAndClients();
+
+      if (signal) {
+        process.kill(process.pid, signal);
+        return;
+      }
+
+      process.exit(code ?? 1);
     });
   }
 
-  if (child.stderr) {
-    child.stderr.on("data", (chunk) => {
-      handleChunk("stderr", chunk);
+  function restartChildProcess() {
+    clearHistoryAndBuffers();
+
+    if (isRestartInProgress) {
+      return false;
+    }
+
+    isRestartInProgress = true;
+
+    const childToRestart = child;
+    child = null;
+    childPendingRestart = childToRestart;
+
+    function startReplacement() {
+      if (!isRestartInProgress) {
+        return;
+      }
+
+      if (childPendingRestart === childToRestart) {
+        childPendingRestart = null;
+      }
+
+      isRestartInProgress = false;
+
+      if (!isServerStartupCancelled) {
+        startChildProcess();
+      }
+    }
+
+    if (!childToRestart || childToRestart.exitCode !== null || childToRestart.signalCode !== null) {
+      startReplacement();
+      return true;
+    }
+
+    const forceKillTimeout = setTimeout(() => {
+      if (childToRestart.exitCode === null && childToRestart.signalCode === null) {
+        childToRestart.kill("SIGKILL");
+      }
+    }, RESTART_FORCE_KILL_TIMEOUT_MS);
+    forceKillTimeout.unref?.();
+
+    childToRestart.once("exit", () => {
+      clearTimeout(forceKillTimeout);
+      startReplacement();
     });
+
+    if (!childToRestart.kill("SIGTERM")) {
+      clearTimeout(forceKillTimeout);
+      startReplacement();
+    }
+
+    return true;
   }
 
-  child.on("error", (error) => {
-    console.error(`[run_bash] Failed to start child process: ${error.message}`);
-    closeServerAndClients();
-    process.exit(1);
-  });
+  function handleTcpRequest(socket, rawRequest) {
+    const request = parseTcpRequest(rawRequest);
+    if (request === null) {
+      return;
+    }
+
+    if (request.type === "read") {
+      writeHistory(socket, request.amount);
+      return;
+    }
+
+    if (request.type === "restart") {
+      const didStartRestart = restartChildProcess();
+      const message = didStartRestart ? "Restarting command" : "Restart already in progress";
+      writeSocketText(socket, `[run_bash] ${message}\n`);
+    }
+  }
 
   function createTcpServer() {
     return net.createServer((socket) => {
@@ -358,13 +509,7 @@ function main() {
           requestBuffer = requestBuffer.slice(newlineIndex + 1);
 
           try {
-            const amount = parseReadRequest(rawRequest);
-            if (amount === null) {
-              newlineIndex = requestBuffer.indexOf("\n");
-              continue;
-            }
-
-            writeHistory(socket, amount);
+            handleTcpRequest(socket, rawRequest);
           } catch (error) {
             writeSocketText(socket, `[run_bash] ${error.message}\n`);
           }
@@ -376,10 +521,7 @@ function main() {
       socket.on("end", () => {
         if (requestBuffer.trim()) {
           try {
-            const amount = parseReadRequest(requestBuffer);
-            if (amount !== null) {
-              writeHistory(socket, amount);
-            }
+            handleTcpRequest(socket, requestBuffer);
           } catch (error) {
             writeSocketText(socket, `[run_bash] ${error.message}\n`);
           }
@@ -403,7 +545,7 @@ function main() {
     const port = boundAddress?.port ?? activePort;
 
     console.error(`[run_bash] TCP server error on ${host}:${port}: ${error.message}`);
-    child.kill("SIGTERM");
+    killCurrentChild("SIGTERM");
     closeServerAndClients();
     process.exit(1);
   }
@@ -472,15 +614,17 @@ function main() {
       }
 
       console.error(`[run_bash] ${error.message}`);
-      child.kill("SIGTERM");
+      killCurrentChild("SIGTERM");
       closeServerAndClients();
       process.exit(1);
     });
 
   function forwardSignal(signal) {
-    if (!child.killed) {
-      child.kill(signal);
+    if (!child && childPendingRestart) {
+      closeServerAndClients();
     }
+
+    killCurrentChild(signal);
   }
 
   process.on("SIGINT", () => {
@@ -491,17 +635,7 @@ function main() {
     forwardSignal("SIGTERM");
   });
 
-  child.on("exit", (code, signal) => {
-    flushPartialLines();
-    closeServerAndClients();
-
-    if (signal) {
-      process.kill(process.pid, signal);
-      return;
-    }
-
-    process.exit(code ?? 1);
-  });
+  startChildProcess();
 }
 
 main();
