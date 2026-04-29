@@ -63,6 +63,7 @@ import "prosemirror-view/style/prosemirror.css";
 const YDOC_FRAGMENT_NAME = "prosemirror";
 const MIN_TABLE_SIZE = 1;
 const MAX_TABLE_SIZE = 12;
+const DEFAULT_TABLE_PICKER_SIZE = 3;
 const DEFAULT_PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [2, 3];
 const PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [1, 2, 3, 4, 5, 6];
 
@@ -150,8 +151,6 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     const initialMarkdownRef = React.useRef(markdownValue);
     const [stateVersion, setStateVersion] = React.useState(0);
     const [connectionStatus, setConnectionStatus] = React.useState<"connecting" | "connected" | "disconnected" | null>(null);
-    const [tableRows, setTableRows] = React.useState(3);
-    const [tableColumns, setTableColumns] = React.useState(3);
     const [editorMode, setEditorMode] = React.useState<MarkdownEditorMode>("normal");
     const [sourceMarkdown, setSourceMarkdown] = React.useState(markdownValue);
     const collaborationName = collaboration?.entityId && !collaborationDisabled ? buildDocumentName(collaboration) : "";
@@ -445,11 +444,15 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
         return;
       }
 
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.closest(".prosemirror-table-picker-popover")) {
+        return;
+      }
+
       if (!isToolbarNavigationKey(event.key)) {
         return;
       }
 
-      const target = event.target instanceof HTMLElement ? event.target : null;
       if ((event.key === "ArrowUp" || event.key === "ArrowDown") && isToolbarFormControl(target)) {
         return;
       }
@@ -606,32 +609,12 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
             <LuQuote aria-hidden="true" />
           </ToolbarButton>
           <span className="prosemirror-toolbar-separator" />
-          <div className="prosemirror-table-controls" role="group" aria-label="Configuracion de tabla">
-            <ToolbarNumberInput
-              label="Filas de tabla"
-              value={tableRows}
-              min={MIN_TABLE_SIZE}
-              max={MAX_TABLE_SIZE}
-              disabled={editorCommandDisabled}
-              onChange={setTableRows}
-            />
-            <span className="prosemirror-table-control-divider" aria-hidden="true">x</span>
-            <ToolbarNumberInput
-              label="Columnas de tabla"
-              value={tableColumns}
-              min={MIN_TABLE_SIZE}
-              max={MAX_TABLE_SIZE}
-              disabled={editorCommandDisabled}
-              onChange={setTableColumns}
-            />
-            <ToolbarButton
-              label={`Insertar tabla ${tableRows} por ${tableColumns}`}
-              disabled={editorCommandDisabled}
-              onClick={() => insertMarkdownAtSelection(buildTableMarkdown(tableRows, tableColumns))}
-            >
-              <FiTable aria-hidden="true" />
-            </ToolbarButton>
-          </div>
+          <ToolbarTablePicker
+            disabled={editorCommandDisabled}
+            onSelect={(rows, columns) => {
+              insertMarkdownAtSelection(buildTableMarkdown(rows, columns));
+            }}
+          />
           <ToolbarButton label="Insertar bloque de codigo" disabled={editorCommandDisabled} onClick={() => insertMarkdownAtSelection("\n\n```txt\n\n```\n\n")}>
             <FiCode aria-hidden="true" />
           </ToolbarButton>
@@ -1248,29 +1231,177 @@ function placeSelectionAfterImage(view: EditorView, imageUrl: string) {
   }
 }
 
-function ToolbarNumberInput(props: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
+type TablePickerSelection = {
+  rows: number;
+  columns: number;
+};
+
+function ToolbarTablePicker(props: {
   disabled?: boolean;
-  onChange: (value: number) => void;
+  onSelect: (rows: number, columns: number) => void;
 }) {
+  const { disabled, onSelect } = props;
+  const [open, setOpen] = React.useState(false);
+  const [selection, setSelection] = React.useState<TablePickerSelection>({
+    rows: DEFAULT_TABLE_PICKER_SIZE,
+    columns: DEFAULT_TABLE_PICKER_SIZE
+  });
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const gridRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+    }
+  }, [disabled]);
+
+  const focusCell = React.useCallback((nextSelection: TablePickerSelection) => {
+    window.requestAnimationFrame(() => {
+      gridRef.current
+        ?.querySelector<HTMLButtonElement>(`[data-table-rows="${nextSelection.rows}"][data-table-columns="${nextSelection.columns}"]`)
+        ?.focus({ preventScroll: true });
+    });
+  }, []);
+
+  const updateSelection = React.useCallback((nextSelection: TablePickerSelection, options?: { focus?: boolean }) => {
+    const resolvedSelection = {
+      rows: clampInteger(nextSelection.rows, MIN_TABLE_SIZE, MAX_TABLE_SIZE),
+      columns: clampInteger(nextSelection.columns, MIN_TABLE_SIZE, MAX_TABLE_SIZE)
+    };
+    setSelection(resolvedSelection);
+    if (options?.focus) {
+      focusCell(resolvedSelection);
+    }
+  }, [focusCell]);
+
+  const selectTable = React.useCallback((nextSelection: TablePickerSelection) => {
+    const resolvedSelection = {
+      rows: clampInteger(nextSelection.rows, MIN_TABLE_SIZE, MAX_TABLE_SIZE),
+      columns: clampInteger(nextSelection.columns, MIN_TABLE_SIZE, MAX_TABLE_SIZE)
+    };
+    setSelection(resolvedSelection);
+    onSelect(resolvedSelection.rows, resolvedSelection.columns);
+    setOpen(false);
+  }, [onSelect]);
+
+  React.useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && rootRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    focusCell(selection);
+  }, [focusCell, open]);
+
+  const handleGridKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+      triggerRef.current?.focus({ preventScroll: true });
+      return;
+    }
+
+    const nextSelection = { ...selection };
+    if (event.key === "ArrowRight") {
+      nextSelection.columns += 1;
+    } else if (event.key === "ArrowLeft") {
+      nextSelection.columns -= 1;
+    } else if (event.key === "ArrowDown") {
+      nextSelection.rows += 1;
+    } else if (event.key === "ArrowUp") {
+      nextSelection.rows -= 1;
+    } else if (event.key === "Home") {
+      nextSelection.columns = MIN_TABLE_SIZE;
+    } else if (event.key === "End") {
+      nextSelection.columns = MAX_TABLE_SIZE;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    updateSelection(nextSelection, { focus: true });
+  }, [selection, updateSelection]);
+
+  const cells = [];
+  for (let row = MIN_TABLE_SIZE; row <= MAX_TABLE_SIZE; row += 1) {
+    for (let column = MIN_TABLE_SIZE; column <= MAX_TABLE_SIZE; column += 1) {
+      const active = row <= selection.rows && column <= selection.columns;
+      const current = row === selection.rows && column === selection.columns;
+      cells.push(
+        <button
+          key={`${row}-${column}`}
+          type="button"
+          className={`prosemirror-table-picker-cell${active ? " is-active" : ""}`.trim()}
+          data-table-rows={row}
+          data-table-columns={column}
+          tabIndex={current ? 0 : -1}
+          aria-label={`Insertar tabla ${row} por ${column}`}
+          onFocus={() => updateSelection({ rows: row, columns: column })}
+          onMouseEnter={() => updateSelection({ rows: row, columns: column })}
+          onClick={() => selectTable({ rows: row, columns: column })}
+        />
+      );
+    }
+  }
+
   return (
-    <input
-      type="number"
-      className="prosemirror-toolbar-number"
-      aria-label={props.label}
-      title={props.label}
-      min={props.min}
-      max={props.max}
-      value={props.value}
-      disabled={props.disabled}
-      onChange={(event) => {
-        props.onChange(clampInteger(event.target.valueAsNumber, props.min, props.max));
-      }}
-      onMouseDown={(event) => event.stopPropagation()}
-    />
+    <div className="prosemirror-table-controls" ref={rootRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`rich-description-toolbar-button${open ? " is-pressed" : ""}`}
+        aria-label="Insertar tabla"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title="Insertar tabla"
+        disabled={disabled}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <FiTable aria-hidden="true" />
+      </button>
+      {open ? (
+        <div
+          className="prosemirror-table-picker-popover"
+          role="dialog"
+          aria-label="Elegir tamano de tabla"
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          <div className="prosemirror-table-picker-head" aria-live="polite">
+            <span>Insertar tabla</span>
+            <strong>{`${selection.rows} x ${selection.columns}`}</strong>
+          </div>
+          <div
+            ref={gridRef}
+            className="prosemirror-table-picker-grid"
+            role="grid"
+            aria-label="Filas y columnas"
+            onKeyDown={handleGridKeyDown}
+          >
+            {cells}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1310,6 +1441,7 @@ const TOOLBAR_ITEM_SELECTOR = [
 function getToolbarItems(toolbar: HTMLElement) {
   return Array.from(toolbar.querySelectorAll<HTMLElement>(TOOLBAR_ITEM_SELECTOR))
     .filter((item) => item.closest(".prosemirror-toolbar") === toolbar)
+    .filter((item) => !item.closest(".prosemirror-table-picker-popover"))
     .filter((item) => !isToolbarItemDisabled(item) && isElementVisible(item));
 }
 
@@ -1319,7 +1451,7 @@ function findToolbarItemForTarget(toolbar: HTMLElement, target: EventTarget | nu
   }
 
   const item = target.closest<HTMLElement>(TOOLBAR_ITEM_SELECTOR);
-  if (!item || item.closest(".prosemirror-toolbar") !== toolbar || isToolbarItemDisabled(item)) {
+  if (!item || item.closest(".prosemirror-toolbar") !== toolbar || item.closest(".prosemirror-table-picker-popover") || isToolbarItemDisabled(item)) {
     return null;
   }
   return item;

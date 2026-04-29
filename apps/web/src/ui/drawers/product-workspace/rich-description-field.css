@@ -196,6 +196,7 @@
 }
 
 .prosemirror-table-controls {
+  position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -203,20 +204,70 @@
   min-width: 0;
 }
 
-.prosemirror-toolbar-number {
-  flex: 0 0 auto;
-  width: 3.2rem;
-  min-width: 0;
-  height: 36px;
-  min-height: 36px;
-  padding: 0 0.35rem;
-  border-radius: 8px;
-  text-align: center;
+.rich-description-editor:has(.prosemirror-table-picker-popover) {
+  overflow: visible;
 }
 
-.prosemirror-table-control-divider {
+.rich-description-field.is-maximized .rich-description-editor:has(.prosemirror-table-picker-popover) {
+  overflow: visible;
+}
+
+.prosemirror-table-picker-popover {
+  position: absolute;
+  top: calc(100% + 0.42rem);
+  left: 0;
+  z-index: 35;
+  display: grid;
+  gap: 0.65rem;
+  width: max-content;
+  padding: 0.75rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 96%, var(--bg-soft));
+  box-shadow: var(--shadow-surface);
+}
+
+.prosemirror-table-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   color: var(--text-muted);
   font-size: 0.82rem;
+  line-height: 1;
+}
+
+.prosemirror-table-picker-head strong {
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.prosemirror-table-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 18px);
+  gap: 4px;
+  outline: none;
+}
+
+.prosemirror-table-picker-cell {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, var(--text-muted));
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--field-bg) 90%, var(--bg-soft));
+  cursor: pointer;
+}
+
+.prosemirror-table-picker-cell.is-active {
+  border-color: color-mix(in srgb, var(--accent-a) 76%, var(--border));
+  background: color-mix(in srgb, var(--accent-a) 24%, var(--bg-soft));
+}
+
+.prosemirror-table-picker-cell:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .prosemirror-collab-status {
