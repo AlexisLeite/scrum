@@ -199,6 +199,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     if (editorHost) {
       editorHost.style.height = `${nextHeight}px`;
     }
+    keepRichDescriptionEditorVisibleInDrawer(fieldRef.current, isMaximized);
   }, [isMaximized, minHeight]);
 
   const scheduleHeightSync = React.useCallback(() => {
@@ -747,6 +748,10 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       }
       syncAnchor();
     };
+    const handleFocus = () => {
+      syncAnchor();
+      scheduleHeightSync();
+    };
     const handlePaste = (event: ClipboardEvent) => {
       if (editorInteractionDisabled) {
         return;
@@ -790,7 +795,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     content.addEventListener("keydown", handleKeyDown);
     content.addEventListener("keyup", syncAnchor);
     content.addEventListener("mouseup", syncAnchor);
-    content.addEventListener("focus", syncAnchor);
+    content.addEventListener("focus", handleFocus);
     content.addEventListener("paste", handlePaste);
     content.addEventListener("click", handleClick);
     document.addEventListener("selectionchange", handleSelectionChange);
@@ -808,7 +813,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       content.removeEventListener("keydown", handleKeyDown);
       content.removeEventListener("keyup", syncAnchor);
       content.removeEventListener("mouseup", syncAnchor);
-      content.removeEventListener("focus", syncAnchor);
+      content.removeEventListener("focus", handleFocus);
       content.removeEventListener("paste", handlePaste);
       content.removeEventListener("click", handleClick);
       document.removeEventListener("selectionchange", handleSelectionChange);
@@ -901,6 +906,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       aria-modal={isMaximized ? "true" : undefined}
       aria-label={isMaximized ? `${label} en pantalla completa` : undefined}
       onKeyDownCapture={handleFieldKeyDownCapture}
+      onFocusCapture={scheduleHeightSync}
       onMouseDown={isMaximized ? (event) => event.stopPropagation() : undefined}
     >
       <span className="rich-description-label">{label}</span>
@@ -1118,6 +1124,82 @@ function measureRichDescriptionContentHeightWithClone(content: HTMLElement) {
   const measuredHeight = clone.scrollHeight;
   clone.remove();
   return measuredHeight || content.scrollHeight;
+}
+
+function keepRichDescriptionEditorVisibleInDrawer(field: HTMLElement | null, isMaximized: boolean) {
+  if (!field || isMaximized) {
+    return;
+  }
+
+  if (!richDescriptionFieldHasActiveSelection(field)) {
+    return;
+  }
+
+  const drawerScroller = field.closest<HTMLElement>(".drawer-content");
+  const editor = field.querySelector<HTMLElement>(".rich-description-editor");
+  if (!drawerScroller || !editor) {
+    return;
+  }
+
+  const scrollerRect = drawerScroller.getBoundingClientRect();
+  const editorRect = editor.getBoundingClientRect();
+  if (scrollerRect.height <= 0 || editorRect.height <= 0) {
+    return;
+  }
+
+  const padding = Math.min(16, Math.max(0, scrollerRect.height * 0.08));
+  const safeTop = scrollerRect.top + padding;
+  const safeBottom = scrollerRect.bottom - padding;
+  const safeHeight = Math.max(0, safeBottom - safeTop);
+  const canFitInsideSafeArea = editorRect.height <= safeHeight;
+  const canFitInsideScroller = editorRect.height <= scrollerRect.height;
+  let nextScrollTop: number | null = null;
+
+  if (canFitInsideSafeArea) {
+    if (editorRect.top < safeTop) {
+      nextScrollTop = drawerScroller.scrollTop + editorRect.top - safeTop;
+    } else if (editorRect.bottom > safeBottom) {
+      nextScrollTop = drawerScroller.scrollTop + editorRect.bottom - safeBottom;
+    }
+  } else if (canFitInsideScroller) {
+    if (editorRect.top < scrollerRect.top) {
+      nextScrollTop = drawerScroller.scrollTop + editorRect.top - scrollerRect.top;
+    } else if (editorRect.bottom > scrollerRect.bottom) {
+      nextScrollTop = drawerScroller.scrollTop + editorRect.bottom - scrollerRect.bottom;
+    }
+  } else if (editorRect.top < safeTop) {
+    nextScrollTop = drawerScroller.scrollTop + editorRect.top - safeTop;
+  }
+
+  if (nextScrollTop === null) {
+    return;
+  }
+
+  const maxScrollTop = Math.max(0, drawerScroller.scrollHeight - drawerScroller.clientHeight);
+  const clampedScrollTop = Math.max(0, Math.min(maxScrollTop, nextScrollTop));
+  if (Math.abs(clampedScrollTop - drawerScroller.scrollTop) < 1) {
+    return;
+  }
+
+  drawerScroller.scrollTo({
+    top: clampedScrollTop,
+    behavior: prefersReducedMotion() ? "auto" : "smooth"
+  });
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function richDescriptionFieldHasActiveSelection(field: HTMLElement) {
+  const activeElement = document.activeElement;
+  if (activeElement && field.contains(activeElement)) {
+    return true;
+  }
+
+  const selection = window.getSelection();
+  const anchorNode = selection?.anchorNode ?? null;
+  return Boolean(anchorNode && field.contains(anchorNode));
 }
 
 function buildUploadingImageMarkdown(alt: string, previewUrl: string) {
