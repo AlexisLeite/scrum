@@ -184,6 +184,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       return;
     }
 
+    content.style.removeProperty("height");
     const contentRect = content.getBoundingClientRect();
     const viewportAllowance = Math.max(minHeight, Math.round(window.innerHeight - contentRect.top - (isMaximized ? 28 : 24)));
     const maxHeight = isMaximized
@@ -193,7 +194,11 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     const nextHeight = isMaximized
       ? maxHeight
       : Math.min(Math.max(contentHeight, minHeight), maxHeight);
-    content.style.height = `${nextHeight}px`;
+    content.style.minHeight = `${nextHeight}px`;
+    const editorHost = content.closest<HTMLElement>(".prosemirror-editor-host");
+    if (editorHost) {
+      editorHost.style.height = `${nextHeight}px`;
+    }
   }, [isMaximized, minHeight]);
 
   const scheduleHeightSync = React.useCallback(() => {

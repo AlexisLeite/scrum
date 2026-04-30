@@ -137,6 +137,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       toolbarExtras
     } = props;
     const shellRef = React.useRef<HTMLDivElement | null>(null);
+    const editorMountRef = React.useRef<HTMLDivElement | null>(null);
     const toolbarRef = React.useRef<HTMLDivElement | null>(null);
     const sourceTextareaRef = React.useRef<HTMLTextAreaElement | null>(null);
     const activeToolbarItemRef = React.useRef<HTMLElement | null>(null);
@@ -194,8 +195,8 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     });
 
     React.useEffect(() => {
-      const host = shellRef.current;
-      if (!host) {
+      const mount = editorMountRef.current;
+      if (!mount) {
         return;
       }
 
@@ -225,14 +226,14 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
         plugins
       });
 
-      const view = new EditorView(host, {
+      const view = new EditorView(mount, {
         state,
         editable: () => !readOnlyRef.current,
         attributes: {
           class: contentEditableClassName,
           tabindex: "0"
         },
-        handleScrollToSelection: preserveVisibleSelectionScroll,
+        handleScrollToSelection: keepSelectionInsideEditorGuard,
         nodeViews: {
           list_item: (node, view, getPos) => new ListItemNodeView(
             node,
@@ -663,7 +664,10 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
           className={`prosemirror-editor-host${sourceModeActive ? " is-source-hidden" : ""}`}
           onMouseDown={handleEditorHostMouseDown}
           aria-hidden={sourceModeActive ? "true" : undefined}
-        />
+        >
+          <div className="prosemirror-editor-mount" ref={editorMountRef} />
+          <div className="prosemirror-editor-tail-spacer" aria-hidden="true" />
+        </div>
       </div>
     );
   }
@@ -926,7 +930,7 @@ function buildPlugins(args: {
 
 function replaceDocumentMarkdown(view: EditorView, markdown: string) {
   const nextDoc = parseMarkdown(markdown);
-  const transaction = view.state.tr.replaceWith(0, view.state.doc.content.size, nextDoc.content).scrollIntoView();
+  const transaction = view.state.tr.replaceWith(0, view.state.doc.content.size, nextDoc.content);
   view.dispatch(transaction);
 }
 
@@ -938,11 +942,11 @@ function focusEditorView(view: EditorView, readOnly: boolean) {
   view.focus();
 }
 
-const SELECTION_SCROLL_TOLERANCE_PX = 96;
+const CARET_SCROLL_GUARD_RATIO = 0.2;
 
 type VerticalRect = Pick<DOMRect, "top" | "bottom">;
 
-function preserveVisibleSelectionScroll(view: EditorView) {
+function keepSelectionInsideEditorGuard(view: EditorView) {
   const selection = view.state.selection;
   if (!selection.empty) {
     return false;
@@ -955,31 +959,86 @@ function preserveVisibleSelectionScroll(view: EditorView) {
     return false;
   }
 
-  return isRectVisibleInScrollChain(selectionRect, view.dom);
+  const editorScroller = findEditorScrollContainer(view.dom);
+  if (!editorScroller) {
+    return false;
+  }
+
+  scrollRectInsideGuard(selectionRect, editorScroller, {
+    atDocumentStart: selection.head <= 1,
+    atDocumentEnd: isSelectionAtDocumentEnd(selection)
+  });
+  return true;
 }
 
-function isRectVisibleInScrollChain(rect: VerticalRect, startElement: HTMLElement) {
-  for (let element: HTMLElement | null = startElement; element; element = element.parentElement) {
-    if (!isScrollableElement(element)) {
-      continue;
-    }
-    if (!isRectVerticallyNearContainer(rect, element.getBoundingClientRect())) {
+function findEditorScrollContainer(startElement: HTMLElement) {
+  return startElement.closest<HTMLElement>(".prosemirror-editor-host");
+}
+
+function scrollRectInsideGuard(
+  rect: VerticalRect,
+  scroller: HTMLElement,
+  options: { atDocumentStart: boolean; atDocumentEnd: boolean }
+) {
+  const scrollerRect = scroller.getBoundingClientRect();
+  const visibleHeight = scrollerRect.height;
+  if (visibleHeight <= 0) {
+    return;
+  }
+
+  const caretHeight = Math.max(0, rect.bottom - rect.top);
+  const guard = Math.min(window.innerHeight * CARET_SCROLL_GUARD_RATIO, Math.max(0, (visibleHeight - caretHeight) / 2));
+  const tailSpace = options.atDocumentEnd ? resolveEditorTailSpace(scroller) : 0;
+  const bottomGuard = Math.min(Math.max(guard, tailSpace), Math.max(0, (visibleHeight - caretHeight) / 2));
+  const topLimit = options.atDocumentStart ? scrollerRect.top : scrollerRect.top + guard;
+  const bottomLimit = scrollerRect.bottom - bottomGuard;
+  let scrollDelta = 0;
+
+  if (rect.top < topLimit) {
+    scrollDelta = rect.top - topLimit;
+  } else if (rect.bottom > bottomLimit) {
+    scrollDelta = rect.bottom - bottomLimit;
+  }
+
+  if (scrollDelta !== 0) {
+    scrollEditorBy(scroller, scrollDelta);
+  }
+}
+
+function scrollEditorBy(scroller: HTMLElement, top: number) {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    scroller.scrollTop += top;
+    return;
+  }
+
+  scroller.scrollBy({
+    top,
+    behavior: "smooth"
+  });
+}
+
+function resolveEditorTailSpace(scroller: HTMLElement) {
+  const spacer = scroller.querySelector<HTMLElement>(".prosemirror-editor-tail-spacer");
+  if (!spacer) {
+    return 0;
+  }
+  const height = Number.parseFloat(window.getComputedStyle(spacer).height);
+  return Number.isFinite(height) ? height : 0;
+}
+
+function isSelectionAtDocumentEnd(selection: Selection) {
+  const $head = selection.$head;
+  if ($head.pos < $head.end($head.depth)) {
+    return false;
+  }
+
+  for (let depth = $head.depth - 1; depth >= 0; depth -= 1) {
+    if ($head.indexAfter(depth) < $head.node(depth).childCount) {
       return false;
     }
   }
 
-  return isRectVerticallyNearContainer(rect, new DOMRect(0, 0, window.innerWidth, window.innerHeight));
-}
-
-function isScrollableElement(element: HTMLElement) {
-  const style = window.getComputedStyle(element);
-  const overflowY = style.overflowY;
-  return (overflowY === "auto" || overflowY === "scroll") && element.scrollHeight > element.clientHeight;
-}
-
-function isRectVerticallyNearContainer(rect: VerticalRect, containerRect: VerticalRect) {
-  return rect.bottom >= containerRect.top - SELECTION_SCROLL_TOLERANCE_PX &&
-    rect.top <= containerRect.bottom + SELECTION_SCROLL_TOLERANCE_PX;
+  return true;
 }
 
 function serializeSelectionMarkdown(state: EditorState) {

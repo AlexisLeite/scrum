@@ -7,7 +7,6 @@
 .mdxeditor-rich-text-editor {
   overflow: auto;
   scrollbar-gutter: stable both-edges;
-  scroll-padding-bottom: var(--rich-description-tail-space, 30vh);
 }
 
 .rich-description-maximized-shell {
@@ -40,7 +39,7 @@
 }
 
 .rich-description-field.is-maximized .rich-description-editor {
-  --rich-description-tail-space: 30vh;
+  --rich-description-tail-space: 80vh;
   border: none;
   border-radius: 0;
   display: flex;
@@ -92,7 +91,7 @@
 }
 
 .rich-description-editor {
-  --rich-description-tail-space: 0px;
+  --rich-description-tail-space: 80vh;
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
@@ -401,6 +400,7 @@
 }
 
 .prosemirror-editor-host {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
@@ -419,18 +419,29 @@
   overflow: auto;
 }
 
+.prosemirror-editor-mount {
+  min-width: 0;
+}
+
+.prosemirror-editor-tail-spacer {
+  display: block;
+  flex: 0 0 auto;
+  height: var(--rich-description-tail-space);
+  min-height: var(--rich-description-tail-space);
+  pointer-events: none;
+}
+
 .rich-description-content {
   padding: 0.65rem 0.72rem 0.65rem;
   min-height: var(--rich-description-min-height, 96px);
-  max-height: var(--rich-description-max-height, 75vh);
   max-width: 920px;
   margin: auto;
   color: var(--text-main);
   background: transparent;
   box-sizing: border-box;
+  height: auto;
   resize: none;
   scrollbar-gutter: stable both-edges;
-  scroll-padding-bottom: var(--rich-description-tail-space, 30vh);
   --rich-heading-1-size: 2.0625rem;
   --rich-heading-2-size: 1.84375rem;
   --rich-heading-3-size: 1.625rem;
@@ -718,10 +729,6 @@
 
 .rich-description-editor .mdxeditor-root-contenteditable {
   position: relative;
-}
-
-.rich-description-content>* {
-  scroll-margin-bottom: var(--rich-description-tail-space);
 }
 
 .rich-description-content :is(h1, h2, h3, h4, h5, h6) {
