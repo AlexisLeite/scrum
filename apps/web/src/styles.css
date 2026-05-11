@@ -3485,6 +3485,54 @@ html .drawer-content .card {
   padding-right: 5.25rem;
 }
 
+.markdown-preview-mermaid-block {
+  padding-top: 3rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-muted) 94%, transparent);
+  overflow: hidden;
+}
+
+.markdown-preview-mermaid-block .markdown-preview-copy-button {
+  top: 0.75rem;
+  right: 0.75rem;
+}
+
+.mermaid-diagram {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.9rem;
+}
+
+.mermaid-diagram-svg {
+  min-width: 0;
+  overflow: auto;
+}
+
+.mermaid-diagram-svg svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.mermaid-diagram-status {
+  margin: 0;
+}
+
+.mermaid-diagram-error {
+  display: grid;
+  gap: 0.45rem;
+  color: var(--bad-text);
+}
+
+.mermaid-diagram-error pre {
+  margin: 0.25rem 0 0;
+  max-height: 18rem;
+  padding: 0.75rem;
+}
+
 .markdown-preview pre code {
   background: transparent;
   border: 0;

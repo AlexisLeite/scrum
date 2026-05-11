@@ -15,6 +15,8 @@ import { StoryUpsertionDrawer } from "./StoryUpsertionDrawer";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import { ImageLightbox } from "./ImageLightbox";
 import { buildStatusOptions } from "../../../views/product-workspace/ProductWorkspaceViewShared";
+import { isMermaidLanguage } from "../../../util/mermaid-rendering";
+import { MermaidDiagram } from "./MermaidDiagram";
 
 type MarkdownPreviewProps = {
   markdown: string | null | undefined;
@@ -32,6 +34,10 @@ type MarkdownPreProps = React.HTMLAttributes<HTMLPreElement> & {
   children?: React.ReactNode;
   node?: unknown;
   copyValue?: string;
+};
+type MarkdownCodeBlockInfo = {
+  text: string;
+  lang?: string;
 };
 
 type MarkdownContentBlock =
@@ -197,8 +203,14 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
                 },
                 pre(preProps) {
                   const fallbackCode = extractTextContent(preProps.children);
-                  const copyValue = fullCodeBlocks[renderedCodeBlockIndex] ?? fallbackCode;
+                  const codeBlock = fullCodeBlocks[renderedCodeBlockIndex];
+                  const copyValue = codeBlock?.text ?? fallbackCode;
+                  const language = codeBlock?.lang ?? extractCodeLanguage(preProps.children);
                   renderedCodeBlockIndex += 1;
+
+                  if (isMermaidLanguage(language)) {
+                    return <MarkdownMermaidBlock source={copyValue} />;
+                  }
 
                   return <MarkdownCodeBlock {...preProps} copyValue={copyValue} />;
                 },
@@ -234,9 +246,28 @@ export function MarkdownPreview(props: MarkdownPreviewProps) {
 
 function MarkdownCodeBlock(props: MarkdownPreProps) {
   const { children, node: _node, copyValue, ...preProps } = props;
-  const [copyState, setCopyState] = React.useState<CopyState>("idle");
   const code = copyValue ?? "";
-  const canCopy = code.length > 0;
+
+  return (
+    <div className="markdown-preview-code-block">
+      <MarkdownCopyButton value={code} />
+      <pre {...preProps}>{children}</pre>
+    </div>
+  );
+}
+
+function MarkdownMermaidBlock(props: { source: string }) {
+  return (
+    <div className="markdown-preview-code-block markdown-preview-mermaid-block">
+      <MarkdownCopyButton value={props.source} />
+      <MermaidDiagram source={props.source} fallbackSource />
+    </div>
+  );
+}
+
+function MarkdownCopyButton(props: { value: string }) {
+  const [copyState, setCopyState] = React.useState<CopyState>("idle");
+  const canCopy = props.value.length > 0;
 
   React.useEffect(() => {
     if (copyState === "idle") {
@@ -253,12 +284,12 @@ function MarkdownCodeBlock(props: MarkdownPreProps) {
     }
 
     try {
-      await writeToClipboard(code);
+      await writeToClipboard(props.value);
       setCopyState("copied");
     } catch {
       setCopyState("error");
     }
-  }, [canCopy, code]);
+  }, [canCopy, props.value]);
 
   const buttonLabel = copyState === "copied" ? "Copiado" : copyState === "error" ? "Reintentar" : "Copiar";
   const buttonIcon = copyState === "copied"
@@ -268,20 +299,17 @@ function MarkdownCodeBlock(props: MarkdownPreProps) {
       : <FiCopy aria-hidden="true" />;
 
   return (
-    <div className="markdown-preview-code-block">
-      <button
-        type="button"
-        className={`btn btn-secondary sm markdown-preview-copy-button${copyState === "idle" ? "" : ` is-${copyState}`}`}
-        onClick={() => void handleCopy()}
-        disabled={!canCopy}
-        aria-label={buttonLabel === "Reintentar" ? "Reintentar copiado del bloque de codigo" : `${buttonLabel} bloque de codigo`}
-        title={buttonLabel === "Reintentar" ? "No se pudo copiar. Intentar nuevamente." : `${buttonLabel} bloque de codigo`}
-      >
-        {buttonIcon}
-        <span>{buttonLabel}</span>
-      </button>
-      <pre {...preProps}>{children}</pre>
-    </div>
+    <button
+      type="button"
+      className={`btn btn-secondary sm markdown-preview-copy-button${copyState === "idle" ? "" : ` is-${copyState}`}`}
+      onClick={() => void handleCopy()}
+      disabled={!canCopy}
+      aria-label={buttonLabel === "Reintentar" ? "Reintentar copiado del bloque de codigo" : `${buttonLabel} bloque de codigo`}
+      title={buttonLabel === "Reintentar" ? "No se pudo copiar. Intentar nuevamente." : `${buttonLabel} bloque de codigo`}
+    >
+      {buttonIcon}
+      <span>{buttonLabel}</span>
+    </button>
   );
 }
 
@@ -299,6 +327,30 @@ function extractTextContent(node: React.ReactNode): string {
   }
 
   return "";
+}
+
+function extractCodeLanguage(node: React.ReactNode): string | undefined {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const language = extractCodeLanguage(child);
+      if (language) {
+        return language;
+      }
+    }
+    return undefined;
+  }
+
+  if (!React.isValidElement<{ className?: string; children?: React.ReactNode }>(node)) {
+    return undefined;
+  }
+
+  const className = node.props.className ?? "";
+  const languageClass = className.split(/\s+/).find((entry) => entry.startsWith("language-"));
+  if (languageClass) {
+    return languageClass.slice("language-".length);
+  }
+
+  return extractCodeLanguage(node.props.children);
 }
 
 function splitMarkdownMediaBlocks(markdown: string): MarkdownContentBlock[] {
@@ -461,16 +513,19 @@ function parseBooleanAttribute(value: string | null | undefined) {
   return normalizedValue === "" || normalizedValue === "true" || normalizedValue === "1" || normalizedValue === "yes";
 }
 
-function extractMarkdownCodeBlocks(markdown: string): string[] {
-  const blocks: string[] = [];
+function extractMarkdownCodeBlocks(markdown: string): MarkdownCodeBlockInfo[] {
+  const blocks: MarkdownCodeBlockInfo[] = [];
   collectCodeBlocks(marked.lexer(markdown, { gfm: true }), blocks);
   return blocks;
 }
 
-function collectCodeBlocks(tokens: readonly Token[] | undefined, blocks: string[]) {
+function collectCodeBlocks(tokens: readonly Token[] | undefined, blocks: MarkdownCodeBlockInfo[]) {
   for (const token of tokens ?? []) {
     if (token.type === "code") {
-      blocks.push(token.text);
+      blocks.push({
+        text: token.text,
+        lang: token.lang
+      });
       continue;
     }
 

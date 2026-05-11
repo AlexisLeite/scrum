@@ -5,6 +5,7 @@ import type {
   ContentImage,
   ContentOrderedList,
   ContentStack,
+  ContentSvg,
   ContentTable,
   ContentText,
   ContentTocItem,
@@ -13,6 +14,7 @@ import type {
   TableCell,
   TDocumentDefinitions
 } from "pdfmake/interfaces";
+import { buildMermaidSourceKey, isMermaidLanguage, renderMermaidSvg, type MermaidRenderTheme } from "./mermaid-rendering";
 
 export type ProductPrintDocumentItem = {
   id: string;
@@ -48,6 +50,7 @@ type RenderContext = {
   pendingTocItem: boolean;
   tocHeadingLevels?: ReadonlySet<number>;
   insideList?: boolean;
+  mermaidSvgBySource?: ReadonlyMap<string, string>;
 };
 
 type PdfContentNode = Record<string, unknown>;
@@ -58,9 +61,22 @@ type PrintBlockKind = "paragraph" | "list";
 let pdfFontsRegistered = false;
 let printBlockIdSequence = 0;
 const A4_PAGE_WIDTH = 595.28;
+const PRINT_CONTENT_WIDTH = A4_PAGE_WIDTH - 96;
 const PRINT_IMAGE_WIDTH = A4_PAGE_WIDTH * 0.65;
+const PRINT_MERMAID_MAX_HEIGHT = 250;
 const DEV_MEDIA_ROOT = "/root/repos/scrum/shared";
 const PRINT_BLOCK_ID_PREFIX = "__scrum_print_block:";
+const PRINT_MERMAID_THEME: MermaidRenderTheme = {
+  text: "#1f2d3d",
+  muted: "#4f6378",
+  border: "#9fb0c0",
+  surface: "#ffffff",
+  surfaceSoft: "#eef4fb",
+  accent: "#166fd6",
+  accentSecondary: "#158b7d",
+  fontFamily: "Roboto, Arial, sans-serif",
+  darkMode: false
+};
 
 const PRINT_DOCUMENT_DEFAULT_STYLE = {
   font: "Roboto",
@@ -1228,7 +1244,14 @@ function normalizeCodeBlockLines(value: string) {
   return normalized.split("\n");
 }
 
-function renderCodeBlock(token: Tokens.Code): ContentTable {
+function renderCodeBlock(token: Tokens.Code, context: RenderContext): ContentTable | ContentSvg {
+  if (isMermaidLanguage(token.lang)) {
+    const svg = context.mermaidSvgBySource?.get(buildMermaidSourceKey(token.text));
+    if (svg) {
+      return renderMermaidSvgBlock(svg);
+    }
+  }
+
   const lines = highlightCodeLines(token.text, token.lang);
   const blockStack: Content[] = [];
 
@@ -1268,6 +1291,15 @@ function renderCodeBlock(token: Tokens.Code): ContentTable {
       paddingLeft: () => 12
     },
     margin: [0, 4, 0, 12]
+  };
+}
+
+function renderMermaidSvgBlock(svg: string): ContentSvg {
+  return {
+    svg,
+    alignment: "center",
+    fit: [PRINT_CONTENT_WIDTH, PRINT_MERMAID_MAX_HEIGHT],
+    margin: [0, 8, 0, 14]
   };
 }
 
@@ -1396,7 +1428,7 @@ function renderBlockTokens(tokens: Token[] | undefined, context: RenderContext):
       case "code":
         {
           const codeToken = token as Tokens.Code;
-          const codeNode = renderCodeBlock(codeToken);
+          const codeNode = renderCodeBlock(codeToken, context);
           content.push(codeNode);
         }
         break;
@@ -1521,6 +1553,221 @@ function slugify(value: string) {
     .slice(0, 80) || "documento-producto";
 }
 
+async function renderPrintMermaidSvgs(markdowns: string[]) {
+  const definitions = new Map<string, string>();
+  for (const markdown of markdowns) {
+    collectMermaidDefinitions(marked.lexer(markdown, {
+      gfm: true,
+      breaks: true
+    }), definitions);
+  }
+
+  const rendered = new Map<string, string>();
+  await Promise.all([...definitions].map(async ([key, source]) => {
+    try {
+      const result = await renderMermaidSvg(source, PRINT_MERMAID_THEME);
+      rendered.set(key, normalizePrintMermaidSvg(result.svg));
+    } catch {
+      // Invalid diagrams stay printable through the regular fenced-code fallback.
+    }
+  }));
+  return rendered;
+}
+
+function normalizePrintMermaidSvg(svg: string) {
+  const viewBox = parseSvgViewBox(svg);
+  let normalized = svg.replace(/<svg\b([^>]*)>/i, (match, rawAttributes: string) => {
+    if (!viewBox) {
+      return match.replace(/\sstyle="[^"]*"/i, "");
+    }
+
+    const width = Math.max(1, Math.ceil(viewBox.width));
+    const height = Math.max(1, Math.ceil(viewBox.height));
+    const attributes = rawAttributes
+      .replace(/\swidth="[^"]*"/i, "")
+      .replace(/\sheight="[^"]*"/i, "")
+      .replace(/\sstyle="[^"]*"/i, "");
+
+    return `<svg${attributes} width="${width}" height="${height}" style="background:#ffffff;">`;
+  });
+
+  if (viewBox) {
+    const background = `<rect x="${viewBox.x}" y="${viewBox.y}" width="${viewBox.width}" height="${viewBox.height}" fill="#ffffff"></rect>`;
+    normalized = normalized.replace(/(<svg\b[^>]*>)/i, `$1${background}`);
+  }
+
+  normalized = normalizeSvgRgbaPaints(normalized);
+  normalized = inlineSvgClassPaints(normalized);
+  return normalizeSvgPrintStyles(normalized);
+}
+
+function parseSvgViewBox(svg: string) {
+  const match = /\sviewBox="([^"]+)"/i.exec(svg);
+  if (!match) {
+    return null;
+  }
+
+  const values = match[1].trim().split(/[\s,]+/).map((entry) => Number.parseFloat(entry));
+  if (values.length !== 4 || values.some((entry) => !Number.isFinite(entry))) {
+    return null;
+  }
+
+  const [x, y, width, height] = values;
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return { x, y, width, height };
+}
+
+function normalizeSvgRgbaPaints(svg: string) {
+  return svg.replace(/rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(0|1|0?\.\d+|1\.0+)\s*\)/gi, (_match, red, green, blue, alpha) => {
+    return blendRgbOverWhite(Number(red), Number(green), Number(blue), Number(alpha));
+  });
+}
+
+function normalizeSvgPrintStyles(svg: string) {
+  return svg
+    .replace(/filter:\s*drop-shadow\([^;]+;\s*/gi, "")
+    .replace(/animation:\s*[^;]+;\s*/gi, "")
+    .replace(/@keyframes\s+[^{]+{(?:[^{}]|{[^{}]*})*}/gi, "");
+}
+
+function inlineSvgClassPaints(svg: string) {
+  const classPaints = collectSvgClassPaints(svg);
+  if (classPaints.size === 0) {
+    return svg;
+  }
+
+  return svg.replace(/<(line|path)\b([^>]*)>/gi, (match, tagName: string, rawAttributes: string) => {
+    const classNames = parseSvgClassNames(rawAttributes);
+    if (classNames.length === 0) {
+      return match;
+    }
+
+    const declarations = classNames
+      .map((className) => classPaints.get(className))
+      .filter((entry): entry is Map<string, string> => Boolean(entry));
+    if (declarations.length === 0) {
+      return match;
+    }
+
+    const merged = new Map<string, string>();
+    declarations.forEach((entry) => {
+      entry.forEach((value, property) => merged.set(property, value));
+    });
+
+    let attributes = rawAttributes;
+    attributes = inlineSvgAttribute(attributes, "stroke", merged.get("stroke"));
+    attributes = inlineSvgAttribute(attributes, "stroke-width", merged.get("stroke-width"));
+    attributes = inlineSvgAttribute(attributes, "stroke-dasharray", merged.get("stroke-dasharray"));
+    attributes = inlineSvgAttribute(attributes, "fill", merged.get("fill"));
+
+    return `<${tagName}${attributes}>`;
+  });
+}
+
+function collectSvgClassPaints(svg: string) {
+  const paints = new Map<string, Map<string, string>>();
+  const rulePattern = /\.([a-zA-Z0-9_-]+)\s*\{([^{}]+)\}/g;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = rulePattern.exec(svg)) !== null) {
+    const className = match[1];
+    const declarations = parseCssDeclarations(match[2]);
+    const paintDeclarations = new Map<string, string>();
+
+    for (const property of ["stroke", "stroke-width", "stroke-dasharray", "fill"]) {
+      const value = declarations.get(property);
+      if (value && value !== "none") {
+        paintDeclarations.set(property, value);
+      }
+    }
+
+    if (paintDeclarations.size > 0) {
+      paints.set(className, paintDeclarations);
+    }
+  }
+
+  return paints;
+}
+
+function parseCssDeclarations(css: string) {
+  const declarations = new Map<string, string>();
+  css.split(";").forEach((entry) => {
+    const separatorIndex = entry.indexOf(":");
+    if (separatorIndex < 0) {
+      return;
+    }
+
+    const property = entry.slice(0, separatorIndex).trim().toLowerCase();
+    const value = entry.slice(separatorIndex + 1).trim();
+    if (property && value) {
+      declarations.set(property, value);
+    }
+  });
+  return declarations;
+}
+
+function parseSvgClassNames(attributes: string) {
+  const match = /\sclass="([^"]+)"/i.exec(attributes);
+  return match?.[1]?.split(/\s+/).filter(Boolean) ?? [];
+}
+
+function inlineSvgAttribute(attributes: string, name: string, value: string | undefined) {
+  if (!value) {
+    return attributes;
+  }
+
+  const attributePattern = new RegExp(`\\s${name}="[^"]*"`, "i");
+  if (attributePattern.test(attributes)) {
+    return attributes.replace(attributePattern, ` ${name}="${escapeSvgAttribute(value)}"`);
+  }
+
+  return `${attributes} ${name}="${escapeSvgAttribute(value)}"`;
+}
+
+function escapeSvgAttribute(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function blendRgbOverWhite(red: number, green: number, blue: number, alpha: number) {
+  const resolvedAlpha = Math.max(0, Math.min(1, alpha));
+  const channels = [red, green, blue].map((channel) => {
+    const resolvedChannel = Math.max(0, Math.min(255, Math.round(channel)));
+    return Math.round(resolvedChannel * resolvedAlpha + 255 * (1 - resolvedAlpha));
+  });
+
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function collectMermaidDefinitions(tokens: readonly Token[] | undefined, definitions: Map<string, string>) {
+  for (const token of tokens ?? []) {
+    if (token.type === "code" && isMermaidLanguage(token.lang)) {
+      const source = buildMermaidSourceKey(token.text);
+      if (source) {
+        definitions.set(source, token.text);
+      }
+      continue;
+    }
+
+    const nestedTokens = "tokens" in token && Array.isArray(token.tokens) ? token.tokens : undefined;
+    if (nestedTokens) {
+      collectMermaidDefinitions(nestedTokens, definitions);
+    }
+
+    if (token.type === "list") {
+      for (const item of token.items) {
+        collectMermaidDefinitions(item.tokens, definitions);
+      }
+    }
+  }
+}
+
 async function loadPdfMake() {
   const [pdfMakeModule, pdfFontsModule] = await Promise.all([
     import("pdfmake/build/pdfmake"),
@@ -1541,6 +1788,7 @@ export function buildProductPrintDocument(args: {
   productName: string;
   items: ProductPrintDocumentItem[];
   now?: Date;
+  mermaidSvgBySource?: ReadonlyMap<string, string>;
 }): TDocumentDefinitions {
   resetPrintBlockIds();
   const now = args.now ?? new Date();
@@ -1552,7 +1800,8 @@ export function buildProductPrintDocument(args: {
     });
 
     return renderBlockTokens(tokens, {
-      pendingTocItem: true
+      pendingTocItem: true,
+      mermaidSvgBySource: args.mermaidSvgBySource
     });
   });
 
@@ -1591,6 +1840,7 @@ export function buildProductPrintDocument(args: {
 export function buildTaskPrintDocument(args: {
   title: string;
   description?: string | null;
+  mermaidSvgBySource?: ReadonlyMap<string, string>;
 }): TDocumentDefinitions {
   resetPrintBlockIds();
   const taskTitle = args.title.trim() || "Tarea";
@@ -1609,7 +1859,8 @@ export function buildTaskPrintDocument(args: {
     pageMargins: [48, 56, 48, 60],
     defaultStyle: PRINT_DOCUMENT_DEFAULT_STYLE,
     content: renderBlockTokens(tokens, {
-      pendingTocItem: false
+      pendingTocItem: false,
+      mermaidSvgBySource: args.mermaidSvgBySource
     }),
     styles: PRINT_DOCUMENT_STYLES,
     pageBreakBefore: preventAwkwardPrintBreaks
@@ -1623,6 +1874,7 @@ export function buildMarkdownPrintDocument(args: {
   includeToc: boolean;
   tocLevels?: MarkdownPrintTocLevel[];
   now?: Date;
+  mermaidSvgBySource?: ReadonlyMap<string, string>;
 }): TDocumentDefinitions {
   resetPrintBlockIds();
   const now = args.now ?? new Date();
@@ -1635,7 +1887,8 @@ export function buildMarkdownPrintDocument(args: {
   });
   const documentContent = renderBlockTokens(tokens, {
     pendingTocItem: false,
-    tocHeadingLevels: args.includeToc ? new Set<number>(tocLevels) : undefined
+    tocHeadingLevels: args.includeToc ? new Set<number>(tocLevels) : undefined,
+    mermaidSvgBySource: args.mermaidSvgBySource
   });
 
   return {
@@ -1685,7 +1938,11 @@ export async function printProductDocument(args: {
   items: ProductPrintDocumentItem[];
 }) {
   const pdfMake = await loadPdfMake();
-  const document = buildProductPrintDocument(args);
+  const mermaidSvgBySource = await renderPrintMermaidSvgs(args.items.map((item) => shiftMarkdownHeadings(buildSectionMarkdown(item), item.level)));
+  const document = buildProductPrintDocument({
+    ...args,
+    mermaidSvgBySource
+  });
   await inlineDocumentImages(document.content, new Map());
   await pdfMake.createPdf(document).print();
 }
@@ -1698,7 +1955,11 @@ export async function printMarkdownDocument(args: {
   tocLevels?: MarkdownPrintTocLevel[];
 }) {
   const pdfMake = await loadPdfMake();
-  const document = buildMarkdownPrintDocument(args);
+  const mermaidSvgBySource = await renderPrintMermaidSvgs([args.markdown]);
+  const document = buildMarkdownPrintDocument({
+    ...args,
+    mermaidSvgBySource
+  });
   await inlineDocumentImages(document.content, new Map());
   await pdfMake.createPdf(document).print();
 }
@@ -1708,7 +1969,11 @@ export async function downloadProductDocument(args: {
   items: ProductPrintDocumentItem[];
 }) {
   const pdfMake = await loadPdfMake();
-  const document = buildProductPrintDocument(args);
+  const mermaidSvgBySource = await renderPrintMermaidSvgs(args.items.map((item) => shiftMarkdownHeadings(buildSectionMarkdown(item), item.level)));
+  const document = buildProductPrintDocument({
+    ...args,
+    mermaidSvgBySource
+  });
   await inlineDocumentImages(document.content, new Map());
   const fileName = `${slugify(args.productName)}-documento.pdf`;
   await pdfMake.createPdf(document).download(fileName);
@@ -1719,7 +1984,18 @@ export async function downloadTaskDocument(args: {
   description?: string | null;
 }) {
   const pdfMake = await loadPdfMake();
-  const document = buildTaskPrintDocument(args);
+  const mermaidSvgBySource = await renderPrintMermaidSvgs([
+    buildSectionMarkdown({
+      id: "task:description",
+      title: args.title.trim() || "Tarea",
+      markdown: args.description?.trim() ?? "",
+      level: 1
+    })
+  ]);
+  const document = buildTaskPrintDocument({
+    ...args,
+    mermaidSvgBySource
+  });
   await inlineDocumentImages(document.content, new Map());
   const fileName = `${slugify(args.title.trim() || "tarea")}-tarea.pdf`;
   await pdfMake.createPdf(document).download(fileName);

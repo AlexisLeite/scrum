@@ -1,5 +1,5 @@
 import React from "react";
-import { FiBold, FiCheckSquare, FiCode, FiImage, FiItalic, FiLink, FiList, FiMinus, FiPrinter, FiRotateCcw, FiRotateCw, FiTable } from "react-icons/fi";
+import { FiBold, FiCheckSquare, FiCode, FiImage, FiItalic, FiLink, FiList, FiMinus, FiPrinter, FiRotateCcw, FiRotateCw, FiShare2, FiTable } from "react-icons/fi";
 import { LuListOrdered, LuQuote } from "react-icons/lu";
 import { EditorState, Plugin, TextSelection, type Selection, type Transaction } from "prosemirror-state";
 import { EditorView, type NodeView, type ViewMutationRecord } from "prosemirror-view";
@@ -32,7 +32,7 @@ import {
   yUndoPlugin
 } from "y-prosemirror";
 import { basicSetup, EditorView as CodeMirrorView } from "codemirror";
-import { EditorState as CodeMirrorState, Extension } from "@codemirror/state";
+import { EditorSelection, EditorState as CodeMirrorState, Extension, Prec, type ChangeSpec } from "@codemirror/state";
 import { keymap as codeMirrorKeymap } from "@codemirror/view";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
@@ -58,6 +58,7 @@ import {
 import { Modal, type ModalRenderContext } from "../../modals/Modal";
 import { ModalsController } from "../../modals/ModalsController";
 import { printMarkdownDocument, type MarkdownPrintTocLevel } from "../../../util/product-print-pdf";
+import { formatMermaidError, isMermaidLanguage, observeMermaidTheme, renderMermaidSvg } from "../../../util/mermaid-rendering";
 import "prosemirror-view/style/prosemirror.css";
 
 const YDOC_FRAGMENT_NAME = "prosemirror";
@@ -66,10 +67,37 @@ const MAX_TABLE_SIZE = 12;
 const DEFAULT_TABLE_PICKER_SIZE = 3;
 const DEFAULT_PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [2, 3];
 const PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [1, 2, 3, 4, 5, 6];
+const MERMAID_TEMPLATE_MARKDOWN = "\n\n```mermaid\nflowchart TD\n  A[Idea] --> B[Historia]\n```\n\n";
+const MERMAID_INSERT_FOCUS_WINDOW_MS = 2000;
+const CODE_BLOCK_INDENT = "  ";
+
+let pendingInsertedMermaidSourceFocus = 0;
+let pendingInsertedMermaidSourceFocusUntil = 0;
+
+function requestInsertedMermaidSourceFocus() {
+  pendingInsertedMermaidSourceFocus += 1;
+  pendingInsertedMermaidSourceFocusUntil = Date.now() + MERMAID_INSERT_FOCUS_WINDOW_MS;
+}
+
+function claimInsertedMermaidSourceFocus() {
+  if (pendingInsertedMermaidSourceFocus <= 0 || Date.now() > pendingInsertedMermaidSourceFocusUntil) {
+    clearInsertedMermaidSourceFocus();
+    return false;
+  }
+
+  pendingInsertedMermaidSourceFocus -= 1;
+  return true;
+}
+
+function clearInsertedMermaidSourceFocus() {
+  pendingInsertedMermaidSourceFocus = 0;
+  pendingInsertedMermaidSourceFocusUntil = 0;
+}
 
 const CODE_LANGUAGE_OPTIONS = [
   { value: "txt", label: "Text" },
   { value: "md", label: "Markdown" },
+  { value: "mermaid", label: "Mermaid" },
   { value: "js", label: "JavaScript" },
   { value: "ts", label: "TypeScript" },
   { value: "tsx", label: "TSX" },
@@ -423,6 +451,14 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       return true;
     }, []);
 
+    const insertMermaidDiagramAtSelection = React.useCallback(() => {
+      requestInsertedMermaidSourceFocus();
+      const inserted = insertMarkdownAtSelection(MERMAID_TEMPLATE_MARKDOWN);
+      if (!inserted) {
+        clearInsertedMermaidSourceFocus();
+      }
+    }, [insertMarkdownAtSelection]);
+
     const handleToolbarFocusCapture = React.useCallback((event: React.FocusEvent<HTMLDivElement>) => {
       const toolbarItem = findToolbarItemForTarget(event.currentTarget, event.target);
       if (toolbarItem) {
@@ -619,6 +655,9 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
           />
           <ToolbarButton label="Insertar bloque de codigo" disabled={editorCommandDisabled} onClick={() => insertMarkdownAtSelection("\n\n```txt\n\n```\n\n")}>
             <FiCode aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarButton label="Insertar diagrama Mermaid" disabled={editorCommandDisabled} onClick={insertMermaidDiagramAtSelection}>
+            <FiShare2 aria-hidden="true" />
           </ToolbarButton>
           <ToolbarButton label="Linea horizontal" disabled={editorCommandDisabled} onClick={() => insertMarkdownAtSelection("\n\n---\n\n")}>
             <FiMinus aria-hidden="true" />
@@ -2752,9 +2791,18 @@ class TableNodeView implements NodeView {
 
 class CodeBlockNodeView implements NodeView {
   dom: HTMLElement;
+  private toolbar: HTMLElement;
   private editorHost: HTMLElement;
+  private mermaidPreview: HTMLElement;
+  private mermaidSvgHost: HTMLElement;
+  private mermaidError: HTMLElement;
   private editor: CodeMirrorView;
   private updating = false;
+  private mermaidEditing = false;
+  private mermaidBlurTimeout = 0;
+  private mermaidRenderTimeout = 0;
+  private mermaidRenderVersion = 0;
+  private cleanupMermaidThemeObserver: (() => void) | null = null;
 
   constructor(
     private node: ProseMirrorNode,
@@ -2763,8 +2811,8 @@ class CodeBlockNodeView implements NodeView {
   ) {
     this.dom = document.createElement("div");
     this.dom.className = "prosemirror-code-block";
-    const toolbar = document.createElement("div");
-    toolbar.className = "prosemirror-code-block-toolbar";
+    this.toolbar = document.createElement("div");
+    this.toolbar.className = "prosemirror-code-block-toolbar";
 
     const languageSelect = document.createElement("select");
     languageSelect.className = "prosemirror-code-language-select";
@@ -2791,15 +2839,38 @@ class CodeBlockNodeView implements NodeView {
       this.deleteBlock();
     });
 
-    toolbar.append(languageSelect, deleteButton);
+    this.toolbar.append(languageSelect, deleteButton);
     this.editorHost = document.createElement("div");
     this.editorHost.className = "prosemirror-code-block-editor";
-    this.dom.append(toolbar, this.editorHost);
+    this.mermaidPreview = document.createElement("div");
+    this.mermaidPreview.className = "prosemirror-mermaid-preview";
+    this.mermaidSvgHost = document.createElement("div");
+    this.mermaidSvgHost.className = "prosemirror-mermaid-preview-svg";
+    this.mermaidPreview.addEventListener("dblclick", this.handleMermaidPreviewDoubleClick);
+    this.mermaidError = document.createElement("div");
+    this.mermaidError.className = "prosemirror-mermaid-preview-error";
+    this.mermaidError.setAttribute("role", "alert");
+    this.mermaidPreview.append(this.mermaidSvgHost, this.mermaidError);
+    this.dom.append(this.toolbar, this.editorHost, this.mermaidPreview);
     this.editor = new CodeMirrorView({
       parent: this.editorHost,
       state: CodeMirrorState.create({
         doc: node.textContent,
         extensions: [
+          Prec.high(codeMirrorKeymap.of([
+            {
+              key: "Tab",
+              run: indentCodeBlockSelection
+            },
+            {
+              key: "Shift-Tab",
+              run: outdentCodeBlockSelection
+            },
+            {
+              key: "Enter",
+              run: insertIndentedCodeBlockLine
+            }
+          ])),
           basicSetup,
           codeLanguage(node.attrs.params),
           codeMirrorKeymap.of([
@@ -2831,10 +2902,20 @@ class CodeBlockNodeView implements NodeView {
             const text = update.state.doc.toString();
             const transaction = this.view.state.tr.insertText(text, position + 1, position + this.node.nodeSize - 1);
             this.view.dispatch(transaction);
+            this.scheduleMermaidPreviewRender();
           })
         ]
       })
     });
+    this.editor.dom.addEventListener("focusin", this.handleCodeMirrorFocusIn);
+    this.editor.dom.addEventListener("focusout", this.handleCodeMirrorFocusOut);
+    this.cleanupMermaidThemeObserver = observeMermaidTheme(() => this.scheduleMermaidPreviewRender(0));
+    if (this.shouldFocusInsertedMermaidSource()) {
+      this.showMermaidSourceEditor({ focus: true, moveCursorToEnd: true });
+    } else {
+      this.updateMermaidSourceVisibility();
+    }
+    this.scheduleMermaidPreviewRender(0);
   }
 
   update(node: ProseMirrorNode) {
@@ -2855,6 +2936,7 @@ class CodeBlockNodeView implements NodeView {
       });
       this.updating = false;
     }
+    this.scheduleMermaidPreviewRender();
     return true;
   }
 
@@ -2867,6 +2949,12 @@ class CodeBlockNodeView implements NodeView {
   }
 
   destroy() {
+    window.clearTimeout(this.mermaidBlurTimeout);
+    window.clearTimeout(this.mermaidRenderTimeout);
+    this.cleanupMermaidThemeObserver?.();
+    this.mermaidPreview.removeEventListener("dblclick", this.handleMermaidPreviewDoubleClick);
+    this.editor.dom.removeEventListener("focusin", this.handleCodeMirrorFocusIn);
+    this.editor.dom.removeEventListener("focusout", this.handleCodeMirrorFocusOut);
     this.editor.destroy();
   }
 
@@ -2875,10 +2963,14 @@ class CodeBlockNodeView implements NodeView {
     if (position == null) {
       return;
     }
+    const nextLanguage = normalizeCodeLanguage(language);
+    if (isMermaidLanguage(nextLanguage)) {
+      requestInsertedMermaidSourceFocus();
+    }
     this.view.dispatch(
       this.view.state.tr.setNodeMarkup(position, undefined, {
         ...this.node.attrs,
-        params: normalizeCodeLanguage(language)
+        params: nextLanguage
       })
     );
   }
@@ -2939,10 +3031,265 @@ class CodeBlockNodeView implements NodeView {
   private resolvePosition() {
     return typeof this.getPos === "function" ? this.getPos() : undefined;
   }
+
+  private handleCodeMirrorFocusIn = () => {
+    this.showMermaidSourceEditor();
+  };
+
+  private handleCodeMirrorFocusOut = () => {
+    if (!isMermaidLanguage(this.node.attrs.params)) {
+      return;
+    }
+
+    window.clearTimeout(this.mermaidBlurTimeout);
+    this.mermaidBlurTimeout = window.setTimeout(() => {
+      if (!this.editor.dom.contains(document.activeElement)) {
+        this.hideMermaidSourceEditor();
+      }
+    }, 0);
+  };
+
+  private handleMermaidPreviewDoubleClick = (event: MouseEvent) => {
+    if (!isMermaidLanguage(this.node.attrs.params)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.showMermaidSourceEditor({ focus: true });
+  };
+
+  private shouldFocusInsertedMermaidSource() {
+    if (!isMermaidLanguage(this.node.attrs.params)) {
+      return false;
+    }
+    return claimInsertedMermaidSourceFocus();
+  }
+
+  private showMermaidSourceEditor(options?: { focus?: boolean; moveCursorToEnd?: boolean }) {
+    if (!isMermaidLanguage(this.node.attrs.params)) {
+      return;
+    }
+
+    window.clearTimeout(this.mermaidBlurTimeout);
+    this.mermaidEditing = true;
+    this.updateMermaidSourceVisibility();
+
+    if (options?.focus) {
+      window.requestAnimationFrame(() => {
+        if (options.moveCursorToEnd) {
+          this.editor.dispatch({
+            selection: EditorSelection.single(this.editor.state.doc.length)
+          });
+        }
+        this.editor.focus();
+      });
+    }
+  }
+
+  private hideMermaidSourceEditor() {
+    if (!isMermaidLanguage(this.node.attrs.params)) {
+      return;
+    }
+
+    this.mermaidEditing = false;
+    this.updateMermaidSourceVisibility();
+  }
+
+  private updateMermaidSourceVisibility() {
+    const mermaid = isMermaidLanguage(this.node.attrs.params);
+    this.dom.classList.toggle("is-mermaid", mermaid);
+    this.dom.classList.toggle("is-mermaid-editing", mermaid && this.mermaidEditing);
+
+    this.toolbar.hidden = mermaid && !this.mermaidEditing;
+    this.editorHost.hidden = mermaid && !this.mermaidEditing;
+  }
+
+  private scheduleMermaidPreviewRender(delay = 160) {
+    window.clearTimeout(this.mermaidRenderTimeout);
+    if (!isMermaidLanguage(this.node.attrs.params)) {
+      this.mermaidRenderVersion += 1;
+      this.mermaidEditing = false;
+      this.updateMermaidSourceVisibility();
+      this.mermaidPreview.hidden = true;
+      this.mermaidPreview.classList.remove("is-loading", "is-ready", "is-error");
+      this.mermaidSvgHost.replaceChildren();
+      this.mermaidError.replaceChildren();
+      return;
+    }
+
+    this.mermaidPreview.hidden = false;
+    this.updateMermaidSourceVisibility();
+    this.mermaidRenderVersion += 1;
+    this.mermaidRenderTimeout = window.setTimeout(() => {
+      void this.renderMermaidPreview();
+    }, delay);
+  }
+
+  private async renderMermaidPreview() {
+    const source = this.editor.state.doc.toString();
+    const renderVersion = this.mermaidRenderVersion + 1;
+    this.mermaidRenderVersion = renderVersion;
+    this.mermaidPreview.classList.remove("is-ready", "is-error");
+    this.mermaidSvgHost.replaceChildren();
+    this.mermaidError.replaceChildren();
+
+    if (!source.trim()) {
+      this.mermaidPreview.classList.remove("is-loading");
+      return;
+    }
+
+    this.mermaidPreview.classList.add("is-loading");
+
+    try {
+      const result = await renderMermaidSvg(source);
+      if (renderVersion !== this.mermaidRenderVersion) {
+        return;
+      }
+
+      this.mermaidSvgHost.innerHTML = result.svg;
+      result.bindFunctions?.(this.mermaidSvgHost);
+      this.mermaidPreview.classList.remove("is-loading", "is-error");
+      this.mermaidPreview.classList.add("is-ready");
+    } catch (error: unknown) {
+      if (renderVersion !== this.mermaidRenderVersion) {
+        return;
+      }
+
+      const title = document.createElement("strong");
+      title.textContent = "No se pudo renderizar el diagrama Mermaid.";
+      const detail = document.createElement("span");
+      detail.textContent = formatMermaidError(error);
+      this.mermaidError.append(title, detail);
+      this.mermaidPreview.classList.remove("is-loading", "is-ready");
+      this.mermaidPreview.classList.add("is-error");
+    }
+  }
+}
+
+function indentCodeBlockSelection(codeView: CodeMirrorView) {
+  const { state } = codeView;
+  const range = state.selection.main;
+  if (range.empty) {
+    codeView.dispatch({
+      changes: { from: range.from, insert: CODE_BLOCK_INDENT },
+      selection: { anchor: range.from + CODE_BLOCK_INDENT.length },
+      scrollIntoView: true
+    });
+    return true;
+  }
+
+  const lineStarts = selectedCodeBlockLineStarts(state, range.from, range.to);
+  if (lineStarts.length === 0) {
+    return false;
+  }
+
+  const changes: ChangeSpec[] = lineStarts.map((from) => ({
+    from,
+    insert: CODE_BLOCK_INDENT
+  }));
+  codeView.dispatch({
+    changes,
+    selection: {
+      anchor: shiftPositionForInsertions(range.anchor, lineStarts, CODE_BLOCK_INDENT.length),
+      head: shiftPositionForInsertions(range.head, lineStarts, CODE_BLOCK_INDENT.length)
+    },
+    scrollIntoView: true
+  });
+  return true;
+}
+
+function outdentCodeBlockSelection(codeView: CodeMirrorView) {
+  const { state } = codeView;
+  const range = state.selection.main;
+  const removals = selectedCodeBlockLineStarts(state, range.from, range.to)
+    .map((from) => {
+      const line = state.doc.lineAt(from);
+      const size = outdentSize(line.text);
+      return size > 0 ? { from, to: from + size } : null;
+    })
+    .filter((entry): entry is { from: number; to: number } => entry !== null);
+
+  if (removals.length === 0) {
+    return true;
+  }
+
+  codeView.dispatch({
+    changes: removals,
+    selection: {
+      anchor: shiftPositionForRemovals(range.anchor, removals),
+      head: shiftPositionForRemovals(range.head, removals)
+    },
+    scrollIntoView: true
+  });
+  return true;
+}
+
+function insertIndentedCodeBlockLine(codeView: CodeMirrorView) {
+  const range = codeView.state.selection.main;
+  const line = codeView.state.doc.lineAt(range.from);
+  const indentation = /^[\t ]*/.exec(line.text)?.[0] ?? "";
+  const insert = `\n${indentation}`;
+  codeView.dispatch({
+    changes: {
+      from: range.from,
+      to: range.to,
+      insert
+    },
+    selection: { anchor: range.from + insert.length },
+    scrollIntoView: true
+  });
+  return true;
+}
+
+function selectedCodeBlockLineStarts(state: CodeMirrorState, from: number, to: number) {
+  const doc = state.doc;
+  const firstLine = doc.lineAt(from);
+  let lastLine = doc.lineAt(to);
+  if (to > from && to === lastLine.from) {
+    lastLine = doc.line(Math.max(firstLine.number, lastLine.number - 1));
+  }
+
+  const starts: number[] = [];
+  for (let lineNumber = firstLine.number; lineNumber <= lastLine.number; lineNumber += 1) {
+    starts.push(doc.line(lineNumber).from);
+  }
+  return starts;
+}
+
+function outdentSize(lineText: string) {
+  if (lineText.startsWith(CODE_BLOCK_INDENT)) {
+    return CODE_BLOCK_INDENT.length;
+  }
+  if (lineText.startsWith("\t") || lineText.startsWith(" ")) {
+    return 1;
+  }
+  return 0;
+}
+
+function shiftPositionForInsertions(position: number, lineStarts: number[], insertSize: number) {
+  return position + lineStarts.filter((lineStart) => lineStart <= position).length * insertSize;
+}
+
+function shiftPositionForRemovals(position: number, removals: Array<{ from: number; to: number }>) {
+  let nextPosition = position;
+  for (const removal of removals) {
+    const size = removal.to - removal.from;
+    if (position <= removal.from) {
+      continue;
+    }
+    if (position <= removal.to) {
+      nextPosition = Math.min(nextPosition, removal.from);
+      continue;
+    }
+    nextPosition -= size;
+  }
+  return nextPosition;
 }
 
 function codeLanguage(rawValue: string | null | undefined): Extension {
   const language = (rawValue ?? "").trim().toLowerCase().split(/\s+/)[0];
+  if (isMermaidLanguage(language)) return [];
   if (language === "js" || language === "jsx" || language === "javascript") return javascript({ jsx: language === "jsx" });
   if (language === "ts" || language === "tsx" || language === "typescript") return javascript({ typescript: true, jsx: language === "tsx" });
   if (language === "json") return json();
@@ -2964,6 +3311,7 @@ function normalizeCodeLanguage(rawValue: string | null | undefined) {
   if (language === "jsx") return "js";
   if (language === "yml") return "yaml";
   if (language === "py") return "python";
+  if (language === "mmd") return "mermaid";
   return "txt";
 }
 
