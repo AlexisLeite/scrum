@@ -93,7 +93,7 @@ const imageNodeSpec: NodeSpec = {
   }
 };
 
-export const markdownSchema = new Schema({
+export const markdownSchema: Schema = new Schema({
   nodes: baseMarkdownSchema.spec.nodes
     .update("list_item", taskListItemSpec)
     .update("image", imageNodeSpec)

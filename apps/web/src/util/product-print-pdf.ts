@@ -9,6 +9,7 @@ import type {
   ContentText,
   ContentTocItem,
   ContentUnorderedList,
+  StyleDictionary,
   TableCell,
   TDocumentDefinitions
 } from "pdfmake/interfaces";
@@ -46,14 +47,20 @@ type InlineContent = string | InlineTextRun;
 type RenderContext = {
   pendingTocItem: boolean;
   tocHeadingLevels?: ReadonlySet<number>;
+  insideList?: boolean;
 };
 
 type PdfContentNode = Record<string, unknown>;
+type ProductPrintPageBreakBefore = NonNullable<TDocumentDefinitions["pageBreakBefore"]>;
+type ProductPrintPageBreakNode = Parameters<ProductPrintPageBreakBefore>[0];
+type PrintBlockKind = "paragraph" | "list";
 
 let pdfFontsRegistered = false;
+let printBlockIdSequence = 0;
 const A4_PAGE_WIDTH = 595.28;
 const PRINT_IMAGE_WIDTH = A4_PAGE_WIDTH * 0.65;
 const DEV_MEDIA_ROOT = "/root/repos/scrum/shared";
+const PRINT_BLOCK_ID_PREFIX = "__scrum_print_block:";
 
 const PRINT_DOCUMENT_DEFAULT_STYLE = {
   font: "Roboto",
@@ -62,7 +69,7 @@ const PRINT_DOCUMENT_DEFAULT_STYLE = {
   color: "#1f2d3d"
 };
 
-const PRINT_DOCUMENT_STYLES = {
+const PRINT_DOCUMENT_STYLES: StyleDictionary = {
   coverTitle: {
     fontSize: 26,
     bold: true,
@@ -459,7 +466,7 @@ function highlightIdentifier(
     return;
   }
 
-  if (family !== "plain" && family !== "json" && CODE_KEYWORDS[family as keyof typeof CODE_KEYWORDS]?.has(lower)) {
+  if (family !== "plain" && CODE_KEYWORDS[family].has(lower)) {
     pushHighlightedSegment(segments, identifier, "keyword");
 
     if (family === "clike") {
@@ -805,6 +812,178 @@ function renderTableCell(cell: Tokens.TableCell, rowIndex: number = 0): TableCel
   };
 }
 
+function createPrintBlockId(kind: PrintBlockKind) {
+  printBlockIdSequence += 1;
+  return `${PRINT_BLOCK_ID_PREFIX}${kind}:${printBlockIdSequence}`;
+}
+
+function resetPrintBlockIds() {
+  printBlockIdSequence = 0;
+}
+
+function getPrintBlockKind(node: ProductPrintPageBreakNode): PrintBlockKind | null {
+  if (typeof node.id !== "string" || !node.id.startsWith(PRINT_BLOCK_ID_PREFIX)) {
+    return null;
+  }
+
+  const rawKind = node.id.slice(PRINT_BLOCK_ID_PREFIX.length).split(":")[0];
+  return rawKind === "paragraph" || rawKind === "list" ? rawKind : null;
+}
+
+function isPrintHeadingNode(node: ProductPrintPageBreakNode) {
+  return typeof node.headlineLevel === "number";
+}
+
+function nodeContinuesAfterPage(node: ProductPrintPageBreakNode, pageNumber: number) {
+  return node.pageNumbers.some((entry) => entry > pageNumber);
+}
+
+function flattenPrintText(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => flattenPrintText(entry)).join("");
+  }
+
+  if (isPdfContentNode(value) && "text" in value) {
+    return flattenPrintText(value.text);
+  }
+
+  return "";
+}
+
+function isShortPrintParagraph(node: ProductPrintPageBreakNode) {
+  if (getPrintBlockKind(node) !== "paragraph") {
+    return false;
+  }
+
+  const normalizedText = flattenPrintText(node.text).replace(/\s+/g, " ").trim();
+  return normalizedText.length > 0 && normalizedText.length <= 220;
+}
+
+function tokenTextContent(token: Token): string {
+  if ("tokens" in token && token.tokens?.length) {
+    return flattenPrintText(asTextContent(token.tokens));
+  }
+
+  if ("text" in token && typeof token.text === "string") {
+    return token.text;
+  }
+
+  return "";
+}
+
+function introducesFollowingList(token: Token | undefined, nextToken: Token | undefined) {
+  if (!token || !nextToken || nextToken.type !== "list") {
+    return false;
+  }
+
+  if (token.type !== "paragraph" && token.type !== "text") {
+    return false;
+  }
+
+  return /:\s*$/.test(tokenTextContent(token).trim());
+}
+
+function findNextNonSpaceToken(tokens: Token[], startIndex: number) {
+  for (let index = startIndex; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.type !== "space") {
+      return { token, index };
+    }
+  }
+
+  return null;
+}
+
+function isPrintContentNode(node: ProductPrintPageBreakNode) {
+  return !isPrintHeadingNode(node) && (
+    getPrintBlockKind(node) !== null ||
+    Boolean(node.text) ||
+    Boolean(node.ul) ||
+    Boolean(node.ol) ||
+    Boolean(node.table) ||
+    Boolean(node.image) ||
+    Boolean(node.canvas) ||
+    Boolean(node.svg) ||
+    Boolean(node.columns)
+  );
+}
+
+function hasContinuationBeforeNextHeading(nodes: ProductPrintPageBreakNode[]) {
+  for (const node of nodes) {
+    if (isPrintHeadingNode(node)) {
+      return false;
+    }
+
+    if (isPrintContentNode(node)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+const preventAwkwardPrintBreaks: ProductPrintPageBreakBefore = (currentNode, nodeQueries) => {
+  const currentPage = currentNode.pageNumbers[0];
+  const previousNodesOnPage = nodeQueries.getPreviousNodesOnPage();
+  const hasPreviousContentOnPage = previousNodesOnPage.some(isPrintContentNode);
+  if (typeof currentPage !== "number") {
+    return false;
+  }
+
+  const nodesOnNextPage = nodeQueries.getNodesOnNextPage();
+  if (nodesOnNextPage.length === 0) {
+    return false;
+  }
+
+  const followingNodesOnPage = nodeQueries.getFollowingNodesOnPage();
+  const currentBlockKind = getPrintBlockKind(currentNode);
+
+  if (currentBlockKind === "paragraph" || currentBlockKind === "list") {
+    if (!hasPreviousContentOnPage) {
+      return false;
+    }
+
+    if (nodeContinuesAfterPage(currentNode, currentPage)) {
+      return true;
+    }
+
+    return (
+      currentBlockKind === "paragraph" &&
+      isShortPrintParagraph(currentNode) &&
+      followingNodesOnPage.length === 0 &&
+      hasContinuationBeforeNextHeading(nodesOnNextPage)
+    );
+  }
+
+  if (!isPrintHeadingNode(currentNode) || !hasPreviousContentOnPage) {
+    return false;
+  }
+
+  if (followingNodesOnPage.length === 0) {
+    return true;
+  }
+
+  const followingContentNodes = followingNodesOnPage.filter(isPrintContentNode);
+  const firstContentNode = followingContentNodes[0];
+  if (!firstContentNode) {
+    return true;
+  }
+
+  if (nodeContinuesAfterPage(firstContentNode, currentPage)) {
+    return true;
+  }
+
+  return (
+    followingContentNodes.length <= 1 &&
+    isShortPrintParagraph(firstContentNode) &&
+    hasContinuationBeforeNextHeading(nodesOnNextPage)
+  );
+};
+
 function hasRenderableInlineTokens(tokens: Token[] | undefined): boolean {
   if (!tokens?.length) {
     return false;
@@ -1007,7 +1186,7 @@ async function inlineDocumentImages(node: unknown, cache: Map<string, Promise<st
   }
 }
 
-function renderParagraphToken(token: Tokens.Paragraph): Content[] {
+function renderParagraphToken(token: Tokens.Paragraph, context: RenderContext): Content[] {
   const inlineTokens = token.tokens ?? [];
   const content: Content[] = [];
   let bufferedTokens: Token[] = [];
@@ -1019,6 +1198,7 @@ function renderParagraphToken(token: Tokens.Paragraph): Content[] {
     }
 
     content.push({
+      ...(context.insideList ? {} : { id: createPrintBlockId("paragraph") }),
       text: asTextContent(bufferedTokens) as ContentText["text"],
       margin: [0, 0, 0, 10]
     });
@@ -1092,7 +1272,10 @@ function renderCodeBlock(token: Tokens.Code): ContentTable {
 }
 
 function renderListItem(item: Tokens.ListItem, context: RenderContext): Content {
-  const blocks = renderBlockTokens(item.tokens, context);
+  const blocks = renderBlockTokens(item.tokens, {
+    ...context,
+    insideList: true
+  });
   if (blocks.length === 1) {
     return blocks[0];
   }
@@ -1103,6 +1286,22 @@ function renderListItem(item: Tokens.ListItem, context: RenderContext): Content 
   };
 }
 
+function renderIntroducedListBlock(introToken: Token, listToken: Token, context: RenderContext): ContentStack {
+  return {
+    id: createPrintBlockId("list"),
+    stack: [
+      ...renderBlockTokens([introToken], {
+        ...context,
+        insideList: true
+      }),
+      ...renderBlockTokens([listToken], {
+        ...context,
+        insideList: true
+      })
+    ]
+  } as ContentStack;
+}
+
 function renderBlockTokens(tokens: Token[] | undefined, context: RenderContext): Content[] {
   if (!tokens?.length) {
     return [];
@@ -1110,7 +1309,15 @@ function renderBlockTokens(tokens: Token[] | undefined, context: RenderContext):
 
   const content: Content[] = [];
 
-  for (const token of tokens) {
+  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {
+    const token = tokens[tokenIndex];
+    const nextNonSpaceToken = findNextNonSpaceToken(tokens, tokenIndex + 1);
+    if (!context.insideList && nextNonSpaceToken && introducesFollowingList(token, nextNonSpaceToken.token)) {
+      content.push(renderIntroducedListBlock(token, nextNonSpaceToken.token, context));
+      tokenIndex = nextNonSpaceToken.index;
+      continue;
+    }
+
     switch (token.type) {
       case "space":
         break;
@@ -1121,6 +1328,7 @@ function renderBlockTokens(tokens: Token[] | undefined, context: RenderContext):
         const baseHeadingNode: ContentText = {
           text: headingText as ContentText["text"],
           style: `heading${headingLevel}`,
+          headlineLevel: headingLevel,
           margin: [0, headingToken.depth <= 2 ? 18 : 12, 0, 8]
         };
         const shouldIncludeInToc = context.pendingTocItem || context.tocHeadingLevels?.has(headingLevel);
@@ -1144,12 +1352,13 @@ function renderBlockTokens(tokens: Token[] | undefined, context: RenderContext):
       }
       case "paragraph": {
         const paragraphToken = token as Tokens.Paragraph;
-        content.push(...renderParagraphToken(paragraphToken));
+        content.push(...renderParagraphToken(paragraphToken, context));
         break;
       }
       case "text": {
         const textToken = token as Tokens.Text;
         const textNode: ContentText = {
+          ...(context.insideList ? {} : { id: createPrintBlockId("paragraph") }),
           text: asTextContent(textToken.tokens) as ContentText["text"],
           margin: [0, 0, 0, 10]
         };
@@ -1161,11 +1370,13 @@ function renderBlockTokens(tokens: Token[] | undefined, context: RenderContext):
           const listToken = token as Tokens.List;
           const listNode: ContentOrderedList | ContentUnorderedList = listToken.ordered
             ? {
+                ...(context.insideList ? {} : { id: createPrintBlockId("list") }),
                 ol: listToken.items.map((item: Tokens.ListItem) => renderListItem(item, context)),
                 start: typeof listToken.start === "number" ? listToken.start : undefined,
                 margin: [0, 0, 0, 10]
               }
             : {
+                ...(context.insideList ? {} : { id: createPrintBlockId("list") }),
                 ul: listToken.items.map((item: Tokens.ListItem) => renderListItem(item, context)),
                 margin: [0, 0, 0, 10]
               };
@@ -1273,6 +1484,22 @@ function formatPrintDate(now: Date) {
   });
 }
 
+function buildTableOfContentsPage(): ContentStack {
+  return {
+    stack: [
+      {
+        text: "Tabla de contenidos",
+        style: "tocTitle"
+      },
+      {
+        toc: {},
+        margin: [0, 14, 0, 0]
+      }
+    ],
+    pageBreak: "after"
+  };
+}
+
 function normalizeMarkdownPrintTocLevels(levels: MarkdownPrintTocLevel[] | undefined): MarkdownPrintTocLevel[] {
   const normalizedLevels = new Set<MarkdownPrintTocLevel>();
 
@@ -1315,6 +1542,7 @@ export function buildProductPrintDocument(args: {
   items: ProductPrintDocumentItem[];
   now?: Date;
 }): TDocumentDefinitions {
+  resetPrintBlockIds();
   const now = args.now ?? new Date();
   const sections = args.items.flatMap((item) => {
     const shiftedMarkdown = shiftMarkdownHeadings(buildSectionMarkdown(item), item.level);
@@ -1352,22 +1580,11 @@ export function buildProductPrintDocument(args: {
         text: " ",
         pageBreak: "after"
       },
-      {
-        stack: [
-          {
-            text: "Tabla de contenidos",
-            style: "tocTitle"
-          },
-          {
-            toc: {},
-            margin: [0, 14, 0, 0]
-          }
-        ],
-        pageBreak: "after"
-      },
+      buildTableOfContentsPage(),
       ...sections
     ],
-    styles: PRINT_DOCUMENT_STYLES
+    styles: PRINT_DOCUMENT_STYLES,
+    pageBreakBefore: preventAwkwardPrintBreaks
   };
 }
 
@@ -1375,6 +1592,7 @@ export function buildTaskPrintDocument(args: {
   title: string;
   description?: string | null;
 }): TDocumentDefinitions {
+  resetPrintBlockIds();
   const taskTitle = args.title.trim() || "Tarea";
   const tokens = marked.lexer(buildSectionMarkdown({
     id: "task:description",
@@ -1393,7 +1611,8 @@ export function buildTaskPrintDocument(args: {
     content: renderBlockTokens(tokens, {
       pendingTocItem: false
     }),
-    styles: PRINT_DOCUMENT_STYLES
+    styles: PRINT_DOCUMENT_STYLES,
+    pageBreakBefore: preventAwkwardPrintBreaks
   };
 }
 
@@ -1405,6 +1624,7 @@ export function buildMarkdownPrintDocument(args: {
   tocLevels?: MarkdownPrintTocLevel[];
   now?: Date;
 }): TDocumentDefinitions {
+  resetPrintBlockIds();
   const now = args.now ?? new Date();
   const title = args.title.trim() || "Documento markdown";
   const description = args.coverDescription?.trim() ?? "";
@@ -1445,19 +1665,7 @@ export function buildMarkdownPrintDocument(args: {
         pageBreak: "after"
       },
       ...(args.includeToc
-        ? [{
-            stack: [
-              {
-                text: "Tabla de contenidos",
-                style: "tocTitle"
-              },
-              {
-                toc: {},
-                margin: [0, 14, 0, 0]
-              }
-            ],
-            pageBreak: "after"
-          }]
+        ? [buildTableOfContentsPage()]
         : []),
       ...(documentContent.length > 0
         ? documentContent
@@ -1467,7 +1675,8 @@ export function buildMarkdownPrintDocument(args: {
             italics: true
           }])
     ],
-    styles: PRINT_DOCUMENT_STYLES
+    styles: PRINT_DOCUMENT_STYLES,
+    pageBreakBefore: preventAwkwardPrintBreaks
   };
 }
 

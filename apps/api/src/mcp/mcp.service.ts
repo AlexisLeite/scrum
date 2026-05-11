@@ -85,7 +85,8 @@ const READ_TASKS_TYPE_TO_STATUS = {
   todo: "Todo",
   "in progress": "In Progress",
   blocked: "Blocked",
-  done: "Done"
+  done: "Done",
+  closed: "Closed"
 } as const;
 const TASK_CHECKLIST_ACTIVITY_PATTERN = /^(\s*)((?:[-+*]|\d+[.)])\s+\[)([ xX])(\]\s*)(.*)$/gm;
 
@@ -170,7 +171,7 @@ export class McpService {
                     type: {
                       type: "string",
                       enum: Object.keys(READ_TASKS_TYPE_TO_STATUS),
-                      description: "Filtro opcional por estado. Valores: todo, in progress, blocked, done."
+                      description: "Filtro opcional por estado. Valores: todo, in progress, blocked, done, closed."
                     },
                     offset: {
                       type: "number",
