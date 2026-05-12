@@ -1598,6 +1598,7 @@ function normalizePrintMermaidSvg(svg: string) {
 
   normalized = normalizeSvgRgbaPaints(normalized);
   normalized = inlineSvgClassPaints(normalized);
+  normalized = normalizeSvgLeftwardArrowheads(normalized);
   return normalizeSvgPrintStyles(normalized);
 }
 
@@ -1631,6 +1632,156 @@ function normalizeSvgPrintStyles(svg: string) {
     .replace(/filter:\s*drop-shadow\([^;]+;\s*/gi, "")
     .replace(/animation:\s*[^;]+;\s*/gi, "")
     .replace(/@keyframes\s+[^{]+{(?:[^{}]|{[^{}]*})*}/gi, "");
+}
+
+function normalizeSvgLeftwardArrowheads(svg: string) {
+  return svg.replace(/<(line|path)\b([^>]*\smarker-end="url\(#([^)]+)\)"[^>]*)>/gi, (match, tagName: string, rawAttributes: string, markerId: string) => {
+    if (!isDirectionalArrowMarker(markerId)) {
+      return match;
+    }
+
+    const points = tagName.toLowerCase() === "line"
+      ? readSvgLineTerminalPoints(rawAttributes)
+      : readSvgPathTerminalPoints(rawAttributes);
+    if (!points || points.end.x >= points.previous.x - 0.5) {
+      return match;
+    }
+
+    const attributes = rawAttributes.replace(/\smarker-end="url\(#([^)]+)\)"/i, "");
+    return `<${tagName}${attributes}>${buildInlineSvgArrowhead(points.previous, points.end, rawAttributes)}`;
+  });
+}
+
+function isDirectionalArrowMarker(markerId: string) {
+  const normalized = markerId.toLowerCase();
+  if (normalized.includes("cross") || normalized.includes("circle") || normalized.includes("sequencenumber")) {
+    return false;
+  }
+  return normalized.includes("arrow") || normalized.includes("pointend") || normalized.includes("filled-head");
+}
+
+function readSvgLineTerminalPoints(attributes: string) {
+  const x1 = readSvgNumericAttribute(attributes, "x1");
+  const y1 = readSvgNumericAttribute(attributes, "y1");
+  const x2 = readSvgNumericAttribute(attributes, "x2");
+  const y2 = readSvgNumericAttribute(attributes, "y2");
+  if (x1 == null || y1 == null || x2 == null || y2 == null) {
+    return null;
+  }
+  return {
+    previous: { x: x1, y: y1 },
+    end: { x: x2, y: y2 }
+  };
+}
+
+function readSvgPathTerminalPoints(attributes: string) {
+  const d = readSvgAttribute(attributes, "d");
+  if (!d) {
+    return null;
+  }
+
+  const numbers = d.match(/-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi)?.map((entry) => Number.parseFloat(entry)) ?? [];
+  if (numbers.length < 4) {
+    return null;
+  }
+
+  const points: Array<{ x: number; y: number }> = [];
+  for (let index = 0; index + 1 < numbers.length; index += 2) {
+    const x = numbers[index];
+    const y = numbers[index + 1];
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      points.push({ x, y });
+    }
+  }
+
+  const end = points.at(-1);
+  const previous = [...points].reverse().find((point) => end && (Math.abs(point.x - end.x) > 0.5 || Math.abs(point.y - end.y) > 0.5));
+  if (!end || !previous) {
+    return null;
+  }
+
+  return { previous, end };
+}
+
+function buildInlineSvgArrowhead(previous: { x: number; y: number }, end: { x: number; y: number }, attributes: string) {
+  const dx = end.x - previous.x;
+  const dy = end.y - previous.y;
+  const length = Math.hypot(dx, dy);
+  if (length <= 0) {
+    return "";
+  }
+
+  const strokeWidth = readSvgNumericAttribute(attributes, "stroke-width") ?? readSvgStyleNumber(attributes, "stroke-width") ?? 1.5;
+  const size = Math.max(7, Math.min(12, 7 + strokeWidth * 1.2));
+  const spread = size * 0.48;
+  const unitX = dx / length;
+  const unitY = dy / length;
+  const normalX = -unitY;
+  const normalY = unitX;
+  const baseX = end.x - unitX * size;
+  const baseY = end.y - unitY * size;
+  const leftX = baseX + normalX * spread;
+  const leftY = baseY + normalY * spread;
+  const rightX = baseX - normalX * spread;
+  const rightY = baseY - normalY * spread;
+  const fill = resolveSvgArrowheadPaint(attributes);
+
+  return `<path d="M ${formatSvgNumber(end.x)} ${formatSvgNumber(end.y)} L ${formatSvgNumber(leftX)} ${formatSvgNumber(leftY)} L ${formatSvgNumber(rightX)} ${formatSvgNumber(rightY)} Z" fill="${escapeSvgAttribute(fill)}" stroke="none"></path>`;
+}
+
+function resolveSvgArrowheadPaint(attributes: string) {
+  const stroke = readSvgAttribute(attributes, "stroke") ?? readSvgStyleProperty(attributes, "stroke");
+  if (stroke && stroke !== "none" && !stroke.startsWith("url(")) {
+    return stroke;
+  }
+
+  const fill = readSvgAttribute(attributes, "fill") ?? readSvgStyleProperty(attributes, "fill");
+  if (fill && fill !== "none" && !fill.startsWith("url(")) {
+    return fill;
+  }
+
+  return "#13263b";
+}
+
+function readSvgNumericAttribute(attributes: string, name: string) {
+  const value = readSvgAttribute(attributes, name);
+  if (value == null) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function readSvgStyleNumber(attributes: string, name: string) {
+  const value = readSvgStyleProperty(attributes, name);
+  if (value == null) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function readSvgAttribute(attributes: string, name: string) {
+  const pattern = new RegExp(`\\s${escapeRegExp(name)}="([^"]*)"`, "i");
+  return pattern.exec(attributes)?.[1] ?? null;
+}
+
+function readSvgStyleProperty(attributes: string, name: string) {
+  const style = readSvgAttribute(attributes, "style");
+  if (!style) {
+    return null;
+  }
+  return parseCssDeclarations(style).get(name.toLowerCase()) ?? null;
+}
+
+function formatSvgNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/\.?0+$/, "");
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function inlineSvgClassPaints(svg: string) {

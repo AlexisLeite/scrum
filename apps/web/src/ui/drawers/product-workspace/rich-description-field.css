@@ -194,7 +194,8 @@
   color: var(--text-main);
 }
 
-.prosemirror-table-controls {
+.prosemirror-table-controls,
+.prosemirror-mermaid-menu-controls {
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
@@ -203,15 +204,18 @@
   min-width: 0;
 }
 
-.rich-description-editor:has(.prosemirror-table-picker-popover) {
+.rich-description-editor:has(.prosemirror-table-picker-popover),
+.rich-description-editor:has(.prosemirror-mermaid-template-menu) {
   overflow: visible;
 }
 
-.rich-description-field.is-maximized .rich-description-editor:has(.prosemirror-table-picker-popover) {
+.rich-description-field.is-maximized .rich-description-editor:has(.prosemirror-table-picker-popover),
+.rich-description-field.is-maximized .rich-description-editor:has(.prosemirror-mermaid-template-menu) {
   overflow: visible;
 }
 
-.prosemirror-table-picker-popover {
+.prosemirror-table-picker-popover,
+.prosemirror-mermaid-template-menu {
   position: absolute;
   top: calc(100% + 0.42rem);
   left: 0;
@@ -224,6 +228,35 @@
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg-card) 96%, var(--bg-soft));
   box-shadow: var(--shadow-surface);
+}
+
+.prosemirror-mermaid-template-menu {
+  min-width: 15.5rem;
+  gap: 0.25rem;
+  padding: 0.45rem;
+}
+
+.prosemirror-mermaid-template-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 34px;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.prosemirror-mermaid-template-option:hover,
+.prosemirror-mermaid-template-option:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--accent-a) 12%, transparent);
+  color: var(--accent-a);
 }
 
 .prosemirror-table-picker-head {
@@ -1078,6 +1111,12 @@
   border-color: color-mix(in srgb, var(--accent-a) 50%, transparent);
   background: color-mix(in srgb, var(--accent-b) 12%, var(--panel));
   color: var(--accent-a);
+}
+
+.rich-description-toolbar-button-caret {
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-left: -0.15rem;
 }
 
 .rich-description-editor .cm-editor,

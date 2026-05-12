@@ -1,5 +1,5 @@
 import React from "react";
-import { FiBold, FiCheckSquare, FiCode, FiImage, FiItalic, FiLink, FiList, FiMinus, FiPrinter, FiRotateCcw, FiRotateCw, FiShare2, FiTable } from "react-icons/fi";
+import { FiBold, FiCheckSquare, FiChevronDown, FiCode, FiImage, FiItalic, FiLink, FiList, FiMinus, FiPrinter, FiRotateCcw, FiRotateCw, FiShare2, FiTable } from "react-icons/fi";
 import { LuListOrdered, LuQuote } from "react-icons/lu";
 import { EditorState, Plugin, TextSelection, type Selection, type Transaction } from "prosemirror-state";
 import { EditorView, type NodeView, type ViewMutationRecord } from "prosemirror-view";
@@ -67,9 +67,187 @@ const MAX_TABLE_SIZE = 12;
 const DEFAULT_TABLE_PICKER_SIZE = 3;
 const DEFAULT_PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [2, 3];
 const PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [1, 2, 3, 4, 5, 6];
-const MERMAID_TEMPLATE_MARKDOWN = "\n\n```mermaid\nflowchart TD\n  A[Idea] --> B[Historia]\n```\n\n";
 const MERMAID_INSERT_FOCUS_WINDOW_MS = 2000;
 const CODE_BLOCK_INDENT = "  ";
+
+const MERMAID_DIAGRAM_TEMPLATES = [
+  {
+    id: "sequence",
+    label: "Diagrama de secuencia",
+    markdown: buildMermaidTemplateMarkdown(`
+sequenceDiagram
+  autonumber
+  actor PO as Product Owner
+  participant UI as Interfaz web
+  participant API as API Scrum
+  participant DB as Base de datos
+
+  PO->>UI: Completa historia
+  activate UI
+  UI->>API: POST /historias
+  activate API
+  API->>DB: INSERT historia
+  activate DB
+  DB-->>API: idHistoria
+  deactivate DB
+
+  alt historia valida
+    API-->>UI: 201 Created
+    UI-->>PO: Muestra confirmacion
+  else faltan criterios
+    API--x UI: 422 Validacion
+    UI-->>PO: Solicita correccion
+  end
+
+  opt notificar equipo
+    API-)UI: evento historia.creada
+  end
+
+  loop por cada adjunto
+    UI->>API: PUT /adjuntos/{id}
+  end
+
+  par registrar auditoria
+    API->>DB: INSERT auditoria
+  and actualizar metricas
+    API->>DB: UPDATE metricas
+  end
+
+  deactivate API
+  deactivate UI
+  Note over PO,DB: Participantes, activaciones, alt/else, opt, loop, par, notas y respuestas.
+`)
+  },
+  {
+    id: "class",
+    label: "Diagrama de clases",
+    markdown: buildMermaidTemplateMarkdown(`
+classDiagram
+  direction LR
+
+  class Usuario {
+    +uuid id
+    +string nombre
+    +crearHistoria(titulo: string) Historia
+  }
+  class MiembroEquipo {
+    +tomarTarea(tarea: Tarea) void
+  }
+  class Asignable {
+    <<interface>>
+    +asignar(responsable: Usuario) void
+  }
+  class Historia {
+    <<entity>>
+    +Estado estado
+    +int prioridad
+    +aceptar() void
+  }
+  class Tarea {
+    <<entity>>
+    -int esfuerzo
+    +moverA(estado: Estado) void
+  }
+  class Estado {
+    <<enumeration>>
+    TODO
+    IN_PROGRESS
+    DONE
+  }
+
+  Usuario <|-- MiembroEquipo : hereda
+  Asignable <|.. MiembroEquipo : implementa
+  Historia "1" *-- "1..*" Tarea : contiene
+  Tarea --> Estado : usa
+  Historia ..> MiembroEquipo : asigna
+  note for Historia "Visibilidad + publica, - privada; multiplicidad y tipos de relacion."
+`)
+  },
+  {
+    id: "database",
+    label: "Diagrama de bases de datos",
+    markdown: buildMermaidTemplateMarkdown(`
+erDiagram
+  PRODUCTO ||--o{ HISTORIA : contiene
+  HISTORIA ||--|{ TAREA : descompone
+  EQUIPO ||--o{ MIEMBRO : incluye
+  MIEMBRO }o--o{ TAREA : toma
+  SPRINT ||--o{ TAREA : planifica
+
+  PRODUCTO {
+    string id PK
+    string nombre
+    datetime creado_en
+  }
+  HISTORIA {
+    string id PK
+    string producto_id FK
+    string titulo
+    int prioridad
+  }
+  TAREA {
+    string id PK
+    string historia_id FK
+    string responsable_id FK
+    string estado
+    int horas_estimadas
+  }
+  EQUIPO {
+    string id PK
+    string nombre
+  }
+  MIEMBRO {
+    string id PK
+    string equipo_id FK
+    string email UK
+  }
+  SPRINT {
+    string id PK
+    date inicio
+    date fin
+  }
+`)
+  },
+  {
+    id: "communication",
+    label: "Diagrama de comunicacion",
+    markdown: buildMermaidTemplateMarkdown(`
+flowchart LR
+  %% Numeracion = orden del mensaje; -.-> representa respuesta.
+  po["Actor: Product Owner"]
+  ui["Objeto: Web"]
+  api["Objeto: API"]
+  db[("Objeto: Base de datos")]
+  bus[["Objeto: Bus de eventos"]]
+
+  subgraph Frontend
+    ui
+  end
+
+  subgraph Backend
+    api
+    db
+    bus
+  end
+
+  po -->|"1. crearHistoria(datos)"| ui
+  ui -->|"2. validarFormulario()"| ui
+  ui -->|"3. POST /historias"| api
+  api -->|"4. guardar(historia)"| db
+  db -.->|"5. idHistoria"| api
+  api -->|"6. publicar(historia.creada)"| bus
+  api -.->|"7. 201 Created"| ui
+  ui -.->|"8. confirmacion"| po
+
+  classDef actor fill:#fff7ed,stroke:#c2410c,color:#7c2d12
+  classDef object fill:#eef6ff,stroke:#166fd6,color:#13263b
+  classDef storage fill:#ecfdf5,stroke:#15803d,color:#064e3b
+  class po actor
+  class ui,api,bus object
+  class db storage
+`)
+  }
+] as const;
 
 let pendingInsertedMermaidSourceFocus = 0;
 let pendingInsertedMermaidSourceFocusUntil = 0;
@@ -92,6 +270,10 @@ function claimInsertedMermaidSourceFocus() {
 function clearInsertedMermaidSourceFocus() {
   pendingInsertedMermaidSourceFocus = 0;
   pendingInsertedMermaidSourceFocusUntil = 0;
+}
+
+function buildMermaidTemplateMarkdown(source: string) {
+  return `\n\n\`\`\`mermaid\n${source.trim()}\n\`\`\`\n\n`;
 }
 
 const CODE_LANGUAGE_OPTIONS = [
@@ -451,9 +633,9 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       return true;
     }, []);
 
-    const insertMermaidDiagramAtSelection = React.useCallback(() => {
+    const insertMermaidDiagramAtSelection = React.useCallback((markdown: string) => {
       requestInsertedMermaidSourceFocus();
-      const inserted = insertMarkdownAtSelection(MERMAID_TEMPLATE_MARKDOWN);
+      const inserted = insertMarkdownAtSelection(markdown);
       if (!inserted) {
         clearInsertedMermaidSourceFocus();
       }
@@ -483,7 +665,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       }
 
       const target = event.target instanceof HTMLElement ? event.target : null;
-      if (target?.closest(".prosemirror-table-picker-popover")) {
+      if (target?.closest(".prosemirror-table-picker-popover, .prosemirror-mermaid-template-menu")) {
         return;
       }
 
@@ -656,9 +838,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
           <ToolbarButton label="Insertar bloque de codigo" disabled={editorCommandDisabled} onClick={() => insertMarkdownAtSelection("\n\n```txt\n\n```\n\n")}>
             <FiCode aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarButton label="Insertar diagrama Mermaid" disabled={editorCommandDisabled} onClick={insertMermaidDiagramAtSelection}>
-            <FiShare2 aria-hidden="true" />
-          </ToolbarButton>
+          <ToolbarMermaidMenu disabled={editorCommandDisabled} onSelect={insertMermaidDiagramAtSelection} />
           <ToolbarButton label="Linea horizontal" disabled={editorCommandDisabled} onClick={() => insertMarkdownAtSelection("\n\n---\n\n")}>
             <FiMinus aria-hidden="true" />
           </ToolbarButton>
@@ -1670,6 +1850,179 @@ function ToolbarTablePicker(props: {
   );
 }
 
+function ToolbarMermaidMenu(props: {
+  disabled?: boolean;
+  onSelect: (markdown: string) => void;
+}) {
+  const { disabled, onSelect } = props;
+  const [open, setOpen] = React.useState(false);
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+    }
+  }, [disabled]);
+
+  const focusOption = React.useCallback((index: number) => {
+    window.requestAnimationFrame(() => {
+      menuRef.current
+        ?.querySelector<HTMLButtonElement>(`[data-mermaid-template-index="${index}"]`)
+        ?.focus({ preventScroll: true });
+    });
+  }, []);
+
+  const openMenu = React.useCallback((nextIndex = 0) => {
+    setActiveIndex(nextIndex);
+    setOpen(true);
+    focusOption(nextIndex);
+  }, [focusOption]);
+
+  const closeMenu = React.useCallback((options?: { focusTrigger?: boolean }) => {
+    setOpen(false);
+    if (options?.focusTrigger) {
+      window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+    }
+  }, []);
+
+  const selectTemplate = React.useCallback((template: typeof MERMAID_DIAGRAM_TEMPLATES[number]) => {
+    onSelect(template.markdown);
+    setOpen(false);
+  }, [onSelect]);
+
+  React.useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && rootRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    focusOption(activeIndex);
+  }, [activeIndex, focusOption, open]);
+
+  const moveToOption = React.useCallback((index: number) => {
+    const nextIndex = clampInteger(index, 0, MERMAID_DIAGRAM_TEMPLATES.length - 1);
+    setActiveIndex(nextIndex);
+  }, []);
+
+  const handleTriggerKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    openMenu(event.key === "ArrowUp" ? MERMAID_DIAGRAM_TEMPLATES.length - 1 : 0);
+  }, [openMenu]);
+
+  const handleMenuKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeMenu({ focusTrigger: true });
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      moveToOption(activeIndex + 1);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      moveToOption(activeIndex - 1);
+      return;
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      event.stopPropagation();
+      moveToOption(0);
+      return;
+    }
+
+    if (event.key === "End") {
+      event.preventDefault();
+      event.stopPropagation();
+      moveToOption(MERMAID_DIAGRAM_TEMPLATES.length - 1);
+    }
+  }, [activeIndex, closeMenu, moveToOption]);
+
+  return (
+    <div className="prosemirror-mermaid-menu-controls" ref={rootRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`rich-description-toolbar-button${open ? " is-pressed" : ""}`}
+        aria-label="Insertar diagrama Mermaid"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Insertar diagrama Mermaid"
+        disabled={disabled}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          if (open) {
+            closeMenu();
+          } else {
+            openMenu();
+          }
+        }}
+        onKeyDown={handleTriggerKeyDown}
+      >
+        <FiShare2 aria-hidden="true" />
+        <FiChevronDown className="rich-description-toolbar-button-caret" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div
+          ref={menuRef}
+          className="prosemirror-mermaid-template-menu"
+          role="menu"
+          aria-label="Tipo de diagrama Mermaid"
+          onMouseDown={(event) => event.preventDefault()}
+          onKeyDown={handleMenuKeyDown}
+        >
+          {MERMAID_DIAGRAM_TEMPLATES.map((template, index) => (
+            <button
+              key={template.id}
+              type="button"
+              className="prosemirror-mermaid-template-option"
+              role="menuitem"
+              data-mermaid-template-index={index}
+              tabIndex={index === activeIndex ? 0 : -1}
+              onFocus={() => setActiveIndex(index)}
+              onMouseEnter={() => setActiveIndex(index)}
+              onClick={() => selectTemplate(template)}
+            >
+              {template.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ToolbarButton(props: {
   label: string;
   disabled?: boolean;
@@ -1706,7 +2059,7 @@ const TOOLBAR_ITEM_SELECTOR = [
 function getToolbarItems(toolbar: HTMLElement) {
   return Array.from(toolbar.querySelectorAll<HTMLElement>(TOOLBAR_ITEM_SELECTOR))
     .filter((item) => item.closest(".prosemirror-toolbar") === toolbar)
-    .filter((item) => !item.closest(".prosemirror-table-picker-popover"))
+    .filter((item) => !item.closest(".prosemirror-table-picker-popover, .prosemirror-mermaid-template-menu"))
     .filter((item) => !isToolbarItemDisabled(item) && isElementVisible(item));
 }
 
@@ -1716,7 +2069,7 @@ function findToolbarItemForTarget(toolbar: HTMLElement, target: EventTarget | nu
   }
 
   const item = target.closest<HTMLElement>(TOOLBAR_ITEM_SELECTOR);
-  if (!item || item.closest(".prosemirror-toolbar") !== toolbar || item.closest(".prosemirror-table-picker-popover") || isToolbarItemDisabled(item)) {
+  if (!item || item.closest(".prosemirror-toolbar") !== toolbar || item.closest(".prosemirror-table-picker-popover, .prosemirror-mermaid-template-menu") || isToolbarItemDisabled(item)) {
     return null;
   }
   return item;
@@ -2835,7 +3188,14 @@ class CodeBlockNodeView implements NodeView {
     deleteButton.title = "Eliminar bloque de codigo";
     deleteButton.setAttribute("aria-label", "Eliminar bloque de codigo");
     deleteButton.textContent = "X";
-    deleteButton.addEventListener("click", () => {
+    deleteButton.addEventListener("mousedown", (event) => {
+      if (event.button === 0) {
+        event.preventDefault();
+      }
+    });
+    deleteButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       this.deleteBlock();
     });
 
@@ -3043,7 +3403,7 @@ class CodeBlockNodeView implements NodeView {
 
     window.clearTimeout(this.mermaidBlurTimeout);
     this.mermaidBlurTimeout = window.setTimeout(() => {
-      if (!this.editor.dom.contains(document.activeElement)) {
+      if (!this.dom.contains(document.activeElement)) {
         this.hideMermaidSourceEditor();
       }
     }, 0);
