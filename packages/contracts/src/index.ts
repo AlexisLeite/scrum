@@ -45,7 +45,8 @@ export const PRODUCT_PERMISSION_KEYS = [
   "product.focused.acquiredByOther.comment",
   "product.focused.acquiredByOther.read",
   "product.focused.acquiredByOther.release",
-  "product.focused.acquiredByOther.updateState"
+  "product.focused.acquiredByOther.updateState",
+  "product.report.create"
 ] as const;
 
 export const PERMISSION_KEYS = [...SYSTEM_PERMISSION_KEYS, ...PRODUCT_PERMISSION_KEYS] as const;
@@ -349,11 +350,23 @@ export const PERMISSION_CATALOG: PermissionCatalogCategory[] = [
         description: "Permite mover tareas asignadas a otras personas."
       }
     ]
+  },
+  {
+    key: "product.report",
+    label: "Reportes de errores",
+    scope: "PRODUCT",
+    permissions: [
+      {
+        key: "product.report.create",
+        label: "Reportar errores",
+        description: "Permite crear reportes de errores desde la URL publica del producto."
+      }
+    ]
   }
 ];
 
 export const STANDARD_ROLE_DEFINITIONS: Array<{
-  key: Role;
+  key: string;
   title: string;
   description: string;
   scope: RoleScope;
@@ -444,6 +457,15 @@ export const STANDARD_ROLE_DEFINITIONS: Array<{
       "product.focused.acquiredByOther.read",
       "product.focused.acquiredByOther.release",
       "product.focused.acquiredByOther.updateState"
+    ]
+  },
+  {
+    key: "reporter",
+    title: "Reporter",
+    description: "Reporta errores del producto desde una URL dedicada.",
+    scope: "PRODUCT",
+    permissions: [
+      "product.report.create"
     ]
   }
 ];
