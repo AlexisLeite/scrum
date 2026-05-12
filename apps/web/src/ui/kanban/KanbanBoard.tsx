@@ -1,5 +1,5 @@
 import React from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { FiCheck, FiCopy, FiPlus } from "react-icons/fi";
 import {
   pointerWithin,
@@ -1337,7 +1337,9 @@ export function KanbanBoard({
     }
 
     creatingColumnNameRef.current = defaultStatus;
-    setCreatingColumnName(defaultStatus);
+    flushSync(() => {
+      setCreatingColumnName(defaultStatus);
+    });
     const startedAt = nowMs();
     try {
       await waitForNextPaint();
