@@ -39,9 +39,11 @@ function printUsage() {
 
 function parsePositiveInteger(value, flagName) {
   const parsed = Number.parseInt(String(value), 10);
+
   if (!Number.isInteger(parsed) || parsed < 0) {
     throw new Error(`Invalid value for ${flagName}: ${value}`);
   }
+
   return parsed;
 }
 
@@ -75,9 +77,11 @@ function parseArgs(argv) {
 
     if (parsingFlags && token === "--port") {
       index += 1;
+
       if (index >= argv.length) {
         throw new Error("Missing value for --port");
       }
+
       options.port = parsePositiveInteger(argv[index], "--port");
       continue;
     }
@@ -89,9 +93,11 @@ function parseArgs(argv) {
 
     if (parsingFlags && token === "--host") {
       index += 1;
+
       if (index >= argv.length) {
         throw new Error("Missing value for --host");
       }
+
       options.host = argv[index] || DEFAULT_HOST;
       continue;
     }
@@ -103,9 +109,11 @@ function parseArgs(argv) {
 
     if (parsingFlags && token === "--cwd") {
       index += 1;
+
       if (index >= argv.length) {
         throw new Error("Missing value for --cwd");
       }
+
       options.cwd = resolve(argv[index]);
       continue;
     }
@@ -166,6 +174,7 @@ function parseTcpRequest(rawRequest) {
   }
 
   const readMatch = /^read(?:\((\d*)\))?$/.exec(request);
+
   if (readMatch) {
     if (readMatch[1] == null || readMatch[1] === "") {
       return {
@@ -195,16 +204,20 @@ function createHistoryWindow() {
   return {
     push(entry) {
       lines.push(entry);
+
       if (lines.length > HISTORY_LIMIT) {
         lines.splice(0, lines.length - HISTORY_LIMIT);
       }
     },
+
     read(count) {
       return lines.slice(-count);
     },
+
     clear() {
       lines.length = 0;
     },
+
     size() {
       return lines.length;
     }
@@ -249,10 +262,12 @@ function main() {
   const [command, ...args] = parsed.command;
   const history = createHistoryWindow();
   const tcpClients = new Set();
+
   const streamBuffers = {
     stdout: "",
     stderr: ""
   };
+
   const configuredPort = parsed.options.port;
   const configuredHost = parsed.options.host;
   const SERVER_STARTUP_CANCELLED = "SERVER_STARTUP_CANCELLED";
@@ -264,6 +279,8 @@ function main() {
   let ownsCurrentPortFile = false;
   let isServerStartupCancelled = false;
   let isRestartInProgress = false;
+  let isShuttingDown = false;
+  let exitFallbackTimer = null;
 
   function writeCurrentPortFile(port) {
     writeFileSync(CURRENT_PORT_FILE, `${port}\n`, "utf8");
@@ -277,6 +294,7 @@ function main() {
 
     try {
       const currentPort = readFileSync(CURRENT_PORT_FILE, "utf8").trim();
+
       if (currentPort === String(activePort)) {
         unlinkSync(CURRENT_PORT_FILE);
       }
@@ -301,6 +319,7 @@ function main() {
 
   function writeHistory(socket, count) {
     const lines = history.read(count);
+
     if (lines.length === 0) {
       return;
     }
@@ -313,15 +332,18 @@ function main() {
     const target = source === "stdout" ? process.stdout : process.stderr;
 
     target.write(text);
+
     streamBuffers[source] = consumeBufferedText(streamBuffers[source], text, (line) => {
       rememberLine(line);
     });
+
     broadcast(text);
   }
 
   function flushPartialLines() {
     for (const source of Object.keys(streamBuffers)) {
       const remainder = streamBuffers[source];
+
       if (!remainder) {
         continue;
       }
@@ -347,6 +369,7 @@ function main() {
       socket.end();
       socket.destroy();
     }
+
     tcpClients.clear();
 
     if (server) {
@@ -361,11 +384,65 @@ function main() {
     return error;
   }
 
+  function signalChildTree(targetChild, signal) {
+    if (!targetChild || targetChild.exitCode !== null || targetChild.signalCode !== null) {
+      return false;
+    }
+
+    try {
+      if (process.platform !== "win32") {
+        process.kill(-targetChild.pid, signal);
+      } else {
+        targetChild.kill(signal);
+      }
+
+      return true;
+    } catch (error) {
+      if (error?.code !== "ESRCH") {
+        console.error(`[run_bash] Failed to send ${signal} to child process tree: ${error.message}`);
+      }
+
+      return false;
+    }
+  }
+
   function killCurrentChild(signal) {
     const targetChild = child ?? childPendingRestart;
-    if (targetChild && !targetChild.killed) {
-      targetChild.kill(signal);
+    signalChildTree(targetChild, signal);
+  }
+
+  function forceKillChildTree(targetChild) {
+    signalChildTree(targetChild, "SIGKILL");
+  }
+
+  function startExitFallback(signal) {
+    if (exitFallbackTimer) {
+      return;
     }
+
+    exitFallbackTimer = setTimeout(() => {
+      const targetChild = child ?? childPendingRestart;
+
+      if (targetChild) {
+        forceKillChildTree(targetChild);
+      }
+
+      process.exit(128 + signalToExitCode(signal));
+    }, RESTART_FORCE_KILL_TIMEOUT_MS);
+
+    exitFallbackTimer.unref?.();
+  }
+
+  function signalToExitCode(signal) {
+    if (signal === "SIGINT") {
+      return 2;
+    }
+
+    if (signal === "SIGTERM") {
+      return 15;
+    }
+
+    return 1;
   }
 
   function startChildProcess() {
@@ -373,7 +450,8 @@ function main() {
       cwd: parsed.options.cwd,
       env: process.env,
       stdio: ["inherit", "pipe", "pipe"],
-      shell: process.platform === "win32"
+      shell: process.platform === "win32",
+      detached: process.platform !== "win32"
     });
 
     child = childProcess;
@@ -412,9 +490,19 @@ function main() {
       flushPartialLines();
       closeServerAndClients();
 
+      if (exitFallbackTimer) {
+        clearTimeout(exitFallbackTimer);
+        exitFallbackTimer = null;
+      }
+
+      child = null;
+
+      if (isShuttingDown && signal) {
+        process.exit(128 + signalToExitCode(signal));
+      }
+
       if (signal) {
-        process.kill(process.pid, signal);
-        return;
+        process.exit(128 + signalToExitCode(signal));
       }
 
       process.exit(code ?? 1);
@@ -457,9 +545,10 @@ function main() {
 
     const forceKillTimeout = setTimeout(() => {
       if (childToRestart.exitCode === null && childToRestart.signalCode === null) {
-        childToRestart.kill("SIGKILL");
+        forceKillChildTree(childToRestart);
       }
     }, RESTART_FORCE_KILL_TIMEOUT_MS);
+
     forceKillTimeout.unref?.();
 
     childToRestart.once("exit", () => {
@@ -467,7 +556,9 @@ function main() {
       startReplacement();
     });
 
-    if (!childToRestart.kill("SIGTERM")) {
+    const didSignal = signalChildTree(childToRestart, "SIGTERM");
+
+    if (!didSignal) {
       clearTimeout(forceKillTimeout);
       startReplacement();
     }
@@ -477,6 +568,7 @@ function main() {
 
   function handleTcpRequest(socket, rawRequest) {
     const request = parseTcpRequest(rawRequest);
+
     if (request === null) {
       return;
     }
@@ -504,6 +596,7 @@ function main() {
         requestBuffer += chunk;
 
         let newlineIndex = requestBuffer.indexOf("\n");
+
         while (newlineIndex >= 0) {
           const rawRequest = requestBuffer.slice(0, newlineIndex);
           requestBuffer = requestBuffer.slice(newlineIndex + 1);
@@ -545,9 +638,10 @@ function main() {
     const port = boundAddress?.port ?? activePort;
 
     console.error(`[run_bash] TCP server error on ${host}:${port}: ${error.message}`);
+
     killCurrentChild("SIGTERM");
     closeServerAndClients();
-    process.exit(1);
+    startExitFallback("SIGTERM");
   }
 
   function listenTcpServer(startPort) {
@@ -576,6 +670,7 @@ function main() {
         };
 
         candidate.once("error", handleInitialError);
+
         candidate.listen(port, configuredHost, () => {
           candidate.off("error", handleInitialError);
 
@@ -583,6 +678,7 @@ function main() {
             candidate.close(() => {
               reject(createServerStartupCancelledError());
             });
+
             return;
           }
 
@@ -594,37 +690,17 @@ function main() {
     });
   }
 
-  listenTcpServer(configuredPort)
-    .then((listeningServer) => {
-      server = listeningServer;
-      server.on("error", handleServerError);
-
-      const address = server.address();
-      if (address && typeof address === "object") {
-        activePort = address.port;
-        writeCurrentPortFile(activePort);
-        const configuredLabel =
-          address.port === configuredPort ? "" : ` (configured ${configuredHost}:${configuredPort})`;
-        console.error(`[run_bash] TCP listening on ${address.address}:${address.port}${configuredLabel}`);
-      }
-    })
-    .catch((error) => {
-      if (error?.code === SERVER_STARTUP_CANCELLED) {
-        return;
-      }
-
-      console.error(`[run_bash] ${error.message}`);
-      killCurrentChild("SIGTERM");
-      closeServerAndClients();
-      process.exit(1);
-    });
-
   function forwardSignal(signal) {
-    if (!child && childPendingRestart) {
-      closeServerAndClients();
+    if (isShuttingDown) {
+      killCurrentChild("SIGKILL");
+      process.exit(128 + signalToExitCode(signal));
+      return;
     }
 
+    isShuttingDown = true;
+    closeServerAndClients();
     killCurrentChild(signal);
+    startExitFallback(signal);
   }
 
   process.on("SIGINT", () => {
@@ -634,6 +710,47 @@ function main() {
   process.on("SIGTERM", () => {
     forwardSignal("SIGTERM");
   });
+
+  process.on("exit", () => {
+    clearCurrentPortFile();
+
+    const targetChild = child ?? childPendingRestart;
+
+    if (targetChild && process.platform !== "win32") {
+      try {
+        process.kill(-targetChild.pid, "SIGTERM");
+      } catch { }
+    }
+  });
+
+  listenTcpServer(configuredPort)
+    .then((listeningServer) => {
+      server = listeningServer;
+      server.on("error", handleServerError);
+
+      const address = server.address();
+
+      if (address && typeof address === "object") {
+        activePort = address.port;
+        writeCurrentPortFile(activePort);
+
+        const configuredLabel =
+          address.port === configuredPort ? "" : ` (configured ${configuredHost}:${configuredPort})`;
+
+        console.error(`[run_bash] TCP listening on ${address.address}:${address.port}${configuredLabel}`);
+      }
+    })
+    .catch((error) => {
+      if (error?.code === SERVER_STARTUP_CANCELLED) {
+        return;
+      }
+
+      console.error(`[run_bash] ${error.message}`);
+
+      killCurrentChild("SIGTERM");
+      closeServerAndClients();
+      startExitFallback("SIGTERM");
+    });
 
   startChildProcess();
 }
