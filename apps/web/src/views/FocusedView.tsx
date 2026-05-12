@@ -271,6 +271,7 @@ const FocusedKanbanSection = React.memo(function FocusedKanbanSection(props: {
         statusOptions={statusOptions}
         readOnly={false}
         allowCreateTask={canCreateTask}
+        allowSorting
         allowAssigneeChange
         allowStatusChange
         editActionLabel={editLabel}
@@ -898,22 +899,40 @@ export const FocusedView = observer(function FocusedView() {
   const openFocusedCreationDrawer = React.useCallback(
     async (defaultStatus: string, creationContext: FocusedCreationContext) => {
       try {
-        const [catalog, { TaskUpsertionDrawer }] = await Promise.all([
-          ensureTaskDrawerCatalog(creationContext.productId),
-          loadTaskUpsertionDrawerModule()
-        ]);
+        const { TaskUpsertionDrawer } = await loadTaskUpsertionDrawerModule();
+        const cachedStories = taskDrawerCatalogRef.current.storiesByProductId.get(creationContext.productId) ?? [];
+        const cachedSprints = taskDrawerCatalogRef.current.sprintsByProductId.get(creationContext.productId);
+        const productAssignableUsers = assignableUsersByProductId[creationContext.productId] ?? [];
+        const scopedAssignees = filterAssignableUsersBySprintScope(productAssignableUsers, {
+          sprintId: creationContext.sprintId,
+          teamId: creationContext.teamId
+        }).map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          teamIds: entry.teamIds ?? [],
+          sprintIds: entry.sprintIds ?? []
+        }));
+        const initialSprints = cachedSprints?.length
+          ? cachedSprints
+          : [{
+            id: creationContext.sprintId,
+            name: creationContext.sprintName,
+            teamId: creationContext.teamId ?? null
+          }];
+        const loadDeferredCatalog = () => ensureTaskDrawerCatalog(creationContext.productId);
         store.drawers.add(
           new TaskUpsertionDrawer({
             controller: productController,
             productId: creationContext.productId,
-            stories: catalog.stories,
-            sprints: catalog.sprints,
-            assignees: catalog.assignees,
+            stories: cachedStories,
+            sprints: initialSprints,
+            assignees: scopedAssignees,
             statusOptions,
             defaultStatus,
             fixedSprintId: creationContext.sprintId,
             allowSprintChange: false,
             showCreationPlacementSelector: true,
+            deferredCatalogLoader: loadDeferredCatalog,
             onStoryCatalogRefreshed: (stories) => updateTaskDrawerStoryCatalog(creationContext.productId, stories),
             onDone: async () => {
               await reloadBoard();
@@ -924,11 +943,19 @@ export const FocusedView = observer(function FocusedView() {
         setError(getErrorMessage(loadError));
       }
     },
-    [ensureTaskDrawerCatalog, productController, reloadBoard, statusOptions, store.drawers, updateTaskDrawerStoryCatalog]
+    [
+      assignableUsersByProductId,
+      ensureTaskDrawerCatalog,
+      productController,
+      reloadBoard,
+      statusOptions,
+      store.drawers,
+      updateTaskDrawerStoryCatalog
+    ]
   );
 
   const handleCreateTask = React.useCallback(
-    (defaultStatus: string) => {
+    async (defaultStatus: string) => {
       if (!canCreateFocusedTasks) {
         return;
       }
@@ -936,7 +963,7 @@ export const FocusedView = observer(function FocusedView() {
         setError("No hay un sprint activo visible en Focused donde crear una tarea.");
         return;
       }
-      void openFocusedCreationDrawer(defaultStatus, selectedContext);
+      await openFocusedCreationDrawer(defaultStatus, selectedContext);
     },
     [canCreateFocusedTasks, openFocusedCreationDrawer, selectedContext]
   );

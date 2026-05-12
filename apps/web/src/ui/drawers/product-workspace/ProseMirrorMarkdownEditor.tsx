@@ -34,6 +34,7 @@ import {
   yUndoPlugin
 } from "y-prosemirror";
 import { basicSetup, EditorView as CodeMirrorView } from "codemirror";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorSelection, EditorState as CodeMirrorState, Extension, Prec, type ChangeSpec } from "@codemirror/state";
 import { keymap as codeMirrorKeymap } from "@codemirror/view";
 import { javascript } from "@codemirror/lang-javascript";
@@ -44,11 +45,13 @@ import { markdown } from "@codemirror/lang-markdown";
 import { sql } from "@codemirror/lang-sql";
 import { yaml } from "@codemirror/lang-yaml";
 import { python } from "@codemirror/lang-python";
+import { tags as highlightTags } from "@lezer/highlight";
 import {
   buildDocumentName,
   RichDescriptionCollaboration,
   ScrumYjsProvider
 } from "./yjs-collaboration-provider";
+import { parseInternalReferenceHref } from "../../../lib/internal-references";
 import {
   buildImageMarkdown,
   buildVideoMarkdown,
@@ -74,6 +77,84 @@ const PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [1, 2, 3, 4, 5, 6];
 const MERMAID_INSERT_FOCUS_WINDOW_MS = 2000;
 const CODE_BLOCK_INDENT = "  ";
 type MermaidPreviewToolIcon = "maximize" | "minimize" | "reset";
+
+const codeMirrorCodeBlockTheme = CodeMirrorView.theme({
+  "&": {
+    color: "var(--code-highlight-base)",
+    backgroundColor: "var(--code-block-bg)"
+  },
+  ".cm-content": {
+    caretColor: "var(--code-block-caret)",
+    fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace"
+  },
+  ".cm-gutters": {
+    color: "var(--code-highlight-comment)",
+    backgroundColor: "var(--code-block-bg)",
+    borderRightColor: "var(--border-soft)"
+  },
+  ".cm-activeLine, .cm-activeLineGutter": {
+    backgroundColor: "transparent"
+  },
+  ".cm-cursor, .cm-dropCursor": {
+    borderLeftColor: "var(--code-block-caret)"
+  },
+  ".cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
+    backgroundColor: "var(--code-block-selection-bg) !important"
+  },
+  ".cm-matchingBracket": {
+    color: "var(--code-highlight-base)",
+    backgroundColor: "transparent",
+    outline: "1px solid color-mix(in srgb, var(--code-highlight-keyword) 42%, transparent)"
+  }
+});
+
+const codeMirrorSyntaxHighlight = syntaxHighlighting(HighlightStyle.define([
+  { tag: highlightTags.comment, color: "var(--code-highlight-comment)", fontStyle: "italic" },
+  { tag: [highlightTags.heading, highlightTags.strong], fontWeight: "700" },
+  { tag: highlightTags.emphasis, fontStyle: "italic" },
+  { tag: highlightTags.link, color: "var(--code-highlight-string)", textDecoration: "underline" },
+  {
+    tag: [
+      highlightTags.keyword,
+      highlightTags.modifier,
+      highlightTags.operatorKeyword,
+      highlightTags.controlKeyword,
+      highlightTags.definitionKeyword,
+      highlightTags.moduleKeyword
+    ],
+    color: "var(--code-highlight-keyword)"
+  },
+  { tag: [highlightTags.self, highlightTags.null, highlightTags.atom, highlightTags.bool], color: "var(--code-highlight-keyword)" },
+  { tag: [highlightTags.string, highlightTags.docString, highlightTags.character, highlightTags.attributeValue], color: "var(--code-highlight-string)" },
+  { tag: [highlightTags.regexp, highlightTags.escape, highlightTags.special(highlightTags.string)], color: "var(--code-highlight-string)" },
+  { tag: [highlightTags.number, highlightTags.integer, highlightTags.float, highlightTags.color, highlightTags.constant(highlightTags.variableName)], color: "var(--code-highlight-number)" },
+  { tag: [highlightTags.typeName, highlightTags.className, highlightTags.namespace, highlightTags.tagName, highlightTags.standard(highlightTags.variableName)], color: "var(--code-highlight-type)" },
+  { tag: [highlightTags.propertyName, highlightTags.attributeName, highlightTags.definition(highlightTags.propertyName)], color: "var(--code-highlight-property)" },
+  { tag: [highlightTags.variableName, highlightTags.local(highlightTags.variableName), highlightTags.special(highlightTags.variableName)], color: "var(--code-highlight-variable)" },
+  { tag: [highlightTags.function(highlightTags.variableName), highlightTags.function(highlightTags.propertyName), highlightTags.definition(highlightTags.variableName), highlightTags.macroName], color: "var(--code-highlight-function)" },
+  {
+    tag: [
+      highlightTags.operator,
+      highlightTags.derefOperator,
+      highlightTags.arithmeticOperator,
+      highlightTags.logicOperator,
+      highlightTags.bitwiseOperator,
+      highlightTags.compareOperator,
+      highlightTags.updateOperator,
+      highlightTags.definitionOperator,
+      highlightTags.typeOperator,
+      highlightTags.controlOperator
+    ],
+    color: "var(--code-highlight-operator)"
+  },
+  { tag: [highlightTags.punctuation, highlightTags.separator, highlightTags.bracket, highlightTags.angleBracket, highlightTags.squareBracket, highlightTags.paren, highlightTags.brace], color: "var(--code-highlight-punctuation)" },
+  { tag: [highlightTags.meta, highlightTags.documentMeta, highlightTags.annotation, highlightTags.processingInstruction], color: "var(--code-highlight-meta)" },
+  { tag: highlightTags.inserted, color: "var(--code-highlight-success)" },
+  { tag: highlightTags.deleted, color: "var(--code-highlight-danger)" },
+  { tag: highlightTags.invalid, color: "var(--code-highlight-danger)", textDecoration: "underline wavy" }
+], {
+  all: { color: "var(--code-highlight-base)" }
+}));
 
 const MERMAID_PREVIEW_TOOL_ICONS: Record<MermaidPreviewToolIcon, IconType> = {
   maximize: FiMaximize2,
@@ -337,6 +418,7 @@ type ProseMirrorMarkdownEditorProps = {
   user?: { id?: string; name?: string; email?: string } | null;
   allowReadOnlyTaskCheckboxToggle?: boolean;
   onTaskCheckboxToggle?: (payload: { itemIndex: number; checked: boolean; text: string }) => Promise<void> | void;
+  onInternalReferenceOpen?: (href: string) => Promise<void> | void;
   printTitle?: string;
   printDisabled?: boolean;
   onMermaidTemplateSelect?: (template: MermaidDiagramTemplate) => void;
@@ -357,6 +439,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       user,
       allowReadOnlyTaskCheckboxToggle = false,
       onTaskCheckboxToggle,
+      onInternalReferenceOpen,
       printTitle,
       printDisabled = false,
       onMermaidTemplateSelect,
@@ -372,6 +455,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     const onImageCropRef = React.useRef(onImageCrop);
     const allowReadOnlyTaskCheckboxToggleRef = React.useRef(allowReadOnlyTaskCheckboxToggle);
     const onTaskCheckboxToggleRef = React.useRef(onTaskCheckboxToggle);
+    const onInternalReferenceOpenRef = React.useRef(onInternalReferenceOpen);
     const onChangeRef = React.useRef(onChange);
     const providerRef = React.useRef<ScrumYjsProvider | null>(null);
     const ydocRef = React.useRef<Y.Doc | null>(null);
@@ -389,6 +473,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     onImageCropRef.current = onImageCrop;
     allowReadOnlyTaskCheckboxToggleRef.current = allowReadOnlyTaskCheckboxToggle;
     onTaskCheckboxToggleRef.current = onTaskCheckboxToggle;
+    onInternalReferenceOpenRef.current = onInternalReferenceOpen;
     onChangeRef.current = onChange;
     sourceModeActiveRef.current = sourceModeActive;
 
@@ -458,6 +543,20 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
         attributes: {
           class: contentEditableClassName,
           tabindex: "0"
+        },
+        handleDOMEvents: {
+          click(view, event) {
+            const href = resolveModClickInternalReferenceHref(event, view.dom);
+            const onInternalReferenceOpen = onInternalReferenceOpenRef.current;
+            if (!href || !onInternalReferenceOpen) {
+              return false;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            void onInternalReferenceOpen(href);
+            return true;
+          }
         },
         handleScrollToSelection: keepSelectionInsideEditorGuard,
         nodeViews: {
@@ -1189,6 +1288,21 @@ function focusEditorView(view: EditorView, readOnly: boolean) {
   view.focus();
 }
 
+function resolveModClickInternalReferenceHref(event: Event, root: HTMLElement) {
+  if (!(event instanceof MouseEvent) || event.button !== 0 || (!event.ctrlKey && !event.metaKey)) {
+    return "";
+  }
+
+  const target = event.target instanceof Element ? event.target : null;
+  const anchor = target?.closest<HTMLAnchorElement>("a[href]");
+  if (!anchor || !root.contains(anchor)) {
+    return "";
+  }
+
+  const href = anchor.getAttribute("href") ?? "";
+  return parseInternalReferenceHref(href) ? href : "";
+}
+
 const CARET_SCROLL_GUARD_RATIO = 0.2;
 
 type VerticalRect = Pick<DOMRect, "top" | "bottom">;
@@ -1583,6 +1697,15 @@ function getTaskChecklistItemIndex(doc: ProseMirrorNode, targetPosition: number)
     return true;
   });
   return targetIndex;
+}
+
+function setSelectionNearListItemStart(transaction: Transaction, position: number) {
+  const selectionPosition = Math.min(Math.max(position + 1, 0), transaction.doc.content.size);
+  try {
+    transaction.setSelection(TextSelection.near(transaction.doc.resolve(selectionPosition), 1));
+  } catch {
+    // Best effort only; the checkbox state change should still go through.
+  }
 }
 
 function taskListNormalizationPlugin() {
@@ -2867,14 +2990,13 @@ class ListItemNodeView implements NodeView {
     const nextChecked = this.checkbox.checked;
     const itemIndex = getTaskChecklistItemIndex(this.view.state.doc, position);
     const itemText = this.node.textContent;
-    this.view.dispatch(
-      this.view.state.tr
-        .setNodeMarkup(position, undefined, {
-          ...this.node.attrs,
-          checked: nextChecked
-        })
-        .scrollIntoView()
-    );
+    const transaction = this.view.state.tr.setNodeMarkup(position, undefined, {
+      ...this.node.attrs,
+      checked: nextChecked
+    });
+    setSelectionNearListItemStart(transaction, position);
+    this.view.dispatch(transaction.scrollIntoView());
+    this.view.focus();
 
     const onTaskCheckboxToggle = this.getTaskCheckboxToggleHandler();
     if (!onTaskCheckboxToggle || itemIndex < 0) {
@@ -3283,6 +3405,8 @@ class CodeBlockNodeView implements NodeView {
             }
           ])),
           basicSetup,
+          codeMirrorCodeBlockTheme,
+          codeMirrorSyntaxHighlight,
           codeLanguage(node.attrs.params),
           codeMirrorKeymap.of([
             {

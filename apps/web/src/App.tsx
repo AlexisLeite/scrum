@@ -54,6 +54,7 @@ import { resolvePathPageTitle } from "./lib/page-title";
 
 const SESSION_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const FocusedView = React.lazy(() => import("./views/FocusedView").then((module) => ({ default: module.FocusedView })));
+const ProductReportView = React.lazy(() => import("./views/ProductReportView").then((module) => ({ default: module.ProductReportView })));
 const ProductBacklogView = React.lazy(() => import("./views/product-workspace/ProductBacklogView").then((module) => ({ default: module.ProductBacklogView })));
 const ProductMetricsView = React.lazy(() => import("./views/product-workspace/ProductMetricsView").then((module) => ({ default: module.ProductMetricsView })));
 const ProductOverviewView = React.lazy(() => import("./views/product-workspace/ProductOverviewView").then((module) => ({ default: module.ProductOverviewView })));
@@ -154,6 +155,8 @@ export const App = observer(function App() {
             <Route path="/profile" element={<Navigate to="/settings" replace />} />
             <Route path="/settings" element={<Protected><SettingsView /></Protected>} />
             <Route path="/focused" element={<Protected><RouteSuspense><FocusedView /></RouteSuspense></Protected>} />
+            <Route path="/:productId/report" element={<Protected><RouteSuspense><ProductReportView /></RouteSuspense></Protected>} />
+            <Route path="/products/:productId/report" element={<Protected><RouteSuspense><ProductReportView /></RouteSuspense></Protected>} />
             <Route path="/auth/gitlab/callback" element={<GitlabCallbackView />} />
 
             <Route

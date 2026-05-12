@@ -148,15 +148,16 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const [taskCreatedTo, setTaskCreatedTo] = React.useState("");
   const [storyStatusActionId, setStoryStatusActionId] = React.useState("");
   const [completionRequest, setCompletionRequest] = React.useState<{ taskId: string; title: string } | null>(null);
+  const [movingTaskId, setMovingTaskId] = React.useState("");
   const productScopeKey = productId ? productCollectionScope(productId) : null;
 
   React.useEffect(() => {
     if (!productId) return;
     void controller.loadStories(productId);
-    if (canManageTasks) {
+    if (canManageTasks || canEditTasks) {
       void controller.loadSprints(productId);
     }
-  }, [canManageTasks, controller, productId]);
+  }, [canEditTasks, canManageTasks, controller, productId]);
 
   React.useEffect(() => {
     setSortBy(loadBacklogSort(productId));
@@ -176,6 +177,8 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   if (!productId) return null;
 
   const stories = store.stories.getItems(productScopeKey) as StoryItem[];
+  const sprints = store.sprints.getItems(productScopeKey) as SprintItem[];
+  const activeSprint = sprints.find((sprint) => sprint.status === "ACTIVE") ?? null;
   const loadingStories = store.stories.isLoadingScope(productScopeKey);
   const normalizedSearch = React.useMemo(() => normalizeSearchValue(search.trim()), [search]);
   const taskFilterOptions = React.useMemo(() => {
@@ -340,6 +343,26 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
     }
 
     void updateBacklogTaskStatus(task, nextStatus, task.actualHours ?? undefined);
+  };
+
+  const moveBacklogTaskToActiveSprint = async (task: StoryTaskSummary) => {
+    if (!canEditTasks || !activeSprint || task.sprintId) {
+      return;
+    }
+
+    setActionError("");
+    setMovingTaskId(task.id);
+    try {
+      await controller.updateTask(task.id, {
+        sprintId: activeSprint.id,
+        status: isTaskTerminalStatus(task.status) ? "Todo" : task.status
+      });
+      await reloadBacklog();
+    } catch (error) {
+      setActionError(getErrorMessage(error));
+    } finally {
+      setMovingTaskId("");
+    }
   };
 
   const openStoryDrawer = (story?: StoryItem) => {
@@ -627,8 +650,11 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
               taskStatusOptions={taskFilterOptions.statuses}
               openingTaskId={openingTaskId}
               updatingTaskId={updatingTaskId}
+              movingTaskId={movingTaskId}
               expandedTaskIds={expandedTaskIds}
               canCloseStory={story.canCloseStory}
+              activeSprintName={activeSprint?.name}
+              canMoveTasksToActiveSprint={Boolean(canEditTasks && activeSprint)}
               onToggleStory={toggleStory}
               onEditStory={openStoryDrawer}
               onCreateTask={(entry) => {
@@ -644,6 +670,9 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
                 void openTaskDrawer(taskId);
               }}
               onUpdateTaskStatus={requestBacklogTaskStatusChange}
+              onMoveTaskToActiveSprint={(task) => {
+                void moveBacklogTaskToActiveSprint(task);
+              }}
               onToggleTask={toggleTask}
               statusActionPending={storyStatusActionId === story.id}
             />

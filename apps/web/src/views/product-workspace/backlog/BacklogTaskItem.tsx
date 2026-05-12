@@ -1,4 +1,4 @@
-import { FiChevronRight } from "react-icons/fi";
+import { FiArrowRightCircle, FiChevronRight } from "react-icons/fi";
 import { MarkdownPreview } from "../../../ui/drawers/product-workspace/MarkdownPreview";
 import { StoryTaskSummary } from "../ProductWorkspaceViewShared";
 
@@ -7,9 +7,13 @@ type BacklogTaskItemProps = {
   expanded: boolean;
   isOpening: boolean;
   isUpdatingStatus: boolean;
+  isMovingToSprint: boolean;
   canEditStatus: boolean;
+  canMoveToActiveSprint: boolean;
+  activeSprintName?: string;
   statusOptions: string[];
   onChangeStatus: (task: StoryTaskSummary, nextStatus: string) => void;
+  onMoveToActiveSprint: (task: StoryTaskSummary) => void;
   onOpen: (taskId: string) => void;
   onToggle: (taskId: string) => void;
 };
@@ -22,8 +26,22 @@ function formatDate(value: string | null | undefined): string {
 }
 
 export function BacklogTaskItem(props: BacklogTaskItemProps) {
-  const { task, expanded, isOpening, isUpdatingStatus, canEditStatus, statusOptions, onChangeStatus, onOpen, onToggle } = props;
-  const isBusy = isOpening || isUpdatingStatus;
+  const {
+    task,
+    expanded,
+    isOpening,
+    isUpdatingStatus,
+    isMovingToSprint,
+    canEditStatus,
+    canMoveToActiveSprint,
+    activeSprintName,
+    statusOptions,
+    onChangeStatus,
+    onMoveToActiveSprint,
+    onOpen,
+    onToggle
+  } = props;
+  const isBusy = isOpening || isUpdatingStatus || isMovingToSprint;
   const statusClass = `status status-${task.status.toLowerCase().replace(/\s+/g, "-").replace(/_/g, "-")}`;
   const title = task.title?.trim() || "Sin titulo";
 
@@ -48,7 +66,7 @@ export function BacklogTaskItem(props: BacklogTaskItemProps) {
               className="story-task-status-select"
               value={task.status}
               onChange={(event) => onChangeStatus(task, event.target.value)}
-              disabled={isUpdatingStatus}
+              disabled={isBusy}
               aria-label={`Estado de ${title}`}
             >
               {statusOptions.map((status) => (
@@ -61,6 +79,23 @@ export function BacklogTaskItem(props: BacklogTaskItemProps) {
             <span className={statusClass}>{task.status}</span>
           )}
         </div>
+        {canMoveToActiveSprint ? (
+          <button
+            type="button"
+            className="btn btn-secondary story-task-move-button"
+            onClick={() => onMoveToActiveSprint(task)}
+            disabled={isBusy}
+            aria-label={`Mover ${title} al sprint activo`}
+            title={activeSprintName ? `Mover a ${activeSprintName}` : "Mover al sprint activo"}
+          >
+            {isMovingToSprint ? (
+              <span className="submit-loading-indicator" aria-hidden="true" />
+            ) : (
+              <FiArrowRightCircle aria-hidden="true" focusable="false" />
+            )}
+            <span>Mover al sprint activo</span>
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn btn-secondary btn-icon story-list-icon-button story-task-expand-button"

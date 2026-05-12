@@ -4,12 +4,14 @@ import { FiMaximize2, FiMinimize2, FiSave, FiVideo } from "react-icons/fi";
 import { LuWandSparkles } from "react-icons/lu";
 import { useSearchParams } from "react-router-dom";
 import { apiClient } from "../../../api/client";
-import { buildInternalReferenceMarkdown, ReferenceSearchResult } from "../../../lib/internal-references";
+import { ProductController, TeamController } from "../../../controllers";
+import { buildInternalReferenceMarkdown, parseInternalReferenceHref, ReferenceSearchResult } from "../../../lib/internal-references";
 import { useRootStore } from "../../../stores/root-store";
 import { decodeMermaidHtmlEntities } from "../../../util/mermaid-rendering";
 import { useBodyScrollLock } from "../../useBodyScrollLock";
 import { useOverlayEscape } from "../../useOverlayEscape";
 import { MAXIMIZED_EDITOR_PARAM } from "../drawer-route-state";
+import { openInternalReference } from "../reference/openInternalReference";
 import { ImageLightbox } from "./ImageLightbox";
 import { MarkdownGenerationDialog } from "./MarkdownGenerationDialog";
 import { MermaidGenerationDialog } from "./MermaidGenerationDialog";
@@ -199,6 +201,8 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     onTaskCheckboxToggle
   } = props;
   const store = useRootStore();
+  const productController = React.useMemo(() => new ProductController(store), [store]);
+  const teamController = React.useMemo(() => new TeamController(store), [store]);
   const [searchParams, setSearchParams] = useSearchParams();
   const minHeight = Math.max(rows, 4) * 24;
   const editorRef = React.useRef<ProseMirrorMarkdownEditorHandle | null>(null);
@@ -708,6 +712,15 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     setReferenceResults([]);
   }, [activeAnchor, updateEditorMarkdown]);
 
+  const handleInternalReferenceOpen = React.useCallback((href: string) => {
+    const internalReference = parseInternalReferenceHref(href);
+    if (!internalReference) {
+      return;
+    }
+
+    void openInternalReference(internalReference, store, productController, teamController);
+  }, [productController, store, teamController]);
+
   const handleClipboardImage = React.useCallback(async (file: File) => {
     if (!editorRef.current) {
       return;
@@ -1083,6 +1096,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         user={store.session.user}
         allowReadOnlyTaskCheckboxToggle={allowReadOnlyTaskCheckboxToggle}
         onTaskCheckboxToggle={onTaskCheckboxToggle}
+        onInternalReferenceOpen={handleInternalReferenceOpen}
         onMermaidTemplateSelect={openMermaidGenerationDialog}
         printTitle={printTitle ?? label}
         printDisabled={printDisabled || isGeneratingMarkdown}

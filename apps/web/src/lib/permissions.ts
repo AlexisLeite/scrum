@@ -70,6 +70,10 @@ const TASK_REASSIGN_PERMISSIONS: PermissionKey[] = [
   "product.focused.reassign"
 ];
 
+const PRODUCT_REPORT_PERMISSIONS: PermissionKey[] = [
+  "product.report.create"
+];
+
 export const ADMINISTRATION_ROLES: Role[] = ["platform_admin", "product_owner", "scrum_master"];
 export const USER_ADMIN_ROLES: Role[] = ["platform_admin", "product_owner"];
 export const PRODUCT_MANAGERS: Role[] = ["platform_admin", "product_owner"];
@@ -247,6 +251,21 @@ export function canViewProductMetrics(
   }
 
   return hasAnyProductPermission(subject, productId, ["product.admin.kpis.read"]);
+}
+
+export function canReportProductIssue(
+  subject: Role | SessionAccess | null | undefined,
+  productId?: string
+): boolean {
+  if (!isSessionAccess(subject)) {
+    return false;
+  }
+
+  if (!productId) {
+    return false;
+  }
+
+  return hasAnyProductPermission(subject, productId, PRODUCT_REPORT_PERMISSIONS);
 }
 
 export function canCreateProductsAdministration(subject: Role | SessionAccess | null | undefined): boolean {

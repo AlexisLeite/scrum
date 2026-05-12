@@ -352,7 +352,6 @@ export function TaskSearchPicker({
                             <span>{task.story?.title ?? "Sin historia"}</span>
                             <span>Responsable: {task.assignee?.name ?? "Sin asignar"}</span>
                             <span className={statusClass(task.status)}>{task.status}</span>
-                            {showPills && task.unfinishedSprintCount ? <span className="pill">Reingresa</span> : null}
                           </div>
                         </div>
                       </td>

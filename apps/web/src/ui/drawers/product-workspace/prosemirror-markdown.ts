@@ -407,6 +407,13 @@ function normalizeHtmlTokens(tokens: MarkdownToken[]) {
       token.type = "scrum_video";
       continue;
     }
+    const openingVideoAttrs = parseOpeningVideoMarkdown(token.content);
+    if (token.type === "html_inline" && openingVideoAttrs.src && isClosingVideoToken(tokens[index + 1])) {
+      token.type = "scrum_video";
+      token.content = `${token.content}</video>`;
+      tokens.splice(index + 1, 1);
+      continue;
+    }
     const generationPlaceholderAttrs = parseAiGenerationPlaceholderMarkdown(token.content);
     if ((token.type === "html_inline" || token.type === "html_block") && generationPlaceholderAttrs.id) {
       if (token.type === "html_block") {
@@ -794,6 +801,22 @@ function parseVideoMarkdown(value: string) {
     src: extractHtmlAttribute(attributes, "src") ?? "",
     title: extractHtmlAttribute(attributes, "title") ?? ""
   };
+}
+
+function parseOpeningVideoMarkdown(value: string) {
+  const match = /^<video\b([^>]*)>$/i.exec(value.trim());
+  if (!match) {
+    return { src: "", title: "" };
+  }
+  const attributes = match[1] ?? "";
+  return {
+    src: extractHtmlAttribute(attributes, "src") ?? "",
+    title: extractHtmlAttribute(attributes, "title") ?? ""
+  };
+}
+
+function isClosingVideoToken(token: MarkdownToken | undefined) {
+  return token?.type === "html_inline" && /^<\/video>$/i.test(token.content.trim());
 }
 
 function parseAiGenerationPlaceholderMarkdown(value: string) {

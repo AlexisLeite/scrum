@@ -15,8 +15,11 @@ type BacklogStoryCardProps = {
   taskStatusOptions: string[];
   openingTaskId: string;
   updatingTaskId: string;
+  movingTaskId: string;
   expandedTaskIds: Record<string, boolean>;
   canCloseStory: boolean;
+  activeSprintName?: string;
+  canMoveTasksToActiveSprint: boolean;
   onToggleStory: (storyId: string) => void;
   onEditStory: (story: StoryItem) => void;
   onCreateTask: (story: StoryItem) => void;
@@ -24,6 +27,7 @@ type BacklogStoryCardProps = {
   onReopenStory: (story: StoryItem) => void;
   onOpenTask: (taskId: string) => void;
   onUpdateTaskStatus: (task: StoryTask, nextStatus: string) => void;
+  onMoveTaskToActiveSprint: (task: StoryTask) => void;
   onToggleTask: (taskId: string) => void;
   statusActionPending: boolean;
 };
@@ -38,8 +42,11 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
     taskStatusOptions,
     openingTaskId,
     updatingTaskId,
+    movingTaskId,
     expandedTaskIds,
     canCloseStory,
+    activeSprintName,
+    canMoveTasksToActiveSprint,
     onToggleStory,
     onEditStory,
     onCreateTask,
@@ -47,6 +54,7 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
     onReopenStory,
     onOpenTask,
     onUpdateTaskStatus,
+    onMoveTaskToActiveSprint,
     onToggleTask,
     statusActionPending
   } = props;
@@ -136,9 +144,13 @@ export function BacklogStoryCard(props: BacklogStoryCardProps) {
                 expanded={Boolean(expandedTaskIds[task.id])}
                 isOpening={openingTaskId === task.id}
                 isUpdatingStatus={updatingTaskId === task.id}
+                isMovingToSprint={movingTaskId === task.id}
                 canEditStatus={canEditTaskStatus}
+                canMoveToActiveSprint={canMoveTasksToActiveSprint && !task.sprintId}
+                activeSprintName={activeSprintName}
                 statusOptions={taskStatusOptions}
                 onChangeStatus={onUpdateTaskStatus}
+                onMoveToActiveSprint={onMoveTaskToActiveSprint}
                 onOpen={onOpenTask}
                 onToggle={onToggleTask}
               />

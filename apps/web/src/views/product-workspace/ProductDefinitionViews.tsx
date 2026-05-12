@@ -1534,10 +1534,6 @@ export const TaskDefinitionView = observer(function TaskDefinitionView() {
                 <span className="muted">Actualizado</span>
                 <strong>{formatDateTime(taskDetail.updatedAt)}</strong>
               </div>
-              <div>
-                <span className="muted">No terminada</span>
-                <strong>{taskDetail.unfinishedSprintCount ? `${taskDetail.unfinishedSprintCount} sprint${taskDetail.unfinishedSprintCount === 1 ? "" : "s"}` : "Nunca"}</strong>
-              </div>
             </div>
             {taskDetail.sourceMessage ? (
               <div className="definition-note">

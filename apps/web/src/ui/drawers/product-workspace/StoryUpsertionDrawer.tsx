@@ -404,9 +404,6 @@ export function StoryUpsertionForm(props: {
               </div>
             </div>
             <MarkdownPreview markdown={task.description} compact className="story-task-summary" emptyLabel="Sin descripcion" />
-            {task.unfinishedSprintCount ? (
-              <p className="muted">No se pudo terminar en {task.unfinishedSprintCount} sprint{task.unfinishedSprintCount === 1 ? "" : "s"}.</p>
-            ) : null}
             <div className="story-task-meta-grid">
               <div className="story-task-meta-item">
                 <span className="story-task-meta-label">Asignado</span>

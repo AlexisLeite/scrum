@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { FiCheck, FiCopy } from "react-icons/fi";
+import { FiCheck, FiCopy, FiPlus } from "react-icons/fi";
 import {
   pointerWithin,
   DndContext,
@@ -59,6 +59,8 @@ type ColumnPreferences = {
 };
 
 type TaskCopyState = "idle" | "copied";
+type KanbanSortKey = "manual" | "title" | "updatedAt" | "assignee";
+type KanbanSortDirection = "asc" | "desc";
 
 type KanbanBoardProps = {
   columns: KanbanColumn[];
@@ -71,6 +73,7 @@ type KanbanBoardProps = {
   allowEditTask?: boolean;
   allowAssigneeChange?: boolean;
   allowStatusChange?: boolean;
+  allowSorting?: boolean;
   canCreateTask?: (columnName: string) => boolean;
   canEditTask?: (task: KanbanTask) => boolean;
   canChangeAssignee?: (task: KanbanTask) => boolean;
@@ -82,7 +85,7 @@ type KanbanBoardProps = {
   editActionLabel?: string | ((task: KanbanTask) => string);
   isTaskPending?: (taskId: string) => boolean;
   isTaskOpening?: (taskId: string) => boolean;
-  onCreateTask: (defaultStatus: string) => void;
+  onCreateTask: (defaultStatus: string) => void | Promise<void>;
   onEditTask: (task: KanbanTask) => void;
   onStatusChange: (taskId: string, status: string, actualHours?: number) => Promise<void>;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
@@ -240,6 +243,17 @@ function parseCssPixels(value: string | null | undefined) {
 
 const GHOST_ID_PREFIX = "kanban:ghost:";
 const TASK_COPY_RESET_DELAY_MS = 1000;
+const CREATE_TASK_SPINNER_MIN_MS = 180;
+const KANBAN_SORT_OPTIONS: Array<{ value: KanbanSortKey; label: string }> = [
+  { value: "manual", label: "Manual" },
+  { value: "title", label: "Titulo" },
+  { value: "updatedAt", label: "Fecha" },
+  { value: "assignee", label: "Responsable" }
+];
+const KANBAN_SORT_DIRECTION_OPTIONS: Array<{ value: KanbanSortDirection; label: string }> = [
+  { value: "asc", label: "Ascendente" },
+  { value: "desc", label: "Descendente" }
+];
 
 function buildGhostId(columnName: string, index: number) {
   return `${GHOST_ID_PREFIX}${encodeURIComponent(columnName)}:${index}`;
@@ -260,6 +274,47 @@ function parseGhostId(id: string) {
     return null;
   }
   return { columnName, index };
+}
+
+function compareBoardOrder(left: KanbanTask, right: KanbanTask) {
+  const leftOrder = typeof left.boardOrder === "number" ? left.boardOrder : Number.MAX_SAFE_INTEGER;
+  const rightOrder = typeof right.boardOrder === "number" ? right.boardOrder : Number.MAX_SAFE_INTEGER;
+  if (leftOrder !== rightOrder) {
+    return leftOrder - rightOrder;
+  }
+  return String(left.updatedAt ?? "").localeCompare(String(right.updatedAt ?? ""));
+}
+
+function compareText(left: string | null | undefined, right: string | null | undefined) {
+  return (left ?? "").localeCompare(right ?? "", undefined, { sensitivity: "base", numeric: true });
+}
+
+function parseTaskDate(value: string | null | undefined) {
+  if (!value) {
+    return 0;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function compareTasksBySort(left: KanbanTask, right: KanbanTask, sortKey: KanbanSortKey, direction: KanbanSortDirection) {
+  if (sortKey === "manual") {
+    return compareBoardOrder(left, right);
+  }
+
+  let result = 0;
+  if (sortKey === "title") {
+    result = compareText(left.title, right.title);
+  } else if (sortKey === "updatedAt") {
+    result = parseTaskDate(left.updatedAt) - parseTaskDate(right.updatedAt);
+  } else if (sortKey === "assignee") {
+    result = compareText(left.assignee?.name ?? left.assigneeId, right.assignee?.name ?? right.assigneeId);
+  }
+
+  if (result !== 0) {
+    return direction === "desc" ? -result : result;
+  }
+  return compareBoardOrder(left, right);
 }
 
 function getEventPointerClientY(activatorEvent: Event, deltaY: number) {
@@ -318,6 +373,28 @@ async function writeToClipboard(value: string) {
   if (!copied) {
     throw new Error("Clipboard copy failed");
   }
+}
+
+function nowMs() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+function waitForNextPaint() {
+  if (typeof window === "undefined" || !window.requestAnimationFrame) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
+function waitMs(delayMs: number) {
+  if (delayMs <= 0 || typeof window === "undefined") {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
 }
 
 function resolvePreviewIndexFromRenderedTasks(
@@ -591,7 +668,6 @@ const TaskCardContent = React.memo(function TaskCardContent(props: {
         <span className="kb-date muted">{formatUpdatedAt(task.updatedAt)}</span>
         <div className="kb-meta-pills">
           {task.isHistoricalUnfinished ? <span className="pill">Pendiente al cierre</span> : null}
-          {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
           <span className="pill">SP {task.effortPoints ?? "-"}</span>
         </div>
       </div>
@@ -745,6 +821,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
   canChangeAssignee: (task: KanbanTask) => boolean;
   canEditTask: (task: KanbanTask) => boolean;
   canChangeStatus: (task: KanbanTask) => boolean;
+  creatingColumnName: string | null;
   getTaskAssignees: (task: KanbanTask, assignees: KanbanAssignee[]) => KanbanAssignee[];
   getTaskCopyText?: (task: KanbanTask) => string | null | undefined;
   getTaskHref?: (task: KanbanTask) => string | undefined;
@@ -753,7 +830,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
   setColumnElement: (columnName: string, node: HTMLElement | null) => void;
   activeDrag: ActiveDragState | null;
   dragPreview: DragPreviewState | null;
-  onCreateTask: (defaultStatus: string) => void;
+  onCreateTask: (defaultStatus: string) => void | Promise<void>;
   onEditTask: (task: KanbanTask) => void;
   onAssigneeChange: (taskId: string, assigneeId: string | null) => Promise<void>;
   onStatusChange: (task: KanbanTask, status: string) => Promise<void>;
@@ -773,6 +850,7 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
     canChangeAssignee,
     canEditTask,
     canChangeStatus,
+    creatingColumnName,
     getTaskAssignees,
     getTaskCopyText,
     getTaskHref,
@@ -787,6 +865,8 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
     onStatusChange
   } = props;
   const { setNodeRef, isOver } = useDroppable({ id: column.name, disabled: !canReorder });
+  const creatingTaskInColumn = creatingColumnName === column.name;
+  const creatingTaskInAnyColumn = creatingColumnName !== null;
   const showGhost = Boolean(activeDrag && dragPreview && column.name === dragPreview.columnName);
   const ghostIndex = showGhost && dragPreview ? dragPreview.index : -1;
   const renderItems: { kind: "task" | "ghost"; task: KanbanTask }[] = column.tasks
@@ -815,12 +895,16 @@ const KanbanColumnView = React.memo(function KanbanColumnView(props: {
             {allowCreateTask && canCreateTask(column.name) ? (
               <button
                 type="button"
-                className="btn btn-secondary btn-icon"
-                onClick={() => onCreateTask(column.name)}
+                className={`btn btn-secondary btn-icon kb-create-task-button${creatingTaskInColumn ? " is-loading" : ""}`}
+                onClick={() => void onCreateTask(column.name)}
                 aria-label={`Crear tarea en ${column.name}`}
-                disabled={readOnly}
+                aria-busy={creatingTaskInColumn}
+                title={`Crear tarea en ${column.name}`}
+                disabled={readOnly || creatingTaskInAnyColumn}
               >
-                +
+                {creatingTaskInColumn
+                  ? <span className="submit-loading-indicator kb-create-task-spinner" aria-hidden="true" />
+                  : <FiPlus aria-hidden="true" focusable="false" />}
               </button>
             ) : null}
           </div>
@@ -935,6 +1019,7 @@ export function KanbanBoard({
   allowEditTask = true,
   allowAssigneeChange = true,
   allowStatusChange = true,
+  allowSorting = false,
   isTaskPending,
   isTaskOpening,
   canCreateTask = () => true,
@@ -963,16 +1048,19 @@ export function KanbanBoard({
   const [columnsMenuOpen, setColumnsMenuOpen] = React.useState(false);
   const [hiddenColumns, setHiddenColumns] = React.useState<string[]>([]);
   const [columnWidths, setColumnWidths] = React.useState<Record<string, number>>({});
+  const [sortKey, setSortKey] = React.useState<KanbanSortKey>("manual");
+  const [sortDirection, setSortDirection] = React.useState<KanbanSortDirection>("asc");
+  const [creatingColumnName, setCreatingColumnName] = React.useState<string | null>(null);
   const columnsMenuRef = React.useRef<HTMLDivElement | null>(null);
   const columnElementRefs = React.useRef(new Map<string, HTMLElement>());
   const columnsContainerRef = React.useRef<HTMLDivElement | null>(null);
   const dragPointerClientYRef = React.useRef<number | null>(null);
+  const creatingColumnNameRef = React.useRef<string | null>(null);
   const resizeStateRef = React.useRef<{
-    leftColumnName: string;
-    rightColumnName: string;
+    targetColumnName: string;
     startX: number;
-    startLeftWidth: number;
-    startRightWidth: number;
+    startWidths: Record<string, number>;
+    startTotalWidth: number;
   } | null>(null);
 
   React.useEffect(() => {
@@ -1087,26 +1175,35 @@ export function KanbanBoard({
   const filteredColumns = React.useMemo(() => {
     const q = normalizeText(search);
     const visibleColumns = localColumns.filter((column) => !hiddenColumns.includes(column.name));
-    if (!q && assigneeFilter === "all") {
-      return visibleColumns;
+    const nextColumns = !q && assigneeFilter === "all"
+      ? visibleColumns
+      : visibleColumns.map((column) => ({
+        ...column,
+        tasks: column.tasks.filter((task) => {
+          if (assigneeFilter === "unassigned" && task.assigneeId) return false;
+          if (assigneeFilter !== "all" && assigneeFilter !== "unassigned" && task.assigneeId !== assigneeFilter) return false;
+          if (!q) return true;
+          const haystack = [task.title, task.description ?? "", task.story?.title ?? "", task.assignee?.name ?? ""]
+            .map(normalizeText)
+            .join(" ");
+          return haystack.includes(q);
+        })
+      }));
+
+    if (!allowSorting || sortKey === "manual") {
+      return nextColumns;
     }
-    return visibleColumns.map((column) => ({
+
+    return nextColumns.map((column) => ({
       ...column,
-      tasks: column.tasks.filter((task) => {
-        if (assigneeFilter === "unassigned" && task.assigneeId) return false;
-        if (assigneeFilter !== "all" && assigneeFilter !== "unassigned" && task.assigneeId !== assigneeFilter) return false;
-        if (!q) return true;
-        const haystack = [task.title, task.description ?? "", task.story?.title ?? "", task.assignee?.name ?? ""]
-          .map(normalizeText)
-          .join(" ");
-        return haystack.includes(q);
-      })
+      tasks: [...column.tasks].sort((left, right) => compareTasksBySort(left, right, sortKey, sortDirection))
     }));
-  }, [assigneeFilter, hiddenColumns, localColumns, search]);
+  }, [allowSorting, assigneeFilter, hiddenColumns, localColumns, search, sortDirection, sortKey]);
   const columnsGridTemplate = React.useMemo(
     () => filteredColumns
       .flatMap((column, index) => {
-        const track = columnWidths[column.name] ? `${columnWidths[column.name]}px` : "minmax(300px, 1fr)";
+        const hasExplicitWidth = Object.prototype.hasOwnProperty.call(columnWidths, column.name);
+        const track = hasExplicitWidth ? `${Math.max(0, columnWidths[column.name])}px` : "minmax(300px, 1fr)";
         return index < filteredColumns.length - 1 ? [track, "16px"] : [track];
       })
       .join(" "),
@@ -1153,7 +1250,7 @@ export function KanbanBoard({
 
       const currentWidths = visibleColumns.map((column) => {
         const explicit = columnWidths[column.name];
-        if (explicit) {
+        if (typeof explicit === "number" && Number.isFinite(explicit)) {
           return explicit;
         }
         const measured = columnElementRefs.current.get(column.name)?.getBoundingClientRect().width;
@@ -1174,9 +1271,8 @@ export function KanbanBoard({
         const next: Record<string, number> = { ...current };
         visibleColumns.forEach((column, index) => {
           const scaled = Math.round(currentWidths[index] * scale);
-          const bounded = Math.max(260, Math.min(760, scaled));
-          if (next[column.name] !== bounded) {
-            next[column.name] = bounded;
+          if (next[column.name] !== scaled) {
+            next[column.name] = scaled;
           }
         });
         return next;
@@ -1200,7 +1296,7 @@ export function KanbanBoard({
     () => localColumns.reduce((acc, column) => acc + column.tasks.length, 0),
     [localColumns]
   );
-  const canReorder = !readOnly && allowStatusChange;
+  const canReorder = !readOnly && allowStatusChange && (!allowSorting || sortKey === "manual");
   const collisionDetection = React.useCallback<typeof closestCorners>((args) => {
     const pointerMatches = pointerWithin(args);
     return pointerMatches.length > 0 ? pointerMatches : closestCorners(args);
@@ -1235,50 +1331,77 @@ export function KanbanBoard({
     setHiddenColumns([]);
     setColumnWidths({});
   }, []);
-  const handleResizeStart = React.useCallback((leftColumnName: string, rightColumnName: string, event: React.PointerEvent<HTMLButtonElement>) => {
+  const handleCreateTask = React.useCallback(async (defaultStatus: string) => {
+    if (creatingColumnNameRef.current) {
+      return;
+    }
+
+    creatingColumnNameRef.current = defaultStatus;
+    setCreatingColumnName(defaultStatus);
+    const startedAt = nowMs();
+    try {
+      await waitForNextPaint();
+      await onCreateTask(defaultStatus);
+      await waitMs(CREATE_TASK_SPINNER_MIN_MS - (nowMs() - startedAt));
+    } finally {
+      creatingColumnNameRef.current = null;
+      setCreatingColumnName(null);
+    }
+  }, [onCreateTask]);
+  const handleResizeStart = React.useCallback((leftColumnName: string, _rightColumnName: string, event: React.PointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    const startLeftWidth = columnElementRefs.current.get(leftColumnName)?.getBoundingClientRect().width ?? columnWidths[leftColumnName] ?? 320;
-    const startRightWidth = columnElementRefs.current.get(rightColumnName)?.getBoundingClientRect().width ?? columnWidths[rightColumnName] ?? 320;
+    const visibleColumns = filteredColumns.filter((column) => !hiddenColumns.includes(column.name));
+    const startWidths = Object.fromEntries(
+      visibleColumns.map((column) => {
+        const explicitWidth = columnWidths[column.name];
+        const measuredWidth = columnElementRefs.current.get(column.name)?.getBoundingClientRect().width;
+        return [
+          column.name,
+          measuredWidth && Number.isFinite(measuredWidth)
+            ? measuredWidth
+            : typeof explicitWidth === "number" && Number.isFinite(explicitWidth)
+              ? explicitWidth
+              : 0
+        ];
+      })
+    );
+    const startTotalWidth = Object.values(startWidths).reduce((acc, width) => acc + width, 0);
     resizeStateRef.current = {
-      leftColumnName,
-      rightColumnName,
+      targetColumnName: leftColumnName,
       startX: event.clientX,
-      startLeftWidth,
-      startRightWidth
+      startWidths,
+      startTotalWidth
     };
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const resizeState = resizeStateRef.current;
       if (
         !resizeState
-        || resizeState.leftColumnName !== leftColumnName
-        || resizeState.rightColumnName !== rightColumnName
+        || resizeState.targetColumnName !== leftColumnName
       ) {
         return;
       }
       const delta = moveEvent.clientX - resizeState.startX;
-      const totalWidth = resizeState.startLeftWidth + resizeState.startRightWidth;
-      let nextLeftWidth = Math.max(260, Math.min(760, Math.round(resizeState.startLeftWidth + delta)));
-      let nextRightWidth = totalWidth - nextLeftWidth;
-
-      if (nextRightWidth < 260) {
-        nextRightWidth = 260;
-        nextLeftWidth = totalWidth - nextRightWidth;
-      } else if (nextRightWidth > 760) {
-        nextRightWidth = 760;
-        nextLeftWidth = totalWidth - nextRightWidth;
-      }
+      const targetStartWidth = resizeState.startWidths[leftColumnName] ?? 0;
+      const nextTargetWidth = Math.max(0, Math.round(targetStartWidth + delta));
+      const restColumnNames = Object.keys(resizeState.startWidths).filter((columnName) => columnName !== leftColumnName);
+      const restStartWidth = restColumnNames.reduce((acc, columnName) => acc + (resizeState.startWidths[columnName] ?? 0), 0);
+      const nextRestTotalWidth = Math.max(0, resizeState.startTotalWidth - nextTargetWidth);
+      const restScale = restStartWidth > 0 ? nextRestTotalWidth / restStartWidth : 0;
 
       setColumnWidths((current) => {
-        if (current[leftColumnName] === nextLeftWidth && current[rightColumnName] === nextRightWidth) {
+        const next = { ...current };
+        next[leftColumnName] = nextTargetWidth;
+        restColumnNames.forEach((columnName) => {
+          next[columnName] = Math.round((resizeState.startWidths[columnName] ?? 0) * restScale);
+        });
+
+        const changed = Object.entries(next).some(([columnName, width]) => current[columnName] !== width);
+        if (!changed) {
           return current;
         }
-        return {
-          ...current,
-          [leftColumnName]: nextLeftWidth,
-          [rightColumnName]: nextRightWidth
-        };
+        return next;
       });
     };
     const handlePointerUp = () => {
@@ -1288,7 +1411,7 @@ export function KanbanBoard({
     };
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
-  }, [columnWidths]);
+  }, [columnWidths, filteredColumns, hiddenColumns]);
 
   const persistMove = React.useCallback(
     async (task: KanbanTask, fromColumn: string, targetColumn: string, targetIndex: number, actualHours?: number) => {
@@ -1452,7 +1575,7 @@ export function KanbanBoard({
   return (
     <>
       <div className="kb-board">
-        <div className="kb-toolbar">
+        <div className={`kb-toolbar${allowSorting ? " has-sort-controls" : ""}`}>
           <label>
             Buscar
             <input
@@ -1474,6 +1597,29 @@ export function KanbanBoard({
               ariaLabel="Filtrar por usuario"
             />
           </label>
+          {allowSorting ? (
+            <>
+              <label>
+                Ordenar por
+                <SearchableSelect
+                  value={sortKey}
+                  onChange={(value) => setSortKey(value as KanbanSortKey)}
+                  options={KANBAN_SORT_OPTIONS}
+                  ariaLabel="Ordenar tareas por"
+                />
+              </label>
+              <label>
+                Direccion
+                <SearchableSelect
+                  value={sortDirection}
+                  onChange={(value) => setSortDirection(value as KanbanSortDirection)}
+                  options={KANBAN_SORT_DIRECTION_OPTIONS}
+                  disabled={sortKey === "manual"}
+                  ariaLabel="Direccion del orden"
+                />
+              </label>
+            </>
+          ) : null}
           <div className="kb-toolbar-actions">
             <div className="kb-column-menu" ref={columnsMenuRef}>
               <button
@@ -1554,6 +1700,7 @@ export function KanbanBoard({
                   canChangeAssignee={canChangeAssignee}
                   canEditTask={canEditTask}
                   canChangeStatus={canChangeStatus}
+                  creatingColumnName={creatingColumnName}
                   getTaskAssignees={getTaskAssignees}
                   getTaskCopyText={getTaskCopyText}
                   getTaskHref={getTaskHref}
@@ -1562,7 +1709,7 @@ export function KanbanBoard({
                   setColumnElement={setColumnElement}
                   activeDrag={activeDrag}
                   dragPreview={dragPreview}
-                  onCreateTask={onCreateTask}
+                  onCreateTask={handleCreateTask}
                   onEditTask={onEditTask}
                   onAssigneeChange={onAssigneeChange}
                   onStatusChange={handleStatusSelect}

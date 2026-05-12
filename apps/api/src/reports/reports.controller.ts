@@ -1,13 +1,15 @@
-import { Body, Controller, Headers, Post, UploadedFiles, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Headers, Param, Post, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
-import { ReportIncidentDto } from "./reports.dto";
+import { AuthUser, CurrentUser } from "../common/current-user.decorator";
+import { JwtAuthGuard } from "../common/jwt-auth.guard";
+import { CreateProductReportDto, ReportIncidentDto } from "./reports.dto";
 import { IncidentReportImage, ReportsService } from "./reports.service";
 
-@Controller("report")
+@Controller()
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
-  @Post()
+  @Post("report")
   @UseInterceptors(FilesInterceptor("images"))
   createIncident(
     @Body() dto: ReportIncidentDto,
@@ -20,6 +22,16 @@ export class ReportsController {
       apiKeyHeader ?? this.extractBearerToken(authorization),
       images ?? []
     );
+  }
+
+  @Post("products/:productId/report")
+  @UseGuards(JwtAuthGuard)
+  createProductReport(
+    @CurrentUser() user: AuthUser,
+    @Param("productId") productId: string,
+    @Body() dto: CreateProductReportDto
+  ) {
+    return this.reportsService.createProductReport(productId, dto, user);
   }
 
   private extractBearerToken(authorization?: string) {

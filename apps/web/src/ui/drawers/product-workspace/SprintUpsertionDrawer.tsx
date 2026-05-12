@@ -551,7 +551,6 @@ export function SprintUpsertionForm(props: {
                             <strong>{task.title}</strong>
                           </div>
                           <div className="row-actions compact">
-                            {task.unfinishedSprintCount ? <span className="pill">No terminada {task.unfinishedSprintCount}</span> : null}
                             <span className="status status-in-sprint">En sprint</span>
                           </div>
                         </div>

@@ -1107,6 +1107,39 @@ export class TasksService {
     });
   }
 
+  async createReportedBacklogTask(
+    productId: string,
+    storyId: string,
+    input: {
+      title: string;
+      description: string;
+    },
+    user: AuthUser
+  ) {
+    const story = await this.prisma.userStory.findUnique({
+      where: { id: storyId },
+      select: { id: true, productId: true, status: true }
+    });
+    if (!story || story.productId !== productId) {
+      throw new BadRequestException("Report story does not belong to product");
+    }
+    this.assertStoryAcceptsNewTasks(story.status);
+
+    return this.createTaskRecord({
+      storyId,
+      productId,
+      title: input.title,
+      description: input.description,
+      status: "Todo",
+      effortPoints: 1,
+      actorUserId: user.sub,
+      action: "TASK_REPORTED",
+      metadataJson: {
+        source: "product_report"
+      }
+    });
+  }
+
   private async createTaskRecord(input: TaskCreationInput) {
     const sprintId = input.sprintId ?? null;
     const taskData = {

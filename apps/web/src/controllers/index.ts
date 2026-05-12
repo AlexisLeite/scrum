@@ -280,6 +280,19 @@ export class ProductController {
     return product;
   }
 
+  async createProductReport(productId: string, payload: { title: string; body: string }) {
+    return apiClient.post<{
+      ok: boolean;
+      message: string;
+      taskId: string;
+      title: string;
+      status: string;
+      productId: string;
+      storyId: string;
+      sprintId: string | null;
+    }>(`/products/${productId}/report`, payload);
+  }
+
   async addProductMember(productId: string, payload: { userId: string; role: Role }) {
     return apiClient.post<any>(`/products/${productId}/members`, payload);
   }

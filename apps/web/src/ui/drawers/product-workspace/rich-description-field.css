@@ -118,18 +118,7 @@
   --accentTextContrast: #ffffff;
   --code-block-bg: color-mix(in srgb, var(--bg-soft) 78%, transparent);
   --code-block-selection-bg: color-mix(in srgb, var(--accent-a) 28%, var(--bg-soft));
-  --code-block-caret: color-mix(in srgb, #ffffff 92%, var(--accent-a) 8%);
-  --code-block-comment: color-mix(in srgb, var(--text-main) 20%, var(--text-muted) 80%);
-}
-
-:root[data-theme="dark"] .rich-description-editor {
-  --code-block-comment: color-mix(in srgb, var(--text-main) 72%, var(--text-muted) 28%);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) .rich-description-editor {
-    --code-block-comment: color-mix(in srgb, var(--text-main) 72%, var(--text-muted) 28%);
-  }
+  --code-block-caret: var(--code-highlight-base);
 }
 
 .rich-description-editor:focus-within {
@@ -1166,7 +1155,7 @@
 .rich-description-editor code {
   background: var(--code-block-bg) !important;
   background-color: var(--code-block-bg) !important;
-  color: var(--text-main);
+  color: var(--code-highlight-base);
 }
 
 .prosemirror-code-block {
@@ -1386,11 +1375,7 @@
 
 .rich-description-editor .cm-editor .cm-cursor,
 .rich-description-editor .cm-editor .cm-dropCursor {
-  border-left-color: color-mix(in srgb, #ffffff 92%, var(--accent-a) 8%)var(--code-block-caret) !important;
-}
-
-.rich-description-editor .cm-editor :is(.ͼ1b, .ͼ1n) {
-  color: var(--code-block-comment) !important;
+  border-left-color: var(--code-block-caret) !important;
 }
 
 .rich-description-editor a {

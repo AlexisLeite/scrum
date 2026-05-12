@@ -182,9 +182,6 @@ export const StoryTasksView = observer(function StoryTasksView() {
               <tr key={task.id}>
                 <td>
                   <MarkdownPreview markdown={markdownWithTitle(task.title, task.description, 4)} compact className="muted" emptyLabel="Sin descripcion" />
-                  {task.unfinishedSprintCount ? (
-                    <small className="muted">No terminada en {task.unfinishedSprintCount} sprint{task.unfinishedSprintCount === 1 ? "" : "s"}</small>
-                  ) : null}
                 </td>
                 <td>
                   <SearchableSelect
