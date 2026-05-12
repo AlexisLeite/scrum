@@ -402,11 +402,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   }, [scheduleHeightSync, value]);
 
   const focusEditor = React.useCallback(() => {
-    const editorContent = fieldRef.current?.querySelector<HTMLElement>('[contenteditable="true"]');
-    if (!editorContent) {
-      return;
-    }
-    editorContent.focus();
+    editorRef.current?.focus();
     scheduleHeightSync();
   }, [scheduleHeightSync]);
 
@@ -1298,39 +1294,22 @@ function keepRichDescriptionEditorVisibleInDrawer(field: HTMLElement | null, isM
   }
 
   const drawerScroller = field.closest<HTMLElement>(".drawer-content");
-  const editor = field.querySelector<HTMLElement>(".rich-description-editor");
-  if (!drawerScroller || !editor) {
+  const selectionRect = resolveRichDescriptionCaretRect(field);
+  if (!drawerScroller || !selectionRect) {
     return;
   }
 
   const scrollerRect = drawerScroller.getBoundingClientRect();
-  const editorRect = editor.getBoundingClientRect();
-  if (scrollerRect.height <= 0 || editorRect.height <= 0) {
+  if (scrollerRect.height <= 0) {
     return;
   }
 
-  const padding = Math.min(16, Math.max(0, scrollerRect.height * 0.08));
-  const safeTop = scrollerRect.top + padding;
-  const safeBottom = scrollerRect.bottom - padding;
-  const safeHeight = Math.max(0, safeBottom - safeTop);
-  const canFitInsideSafeArea = editorRect.height <= safeHeight;
-  const canFitInsideScroller = editorRect.height <= scrollerRect.height;
   let nextScrollTop: number | null = null;
 
-  if (canFitInsideSafeArea) {
-    if (editorRect.top < safeTop) {
-      nextScrollTop = drawerScroller.scrollTop + editorRect.top - safeTop;
-    } else if (editorRect.bottom > safeBottom) {
-      nextScrollTop = drawerScroller.scrollTop + editorRect.bottom - safeBottom;
-    }
-  } else if (canFitInsideScroller) {
-    if (editorRect.top < scrollerRect.top) {
-      nextScrollTop = drawerScroller.scrollTop + editorRect.top - scrollerRect.top;
-    } else if (editorRect.bottom > scrollerRect.bottom) {
-      nextScrollTop = drawerScroller.scrollTop + editorRect.bottom - scrollerRect.bottom;
-    }
-  } else if (editorRect.top < safeTop) {
-    nextScrollTop = drawerScroller.scrollTop + editorRect.top - safeTop;
+  if (selectionRect.top < scrollerRect.top) {
+    nextScrollTop = drawerScroller.scrollTop + selectionRect.top - scrollerRect.top;
+  } else if (selectionRect.bottom > scrollerRect.bottom) {
+    nextScrollTop = drawerScroller.scrollTop + selectionRect.bottom - scrollerRect.bottom;
   }
 
   if (nextScrollTop === null) {
@@ -1343,14 +1322,41 @@ function keepRichDescriptionEditorVisibleInDrawer(field: HTMLElement | null, isM
     return;
   }
 
-  drawerScroller.scrollTo({
-    top: clampedScrollTop,
-    behavior: prefersReducedMotion() ? "auto" : "smooth"
-  });
+  drawerScroller.scrollTop = clampedScrollTop;
 }
 
-function prefersReducedMotion() {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function resolveRichDescriptionCaretRect(field: HTMLElement) {
+  const activeElement = document.activeElement;
+  const selection = window.getSelection();
+  const anchorNode = selection?.anchorNode ?? null;
+
+  if (selection && selection.rangeCount > 0 && anchorNode && field.contains(anchorNode)) {
+    const range = selection.getRangeAt(0);
+    const rect = firstUsableRect(range.getClientRects()) ?? firstUsableRect([range.getBoundingClientRect()]);
+    if (rect) {
+      return rect;
+    }
+  }
+
+  if (activeElement instanceof HTMLElement && field.contains(activeElement) && !activeElement.isContentEditable) {
+    return activeElement.getBoundingClientRect();
+  }
+
+  return null;
+}
+
+function firstUsableRect(rects: ArrayLike<DOMRect | DOMRectReadOnly>) {
+  for (let index = 0; index < rects.length; index += 1) {
+    const rect = rects[index];
+    if (rect.height > 0 || rect.width > 0) {
+      return {
+        top: rect.top,
+        bottom: rect.bottom
+      };
+    }
+  }
+
+  return null;
 }
 
 function richDescriptionFieldHasActiveSelection(field: HTMLElement) {

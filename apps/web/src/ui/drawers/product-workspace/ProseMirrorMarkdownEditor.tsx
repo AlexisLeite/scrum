@@ -3,9 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { FiBold, FiCheckSquare, FiChevronDown, FiCode, FiImage, FiItalic, FiLink, FiList, FiMaximize2, FiMinimize2, FiMinus, FiPrinter, FiRotateCcw, FiRotateCw, FiShare2, FiTable } from "react-icons/fi";
 import type { IconType } from "react-icons";
 import { LuListOrdered, LuQuote } from "react-icons/lu";
-import { EditorState, Plugin, TextSelection, type Selection, type Transaction } from "prosemirror-state";
+import { EditorState, Plugin, Selection, TextSelection, type Transaction } from "prosemirror-state";
 import { EditorView, type NodeView, type ViewMutationRecord } from "prosemirror-view";
-import { Node as ProseMirrorNode, Slice } from "prosemirror-model";
+import { Fragment, Node as ProseMirrorNode, Slice } from "prosemirror-model";
 import { baseKeymap, chainCommands, createParagraphNear, lift, setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
 import { history, redo, undo } from "prosemirror-history";
 import { InputRule, inputRules, textblockTypeInputRule, wrappingInputRule } from "prosemirror-inputrules";
@@ -533,7 +533,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
 
       const state = EditorState.create({
         schema: markdownSchema,
-        doc,
+        doc: yXmlFragment ? doc : ensureTrailingEditableParagraph(doc),
         plugins
       });
 
@@ -598,11 +598,21 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       });
       const cleanupSynced = provider?.onSynced(() => {
         if (!yXmlFragment || yXmlFragment.length > 0) {
+          window.requestAnimationFrame(() => {
+            if (viewRef.current === view) {
+              ensureViewHasTrailingEditableParagraph(view);
+            }
+          });
           return;
         }
         ydoc?.transact(() => {
           prosemirrorToYXmlFragment(parseMarkdown(initialMarkdownRef.current), yXmlFragment);
         }, "initial-markdown-seed");
+        window.requestAnimationFrame(() => {
+          if (viewRef.current === view) {
+            ensureViewHasTrailingEditableParagraph(view);
+          }
+        });
       });
 
       return () => {
@@ -831,12 +841,16 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       }
 
       event.preventDefault();
+      placeSelectionFromEditorHostClick(view, event);
       focusEditorView(view, readOnlyRef.current);
     }, []);
 
     React.useImperativeHandle(ref, () => ({
       focus() {
-        viewRef.current?.focus();
+        const view = viewRef.current;
+        if (view) {
+          focusEditorView(view, readOnlyRef.current);
+        }
       },
       getMarkdown() {
         return viewRef.current ? serializeMarkdown(viewRef.current.state.doc) : markdownValue;
@@ -1246,6 +1260,8 @@ function buildPlugins(args: {
     }),
     prosemirrorKeymap(baseKeymap),
     taskListNormalizationPlugin(),
+    trailingEditableParagraphPlugin(),
+    controlledSelectionScrollPlugin(),
     tableEditing()
   ];
 
@@ -1275,9 +1291,63 @@ function buildPlugins(args: {
 }
 
 function replaceDocumentMarkdown(view: EditorView, markdown: string) {
-  const nextDoc = parseMarkdown(markdown);
+  const nextDoc = ensureTrailingEditableParagraph(parseMarkdown(markdown));
   const transaction = view.state.tr.replaceWith(0, view.state.doc.content.size, nextDoc.content);
   view.dispatch(transaction);
+}
+
+function ensureTrailingEditableParagraph(doc: ProseMirrorNode) {
+  if (!needsTrailingEditableParagraph(doc)) {
+    return doc;
+  }
+
+  return doc.copy(doc.content.append(Fragment.from(createTrailingEditableParagraph())));
+}
+
+function ensureViewHasTrailingEditableParagraph(view: EditorView) {
+  if (!needsTrailingEditableParagraph(view.state.doc)) {
+    return;
+  }
+
+  view.dispatch(view.state.tr.insert(view.state.doc.content.size, createTrailingEditableParagraph()));
+}
+
+function trailingEditableParagraphPlugin() {
+  return new Plugin({
+    appendTransaction(transactions, _oldState, newState) {
+      if (!transactions.some((transaction) => transaction.docChanged) || !needsTrailingEditableParagraph(newState.doc)) {
+        return null;
+      }
+
+      return newState.tr.insert(newState.doc.content.size, createTrailingEditableParagraph());
+    }
+  });
+}
+
+function needsTrailingEditableParagraph(doc: ProseMirrorNode) {
+  const lastChild = doc.lastChild;
+  if (!lastChild || isEmptyParagraph(lastChild)) {
+    return false;
+  }
+
+  if (lastChild.type === markdownSchema.nodes.paragraph) {
+    return paragraphEndsWithInlineAtom(lastChild);
+  }
+
+  return true;
+}
+
+function createTrailingEditableParagraph() {
+  return markdownSchema.nodes.paragraph.create();
+}
+
+function isEmptyParagraph(node: ProseMirrorNode) {
+  return node.type === markdownSchema.nodes.paragraph && node.content.size === 0;
+}
+
+function paragraphEndsWithInlineAtom(node: ProseMirrorNode) {
+  const lastChild = node.lastChild;
+  return Boolean(lastChild?.isAtom && !lastChild.isText);
 }
 
 function focusEditorView(view: EditorView, readOnly: boolean) {
@@ -1303,20 +1373,34 @@ function resolveModClickInternalReferenceHref(event: Event, root: HTMLElement) {
   return parseInternalReferenceHref(href) ? href : "";
 }
 
-const CARET_SCROLL_GUARD_RATIO = 0.2;
-
 type VerticalRect = Pick<DOMRect, "top" | "bottom">;
 
+function placeSelectionFromEditorHostClick(view: EditorView, event: React.MouseEvent<HTMLElement>) {
+  const hit = view.posAtCoords({
+    left: event.clientX,
+    top: event.clientY
+  });
+  const selection = hit && isPointInsideEditorDomVerticalBounds(view, event.clientY)
+    ? TextSelection.near(view.state.doc.resolve(hit.pos), 1)
+    : Selection.atEnd(view.state.doc);
+
+  if (!selection.eq(view.state.selection)) {
+    view.dispatch(view.state.tr.setSelection(selection));
+  }
+}
+
+function isPointInsideEditorDomVerticalBounds(view: EditorView, clientY: number) {
+  const rect = view.dom.getBoundingClientRect();
+  return clientY >= rect.top && clientY <= rect.bottom;
+}
+
 function keepSelectionInsideEditorGuard(view: EditorView) {
-  const selection = view.state.selection;
-  if (!selection.empty) {
+  if (!view.state.selection.empty) {
     return false;
   }
 
-  let selectionRect: VerticalRect;
-  try {
-    selectionRect = view.coordsAtPos(selection.head, 1);
-  } catch {
+  const selectionRect = resolveProseMirrorSelectionRect(view);
+  if (!selectionRect) {
     return false;
   }
 
@@ -1325,10 +1409,7 @@ function keepSelectionInsideEditorGuard(view: EditorView) {
     return false;
   }
 
-  scrollRectInsideGuard(selectionRect, editorScroller, {
-    atDocumentStart: selection.head <= 1,
-    atDocumentEnd: isSelectionAtDocumentEnd(selection)
-  });
+  scrollRectInsideVisibleBounds(selectionRect, editorScroller);
   return true;
 }
 
@@ -1336,23 +1417,15 @@ function findEditorScrollContainer(startElement: HTMLElement) {
   return startElement.closest<HTMLElement>(".prosemirror-editor-host");
 }
 
-function scrollRectInsideGuard(
-  rect: VerticalRect,
-  scroller: HTMLElement,
-  options: { atDocumentStart: boolean; atDocumentEnd: boolean }
-) {
+function scrollRectInsideVisibleBounds(rect: VerticalRect, scroller: HTMLElement) {
   const scrollerRect = scroller.getBoundingClientRect();
   const visibleHeight = scrollerRect.height;
   if (visibleHeight <= 0) {
     return;
   }
 
-  const caretHeight = Math.max(0, rect.bottom - rect.top);
-  const guard = Math.min(window.innerHeight * CARET_SCROLL_GUARD_RATIO, Math.max(0, (visibleHeight - caretHeight) / 2));
-  const tailSpace = options.atDocumentEnd ? resolveEditorTailSpace(scroller) : 0;
-  const bottomGuard = Math.min(Math.max(guard, tailSpace), Math.max(0, (visibleHeight - caretHeight) / 2));
-  const topLimit = options.atDocumentStart ? scrollerRect.top : scrollerRect.top + guard;
-  const bottomLimit = scrollerRect.bottom - bottomGuard;
+  const topLimit = scrollerRect.top;
+  const bottomLimit = scrollerRect.bottom;
   let scrollDelta = 0;
 
   if (rect.top < topLimit) {
@@ -1367,39 +1440,177 @@ function scrollRectInsideGuard(
 }
 
 function scrollEditorBy(scroller: HTMLElement, top: number) {
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    scroller.scrollTop += top;
-    return;
-  }
+  scroller.scrollTop += top;
+}
 
-  scroller.scrollBy({
-    top,
-    behavior: "smooth"
+function resolveProseMirrorSelectionRect(view: EditorView): VerticalRect | null {
+  try {
+    return view.coordsAtPos(view.state.selection.head, 1);
+  } catch {
+    return null;
+  }
+}
+
+type EditorScrollSnapshot = {
+  scroller: HTMLElement;
+  scrollTop: number;
+};
+
+function controlledSelectionScrollPlugin() {
+  return new Plugin({
+    view(view) {
+      let pendingFrame = 0;
+      let pendingSnapshot: EditorScrollSnapshot | null = null;
+
+      const cancelPendingFrame = () => {
+        if (pendingFrame !== 0) {
+          window.cancelAnimationFrame(pendingFrame);
+          pendingFrame = 0;
+        }
+      };
+
+      const captureSnapshot = () => {
+        const scroller = findEditorScrollContainer(view.dom);
+        if (!scroller) {
+          pendingSnapshot = null;
+          return null;
+        }
+
+        pendingSnapshot = {
+          scroller,
+          scrollTop: scroller.scrollTop
+        };
+        return pendingSnapshot;
+      };
+
+      const scheduleKeyboardScrollControl = (snapshot = pendingSnapshot) => {
+        if (!snapshot) {
+          return;
+        }
+
+        cancelPendingFrame();
+        pendingFrame = window.requestAnimationFrame(() => {
+          pendingFrame = 0;
+          restoreOrAdjustEditorScroll(view, snapshot);
+          if (pendingSnapshot === snapshot) {
+            pendingSnapshot = null;
+          }
+        });
+      };
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (!isControlledSelectionScrollKey(event)) {
+          return;
+        }
+
+        const snapshot = captureSnapshot();
+        if (snapshot) {
+          scheduleKeyboardScrollControl(snapshot);
+        }
+      };
+
+      view.dom.addEventListener("keydown", handleKeyDown, true);
+      return {
+        update(_view, previousState) {
+          if (pendingSnapshot && !previousState.selection.eq(_view.state.selection)) {
+            scheduleKeyboardScrollControl();
+          }
+        },
+        destroy() {
+          cancelPendingFrame();
+          view.dom.removeEventListener("keydown", handleKeyDown, true);
+        }
+      };
+    }
   });
 }
 
-function resolveEditorTailSpace(scroller: HTMLElement) {
-  const spacer = scroller.querySelector<HTMLElement>(".prosemirror-editor-tail-spacer");
-  if (!spacer) {
-    return 0;
+function restoreOrAdjustEditorScroll(view: EditorView, snapshot: EditorScrollSnapshot) {
+  if (!snapshot.scroller.isConnected) {
+    return;
   }
-  const height = Number.parseFloat(window.getComputedStyle(spacer).height);
-  return Number.isFinite(height) ? height : 0;
+
+  const currentRect = resolveActiveEditorSelectionRect(view) ?? resolveProseMirrorSelectionRect(view);
+  if (!currentRect) {
+    return;
+  }
+
+  const scrollDelta = snapshot.scroller.scrollTop - snapshot.scrollTop;
+  const rectAtPreviousScroll = offsetVerticalRect(currentRect, scrollDelta);
+  if (isRectFullyVisibleInScroller(rectAtPreviousScroll, snapshot.scroller)) {
+    snapshot.scroller.scrollTop = snapshot.scrollTop;
+    return;
+  }
+
+  snapshot.scroller.scrollTop = snapshot.scrollTop;
+  scrollRectInsideVisibleBounds(rectAtPreviousScroll, snapshot.scroller);
 }
 
-function isSelectionAtDocumentEnd(selection: Selection) {
-  const $head = selection.$head;
-  if ($head.pos < $head.end($head.depth)) {
+function resolveActiveEditorSelectionRect(view: EditorView): VerticalRect | null {
+  const selection = getRootSelection(view);
+  if (!selection || selection.rangeCount === 0) {
+    return null;
+  }
+
+  const anchorNode = selection.anchorNode;
+  if (!anchorNode || !view.dom.contains(anchorNode)) {
+    return null;
+  }
+
+  const range = selection.getRangeAt(0);
+  const rangeRect = firstVerticalRect(range.getClientRects()) ?? firstVerticalRect([range.getBoundingClientRect()]);
+  return rangeRect ?? null;
+}
+
+function getRootSelection(view: EditorView) {
+  const root = view.root;
+  if ("getSelection" in root) {
+    return root.getSelection();
+  }
+  return document.getSelection();
+}
+
+function firstVerticalRect(rects: ArrayLike<DOMRect | DOMRectReadOnly>) {
+  for (let index = 0; index < rects.length; index += 1) {
+    const rect = rects[index];
+    if (rect.height > 0 || rect.width > 0) {
+      return {
+        top: rect.top,
+        bottom: rect.bottom
+      };
+    }
+  }
+  return null;
+}
+
+function offsetVerticalRect(rect: VerticalRect, delta: number): VerticalRect {
+  return {
+    top: rect.top + delta,
+    bottom: rect.bottom + delta
+  };
+}
+
+function isRectFullyVisibleInScroller(rect: VerticalRect, scroller: HTMLElement) {
+  const scrollerRect = scroller.getBoundingClientRect();
+  const tolerance = 1;
+  return rect.top >= scrollerRect.top - tolerance && rect.bottom <= scrollerRect.bottom + tolerance;
+}
+
+function isControlledSelectionScrollKey(event: KeyboardEvent) {
+  if (event.defaultPrevented) {
     return false;
   }
 
-  for (let depth = $head.depth - 1; depth >= 0; depth -= 1) {
-    if ($head.indexAfter(depth) < $head.node(depth).childCount) {
-      return false;
-    }
-  }
-
-  return true;
+  return event.key === "ArrowUp" ||
+    event.key === "ArrowDown" ||
+    event.key === "ArrowLeft" ||
+    event.key === "ArrowRight" ||
+    event.key === "Home" ||
+    event.key === "End" ||
+    event.key === "Enter" ||
+    event.key === "Backspace" ||
+    event.key === "Delete" ||
+    event.key === "Tab";
 }
 
 function serializeSelectionMarkdown(state: EditorState) {
@@ -3410,6 +3621,14 @@ class CodeBlockNodeView implements NodeView {
           codeLanguage(node.attrs.params),
           codeMirrorKeymap.of([
             {
+              key: "ArrowLeft",
+              run: (codeView) => this.exitWithHorizontalArrow(codeView, "before")
+            },
+            {
+              key: "ArrowRight",
+              run: (codeView) => this.exitWithHorizontalArrow(codeView, "after")
+            },
+            {
               key: "ArrowUp",
               run: (codeView) => this.exitWithArrow(codeView, "before")
             },
@@ -3535,6 +3754,22 @@ class CodeBlockNodeView implements NodeView {
     const line = codeView.state.doc.lineAt(selection.head);
     const isAtStart = direction === "before" && line.number === 1 && selection.head === line.from;
     const isAtEnd = direction === "after" && line.number === codeView.state.doc.lines && selection.head === line.to;
+    if (!isAtStart && !isAtEnd) {
+      return false;
+    }
+
+    this.moveCursorOutside(direction);
+    return true;
+  }
+
+  private exitWithHorizontalArrow(codeView: CodeMirrorView, direction: "before" | "after") {
+    const selection = codeView.state.selection.main;
+    if (!selection.empty) {
+      return false;
+    }
+
+    const isAtStart = direction === "before" && selection.head === 0;
+    const isAtEnd = direction === "after" && selection.head === codeView.state.doc.length;
     if (!isAtStart && !isAtEnd) {
       return false;
     }
