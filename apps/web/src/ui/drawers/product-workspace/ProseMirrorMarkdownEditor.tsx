@@ -1,5 +1,7 @@
 import React from "react";
-import { FiBold, FiCheckSquare, FiChevronDown, FiCode, FiImage, FiItalic, FiLink, FiList, FiMinus, FiPrinter, FiRotateCcw, FiRotateCw, FiShare2, FiTable } from "react-icons/fi";
+import { renderToStaticMarkup } from "react-dom/server";
+import { FiBold, FiCheckSquare, FiChevronDown, FiCode, FiImage, FiItalic, FiLink, FiList, FiMaximize2, FiMinimize2, FiMinus, FiPrinter, FiRotateCcw, FiRotateCw, FiShare2, FiTable } from "react-icons/fi";
+import type { IconType } from "react-icons";
 import { LuListOrdered, LuQuote } from "react-icons/lu";
 import { EditorState, Plugin, TextSelection, type Selection, type Transaction } from "prosemirror-state";
 import { EditorView, type NodeView, type ViewMutationRecord } from "prosemirror-view";
@@ -57,8 +59,10 @@ import {
 } from "./prosemirror-markdown";
 import { Modal, type ModalRenderContext } from "../../modals/Modal";
 import { ModalsController } from "../../modals/ModalsController";
+import { registerOverlayEscape } from "../../useOverlayEscape";
 import { printMarkdownDocument, type MarkdownPrintTocLevel } from "../../../util/product-print-pdf";
 import { formatMermaidError, isMermaidLanguage, observeMermaidTheme, renderMermaidSvg } from "../../../util/mermaid-rendering";
+import { createMermaidPanZoomController, type MermaidPanZoomController } from "./mermaid-pan-zoom";
 import "prosemirror-view/style/prosemirror.css";
 
 const YDOC_FRAGMENT_NAME = "prosemirror";
@@ -69,6 +73,13 @@ const DEFAULT_PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [2, 3];
 const PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [1, 2, 3, 4, 5, 6];
 const MERMAID_INSERT_FOCUS_WINDOW_MS = 2000;
 const CODE_BLOCK_INDENT = "  ";
+type MermaidPreviewToolIcon = "maximize" | "minimize" | "reset";
+
+const MERMAID_PREVIEW_TOOL_ICONS: Record<MermaidPreviewToolIcon, IconType> = {
+  maximize: FiMaximize2,
+  minimize: FiMinimize2,
+  reset: FiRotateCcw
+};
 
 const MERMAID_DIAGRAM_TEMPLATES = [
   {
@@ -249,6 +260,8 @@ flowchart LR
   }
 ] as const;
 
+export type MermaidDiagramTemplate = typeof MERMAID_DIAGRAM_TEMPLATES[number];
+
 let pendingInsertedMermaidSourceFocus = 0;
 let pendingInsertedMermaidSourceFocusUntil = 0;
 
@@ -302,6 +315,7 @@ export type ProseMirrorMarkdownEditorHandle = {
   getSelectionMarkdown: () => string;
   getSelectionPlainText: () => string;
   getContentElement: () => HTMLElement | null;
+  discardCollaboration: () => Promise<boolean>;
 };
 
 type MarkdownEditorMode = "normal" | "source";
@@ -325,6 +339,7 @@ type ProseMirrorMarkdownEditorProps = {
   onTaskCheckboxToggle?: (payload: { itemIndex: number; checked: boolean; text: string }) => Promise<void> | void;
   printTitle?: string;
   printDisabled?: boolean;
+  onMermaidTemplateSelect?: (template: MermaidDiagramTemplate) => void;
   toolbarExtras?: React.ReactNode | ((state: ToolbarExtrasRenderState) => React.ReactNode);
 };
 
@@ -344,6 +359,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       onTaskCheckboxToggle,
       printTitle,
       printDisabled = false,
+      onMermaidTemplateSelect,
       toolbarExtras
     } = props;
     const shellRef = React.useRef<HTMLDivElement | null>(null);
@@ -641,6 +657,15 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       }
     }, [insertMarkdownAtSelection]);
 
+    const handleMermaidTemplateSelect = React.useCallback((template: MermaidDiagramTemplate) => {
+      if (onMermaidTemplateSelect) {
+        onMermaidTemplateSelect(template);
+        return;
+      }
+
+      insertMermaidDiagramAtSelection(template.markdown);
+    }, [insertMermaidDiagramAtSelection, onMermaidTemplateSelect]);
+
     const handleToolbarFocusCapture = React.useCallback((event: React.FocusEvent<HTMLDivElement>) => {
       const toolbarItem = findToolbarItemForTarget(event.currentTarget, event.target);
       if (toolbarItem) {
@@ -754,6 +779,9 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       },
       getContentElement() {
         return viewRef.current?.dom ?? null;
+      },
+      discardCollaboration() {
+        return providerRef.current?.discardIfSoleActiveEditor() ?? Promise.resolve(false);
       }
     }), [markdownValue]);
 
@@ -838,7 +866,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
           <ToolbarButton label="Insertar bloque de codigo" disabled={editorCommandDisabled} onClick={() => insertMarkdownAtSelection("\n\n```txt\n\n```\n\n")}>
             <FiCode aria-hidden="true" />
           </ToolbarButton>
-          <ToolbarMermaidMenu disabled={editorCommandDisabled} onSelect={insertMermaidDiagramAtSelection} />
+          <ToolbarMermaidMenu disabled={editorCommandDisabled} onSelect={handleMermaidTemplateSelect} />
           <ToolbarButton label="Linea horizontal" disabled={editorCommandDisabled} onClick={() => insertMarkdownAtSelection("\n\n---\n\n")}>
             <FiMinus aria-hidden="true" />
           </ToolbarButton>
@@ -1852,7 +1880,7 @@ function ToolbarTablePicker(props: {
 
 function ToolbarMermaidMenu(props: {
   disabled?: boolean;
-  onSelect: (markdown: string) => void;
+  onSelect: (template: MermaidDiagramTemplate) => void;
 }) {
   const { disabled, onSelect } = props;
   const [open, setOpen] = React.useState(false);
@@ -1889,7 +1917,7 @@ function ToolbarMermaidMenu(props: {
   }, []);
 
   const selectTemplate = React.useCallback((template: typeof MERMAID_DIAGRAM_TEMPLATES[number]) => {
-    onSelect(template.markdown);
+    onSelect(template);
     setOpen(false);
   }, [onSelect]);
 
@@ -3148,7 +3176,11 @@ class CodeBlockNodeView implements NodeView {
   private editorHost: HTMLElement;
   private mermaidPreview: HTMLElement;
   private mermaidSvgHost: HTMLElement;
+  private mermaidPreviewToolbar: HTMLElement;
+  private mermaidResetButton: HTMLButtonElement;
+  private mermaidMaximizeButton: HTMLButtonElement;
   private mermaidError: HTMLElement;
+  private mermaidPanZoom!: MermaidPanZoomController;
   private editor: CodeMirrorView;
   private updating = false;
   private mermaidEditing = false;
@@ -3156,6 +3188,7 @@ class CodeBlockNodeView implements NodeView {
   private mermaidRenderTimeout = 0;
   private mermaidRenderVersion = 0;
   private cleanupMermaidThemeObserver: (() => void) | null = null;
+  private cleanupMermaidPreviewEscape: (() => void) | null = null;
 
   constructor(
     private node: ProseMirrorNode,
@@ -3206,11 +3239,29 @@ class CodeBlockNodeView implements NodeView {
     this.mermaidPreview.className = "prosemirror-mermaid-preview";
     this.mermaidSvgHost = document.createElement("div");
     this.mermaidSvgHost.className = "prosemirror-mermaid-preview-svg";
+    this.mermaidPanZoom = createMermaidPanZoomController(this.mermaidPreview, this.mermaidSvgHost);
     this.mermaidPreview.addEventListener("dblclick", this.handleMermaidPreviewDoubleClick);
+    this.mermaidPreviewToolbar = document.createElement("div");
+    this.mermaidPreviewToolbar.className = "prosemirror-mermaid-preview-toolbar";
+    this.mermaidPreviewToolbar.addEventListener("pointerdown", stopMermaidToolbarEvent);
+    this.mermaidPreviewToolbar.addEventListener("wheel", stopMermaidToolbarEvent);
+    this.mermaidResetButton = createMermaidPreviewToolButton("Restablecer zoom y posicion", "reset");
+    this.mermaidResetButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.mermaidPanZoom.reset();
+    });
+    this.mermaidMaximizeButton = createMermaidPreviewToolButton("Maximizar visualizador de diagrama", "maximize");
+    this.mermaidMaximizeButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.setMermaidPreviewMaximized(!this.mermaidPreview.classList.contains("is-maximized"));
+    });
+    this.mermaidPreviewToolbar.append(this.mermaidResetButton, this.mermaidMaximizeButton);
     this.mermaidError = document.createElement("div");
     this.mermaidError.className = "prosemirror-mermaid-preview-error";
     this.mermaidError.setAttribute("role", "alert");
-    this.mermaidPreview.append(this.mermaidSvgHost, this.mermaidError);
+    this.mermaidPreview.append(this.mermaidSvgHost, this.mermaidPreviewToolbar, this.mermaidError);
     this.dom.append(this.toolbar, this.editorHost, this.mermaidPreview);
     this.editor = new CodeMirrorView({
       parent: this.editorHost,
@@ -3312,6 +3363,9 @@ class CodeBlockNodeView implements NodeView {
     window.clearTimeout(this.mermaidBlurTimeout);
     window.clearTimeout(this.mermaidRenderTimeout);
     this.cleanupMermaidThemeObserver?.();
+    this.cleanupMermaidPreviewEscape?.();
+    this.cleanupMermaidPreviewEscape = null;
+    this.mermaidPanZoom.destroy();
     this.mermaidPreview.removeEventListener("dblclick", this.handleMermaidPreviewDoubleClick);
     this.editor.dom.removeEventListener("focusin", this.handleCodeMirrorFocusIn);
     this.editor.dom.removeEventListener("focusout", this.handleCodeMirrorFocusOut);
@@ -3473,6 +3527,8 @@ class CodeBlockNodeView implements NodeView {
       this.updateMermaidSourceVisibility();
       this.mermaidPreview.hidden = true;
       this.mermaidPreview.classList.remove("is-loading", "is-ready", "is-error");
+      this.setMermaidPreviewMaximized(false);
+      this.mermaidPanZoom.reset();
       this.mermaidSvgHost.replaceChildren();
       this.mermaidError.replaceChildren();
       return;
@@ -3491,6 +3547,7 @@ class CodeBlockNodeView implements NodeView {
     const renderVersion = this.mermaidRenderVersion + 1;
     this.mermaidRenderVersion = renderVersion;
     this.mermaidPreview.classList.remove("is-ready", "is-error");
+    this.mermaidPanZoom.reset();
     this.mermaidSvgHost.replaceChildren();
     this.mermaidError.replaceChildren();
 
@@ -3509,6 +3566,7 @@ class CodeBlockNodeView implements NodeView {
 
       this.mermaidSvgHost.innerHTML = result.svg;
       result.bindFunctions?.(this.mermaidSvgHost);
+      this.mermaidPanZoom.reset();
       this.mermaidPreview.classList.remove("is-loading", "is-error");
       this.mermaidPreview.classList.add("is-ready");
     } catch (error: unknown) {
@@ -3525,6 +3583,55 @@ class CodeBlockNodeView implements NodeView {
       this.mermaidPreview.classList.add("is-error");
     }
   }
+
+  private setMermaidPreviewMaximized(maximized: boolean) {
+    this.mermaidPreview.classList.toggle("is-maximized", maximized);
+    if (maximized && !this.cleanupMermaidPreviewEscape) {
+      this.cleanupMermaidPreviewEscape = registerOverlayEscape(() => {
+        this.setMermaidPreviewMaximized(false);
+      });
+    } else if (!maximized && this.cleanupMermaidPreviewEscape) {
+      this.cleanupMermaidPreviewEscape();
+      this.cleanupMermaidPreviewEscape = null;
+    }
+    this.mermaidMaximizeButton.classList.toggle("is-maximize", !maximized);
+    this.mermaidMaximizeButton.classList.toggle("is-minimize", maximized);
+    setMermaidPreviewToolButtonIcon(this.mermaidMaximizeButton, maximized ? "minimize" : "maximize");
+    this.mermaidMaximizeButton.setAttribute(
+      "aria-label",
+      maximized ? "Restaurar visualizador de diagrama" : "Maximizar visualizador de diagrama"
+    );
+    this.mermaidMaximizeButton.title = maximized ? "Restaurar visualizador de diagrama" : "Maximizar visualizador de diagrama";
+    window.requestAnimationFrame(() => this.mermaidPanZoom.reset());
+  }
+}
+
+function createMermaidPreviewToolButton(label: string, icon: "maximize" | "reset") {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `prosemirror-mermaid-preview-tool-button is-${icon}`;
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  setMermaidPreviewToolButtonIcon(button, icon);
+  button.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  return button;
+}
+
+function setMermaidPreviewToolButtonIcon(button: HTMLButtonElement, icon: MermaidPreviewToolIcon) {
+  const template = document.createElement("template");
+  const Icon = MERMAID_PREVIEW_TOOL_ICONS[icon];
+  template.innerHTML = renderToStaticMarkup(<Icon aria-hidden="true" focusable="false" />);
+  button.replaceChildren(template.content);
+}
+
+function stopMermaidToolbarEvent(event: Event) {
+  if (event.cancelable) {
+    event.preventDefault();
+  }
+  event.stopPropagation();
 }
 
 function indentCodeBlockSelection(codeView: CodeMirrorView) {

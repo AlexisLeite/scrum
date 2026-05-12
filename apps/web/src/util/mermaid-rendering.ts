@@ -29,7 +29,24 @@ export function isMermaidLanguage(rawValue: string | null | undefined) {
 }
 
 export function buildMermaidSourceKey(source: string) {
-  return source.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  return decodeMermaidHtmlEntities(source).replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+}
+
+export function decodeMermaidHtmlEntities(source: string) {
+  let decoded = source;
+  for (let pass = 0; pass < 2; pass += 1) {
+    const nextDecoded = decoded
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, "\"")
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/&amp;/gi, "&");
+    if (nextDecoded === decoded) {
+      break;
+    }
+    decoded = nextDecoded;
+  }
+  return decoded;
 }
 
 export function readMermaidRenderTheme(): MermaidRenderTheme {

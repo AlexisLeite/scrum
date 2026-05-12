@@ -6,18 +6,21 @@ import { useSearchParams } from "react-router-dom";
 import { apiClient } from "../../../api/client";
 import { buildInternalReferenceMarkdown, ReferenceSearchResult } from "../../../lib/internal-references";
 import { useRootStore } from "../../../stores/root-store";
+import { decodeMermaidHtmlEntities } from "../../../util/mermaid-rendering";
 import { useBodyScrollLock } from "../../useBodyScrollLock";
 import { useOverlayEscape } from "../../useOverlayEscape";
 import { MAXIMIZED_EDITOR_PARAM } from "../drawer-route-state";
 import { ImageLightbox } from "./ImageLightbox";
 import { MarkdownGenerationDialog } from "./MarkdownGenerationDialog";
-import { ProseMirrorMarkdownEditor, type ProseMirrorMarkdownEditorHandle } from "./ProseMirrorMarkdownEditor";
+import { MermaidGenerationDialog } from "./MermaidGenerationDialog";
+import { ProseMirrorMarkdownEditor, type MermaidDiagramTemplate, type ProseMirrorMarkdownEditorHandle } from "./ProseMirrorMarkdownEditor";
 import type { RichDescriptionCollaboration } from "./yjs-collaboration-provider";
 import {
   captureEditorSelection,
   createGenerationRegion,
   type EditorSelectionSnapshot,
   hasGenerationRegionPlaceholder,
+  insertAfterSelectionInMarkdown,
   replaceSelectionInMarkdown,
   replaceGenerationRegion,
   resolveSelectionMarkdownContent,
@@ -45,6 +48,7 @@ type RichDescriptionFieldProps = {
 export type RichDescriptionFieldHandle = {
   focus: () => void;
   refreshLayout: () => void;
+  discardCollaboration: () => Promise<boolean>;
 };
 
 type ToolbarButtonProps = {
@@ -74,8 +78,104 @@ type ActiveAnchor = {
   };
 };
 
+type MarkdownGenerationOptions = {
+  formatGeneratedMarkdown?: (markdown: string) => string;
+  onSuccess?: () => void;
+  placement?: "replace-selection" | "after-selection";
+  streamIntoEditor?: boolean;
+};
+
 const IMAGE_ORIGIN_FALLBACK = "contaboserver.net:5444";
 const IMAGE_ORIGIN_PUBLIC = "contaboserver.net:3000";
+
+type MermaidDiagramTypeId = MermaidDiagramTemplate["id"];
+
+type MermaidDiagramGenerationType = {
+  id: MermaidDiagramTypeId;
+  label: string;
+  promptType: string;
+  instructions: string;
+};
+
+const MERMAID_COMMON_GENERATION_INSTRUCTIONS = [
+  "Entrega solamente el contenido interno del bloque mermaid: no uses triple backticks, no agregues markdown adicional y no expliques el resultado.",
+  "La primera linea debe declarar el tipo Mermaid exacto que corresponde al diagrama.",
+  "Usa sintaxis compatible con Mermaid 11, IDs simples con letras, numeros o guion bajo, y etiquetas entre comillas cuando tengan espacios, signos o acentos.",
+  "Evita HTML, emojis, URLs inventadas, estilos decorativos innecesarios y texto fuera del diagrama.",
+  "Prefiere nombres breves, legibles y consistentes; el diagrama debe ser completo y renderizable sin depender de contexto externo."
+].join("\n");
+
+const MERMAID_DIAGRAM_GENERATION_TYPES: MermaidDiagramGenerationType[] = [
+  {
+    id: "sequence",
+    label: "Diagrama de secuencia",
+    promptType: "diagrama de secuencia Mermaid con sequenceDiagram",
+    instructions: [
+      MERMAID_COMMON_GENERATION_INSTRUCTIONS,
+      "La primera linea debe ser sequenceDiagram.",
+      "Declara actores con actor y sistemas/servicios con participant; usa alias cortos cuando el nombre visible sea largo.",
+      "Modela mensajes en orden temporal con flechas validas: ->> para llamada, -->> para respuesta, -) para evento asincronico y --x solo para error o rechazo.",
+      "Escribe cada mensaje como Origen->>Destino: accion o dato transferido.",
+      "Usa autonumber si el flujo tiene mas de cuatro mensajes.",
+      "Usa activate/deactivate de forma balanceada cuando muestres ejecucion de un participante.",
+      "Representa decisiones con alt/else/end, opcionales con opt/end, repeticiones con loop/end y concurrencia con par/and/end.",
+      "Agrega notas con Note over A,B: texto solo cuando aclaren una regla relevante.",
+      "No inventes participantes que no surjan del pedido; si faltan detalles, usa nombres genericos claros."
+    ].join("\n")
+  },
+  {
+    id: "class",
+    label: "Diagrama de clases",
+    promptType: "diagrama de clases Mermaid con classDiagram",
+    instructions: [
+      MERMAID_COMMON_GENERATION_INSTRUCTIONS,
+      "La primera linea debe ser classDiagram y puedes agregar direction LR si mejora la lectura.",
+      "Declara cada clase, interfaz, enumeracion o entidad con un identificador sin espacios.",
+      "Define atributos y operaciones dentro de bloques class Nombre { ... } cuando aporten informacion util.",
+      "Usa visibilidad valida: + publico, - privado, # protegido, ~ paquete.",
+      "Escribe atributos como +tipo nombre y metodos como +metodo(parametro: Tipo) Retorno.",
+      "Marca interfaces, entidades o enumeraciones con estereotipos como <<interface>>, <<entity>> o <<enumeration>>.",
+      "Modela relaciones con operadores Mermaid validos: <|-- herencia, <|.. implementacion, *-- composicion, o-- agregacion, --> asociacion, ..> dependencia.",
+      "Incluye multiplicidades con comillas cuando sean importantes, por ejemplo ClaseA \"1\" *-- \"0..*\" ClaseB : contiene.",
+      "No mezcles detalles de base de datos en este tipo salvo que el pedido lo requiera explicitamente."
+    ].join("\n")
+  },
+  {
+    id: "database",
+    label: "Diagrama de bases de datos",
+    promptType: "diagrama entidad-relacion Mermaid con erDiagram",
+    instructions: [
+      MERMAID_COMMON_GENERATION_INSTRUCTIONS,
+      "La primera linea debe ser erDiagram.",
+      "Usa entidades en MAYUSCULAS o snake_case sin espacios.",
+      "Declara relaciones antes o despues de las entidades con cardinalidades Mermaid validas: ||--||, ||--o|, ||--|{, ||--o{, }o--o{.",
+      "Etiqueta cada relacion con un verbo corto en singular, por ejemplo PRODUCTO ||--o{ HISTORIA : contiene.",
+      "Define campos dentro de cada entidad con el formato tipo nombre marcador, por ejemplo string id PK o string producto_id FK.",
+      "Usa tipos simples y consistentes: string, int, float, boolean, date, datetime, text, uuid.",
+      "Marca claves con PK, FK o UK cuando corresponda; no uses comas ni punto y coma dentro de los bloques de campos.",
+      "Incluye solo tablas necesarias para explicar el modelo solicitado y evita atributos irrelevantes.",
+      "Si el pedido describe objetos de dominio y no tablas, transformalos en entidades relacionales claras."
+    ].join("\n")
+  },
+  {
+    id: "communication",
+    label: "Diagrama de comunicacion",
+    promptType: "diagrama de comunicacion representado como flowchart LR",
+    instructions: [
+      MERMAID_COMMON_GENERATION_INSTRUCTIONS,
+      "Mermaid no tiene un tipo nativo de diagrama de comunicacion; representalo con flowchart LR y mensajes numerados.",
+      "La primera linea debe ser flowchart LR.",
+      "Crea nodos para actor, objetos, servicios, bases de datos o colas con IDs simples y etiquetas descriptivas entre comillas.",
+      "Agrupa nodos con subgraph solo si ayuda a diferenciar capas o limites del sistema.",
+      "Representa cada mensaje como una arista con etiqueta numerada, por ejemplo UI -->|\"1. enviarSolicitud(datos)\"| API.",
+      "Usa -.-> para respuestas o retornos y --> para llamadas, comandos o eventos principales.",
+      "Mantén la numeracion estrictamente ascendente y sin saltos.",
+      "Si una interaccion es interna del mismo objeto, usa una arista del nodo hacia si mismo con etiqueta numerada.",
+      "Puedes agregar classDef y class para distinguir actor, objeto, almacenamiento o cola, pero no abuses del estilo.",
+      "No uses sequenceDiagram para este tipo aunque el flujo sea temporal."
+    ].join("\n")
+  }
+];
 
 function normalizeEditorImageUrl(value: string) {
   return value.replaceAll(IMAGE_ORIGIN_FALLBACK, IMAGE_ORIGIN_PUBLIC);
@@ -121,6 +221,10 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const [generationIncludesContext, setGenerationIncludesContext] = React.useState(true);
   const [generationSelectionSummary, setGenerationSelectionSummary] = React.useState("");
   const [isGeneratingMarkdown, setIsGeneratingMarkdown] = React.useState(false);
+  const [mermaidDialogOpen, setMermaidDialogOpen] = React.useState(false);
+  const [mermaidDiagramTypeId, setMermaidDiagramTypeId] = React.useState<MermaidDiagramTypeId>("sequence");
+  const [mermaidPrompt, setMermaidPrompt] = React.useState("");
+  const [mermaidIncludesSelection, setMermaidIncludesSelection] = React.useState(true);
   const [lightboxImage, setLightboxImage] = React.useState<{ src: string; alt?: string } | null>(null);
   const [localIsMaximized, setLocalIsMaximized] = React.useState(false);
   const generationSelectionRef = React.useRef<EditorSelectionSnapshot | null>(null);
@@ -131,7 +235,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const isMaximized = isUrlDriven ? maximizedEditorKey === uriStateKey : localIsMaximized;
   const fieldStyle = {
     "--rich-description-min-height": `${minHeight}px`,
-    "--rich-description-max-height": isMaximized ? "calc(100vh - 1px)" : "75vh"
+    "--rich-description-editor-height": "70vh"
   } as React.CSSProperties;
 
   const setMaximized = React.useCallback((nextValue: boolean | ((current: boolean) => boolean)) => {
@@ -179,28 +283,20 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   }, []);
 
   const syncEditorHeight = React.useCallback(() => {
-    const content = fieldRef.current?.querySelector(".rich-description-content") as HTMLElement | null;
-    if (!content) {
+    const field = fieldRef.current;
+    if (!field) {
       return;
     }
 
-    content.style.removeProperty("height");
-    const contentRect = content.getBoundingClientRect();
-    const viewportAllowance = Math.max(minHeight, Math.round(window.innerHeight - contentRect.top - (isMaximized ? 28 : 24)));
-    const maxHeight = isMaximized
-      ? viewportAllowance
-      : Math.min(Math.round(window.innerHeight * 0.75), viewportAllowance);
-    const contentHeight = measureRichDescriptionContentHeight(content);
-    const nextHeight = isMaximized
-      ? maxHeight
-      : Math.min(Math.max(contentHeight, minHeight), maxHeight);
-    content.style.minHeight = `${nextHeight}px`;
-    const editorHost = content.closest<HTMLElement>(".prosemirror-editor-host");
-    if (editorHost) {
-      editorHost.style.height = `${nextHeight}px`;
-    }
-    keepRichDescriptionEditorVisibleInDrawer(fieldRef.current, isMaximized);
-  }, [isMaximized, minHeight]);
+    field.querySelectorAll<HTMLElement>(".rich-description-content").forEach((content) => {
+      content.style.removeProperty("height");
+      content.style.removeProperty("min-height");
+    });
+    field.querySelectorAll<HTMLElement>(".prosemirror-editor-host, .prosemirror-source-host").forEach((host) => {
+      host.style.removeProperty("height");
+    });
+    keepRichDescriptionEditorVisibleInDrawer(field, isMaximized);
+  }, [isMaximized]);
 
   const scheduleHeightSync = React.useCallback(() => {
     if (resizeFrameRef.current !== null) {
@@ -365,7 +461,8 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     ref,
     () => ({
       focus: focusEditor,
-      refreshLayout: scheduleHeightSync
+      refreshLayout: scheduleHeightSync,
+      discardCollaboration: () => editorRef.current?.discardCollaboration() ?? Promise.resolve(false)
     }),
     [focusEditor, scheduleHeightSync]
   );
@@ -390,6 +487,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     const snapshot = captureEditorSelection(resolveEditorContentElement(), editorRef.current);
     generationSelectionRef.current = snapshot;
     setGenerationSelectionSummary(describeSelectionSnapshot(snapshot));
+    return snapshot;
   }, [resolveEditorContentElement]);
 
   const updateGenerationRegion = React.useCallback((replacement: string, region: ReturnType<typeof createGenerationRegion>, finalize: boolean) => {
@@ -420,11 +518,12 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     updateEditorMarkdown(nextMarkdown);
   }, [updateEditorMarkdown]);
 
-  const startMarkdownGeneration = React.useCallback(async (prompt: string, includeEditorContext: boolean) => {
+  const startMarkdownGeneration = React.useCallback(async (prompt: string, includeEditorContext: boolean, options: MarkdownGenerationOptions = {}) => {
     if (!editorRef.current) {
       return;
     }
 
+    const streamIntoEditor = options.streamIntoEditor ?? true;
     const selectionSnapshot = generationSelectionRef.current ?? captureEditorSelection(resolveEditorContentElement(), editorRef.current);
     const originalSelectionMarkdown = resolveSelectionMarkdownContent(selectionSnapshot);
     const generationRegion = createGenerationRegion();
@@ -433,7 +532,10 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       setGenerationError("");
       setIsGeneratingMarkdown(true);
 
-      const reservedSelectionMarkdown = replaceSelectionInMarkdown(selectionSnapshot, generationRegion.block);
+      const placement = options.placement ?? "replace-selection";
+      const reservedSelectionMarkdown = placement === "after-selection"
+        ? insertAfterSelectionInMarkdown(selectionSnapshot, generationRegion.block)
+        : replaceSelectionInMarkdown(selectionSnapshot, generationRegion.block);
       if (!reservedSelectionMarkdown) {
         throw new Error("No se pudo ubicar la seleccion actual dentro del markdown del editor.");
       }
@@ -470,7 +572,9 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         const message = parseMarkdownGenerationMessage(line);
         if (message.type === "chunk") {
           generatedMarkdown += message.chunk;
-          updateGenerationRegion(generatedMarkdown, generationRegion, false);
+          if (streamIntoEditor) {
+            updateGenerationRegion(generatedMarkdown, generationRegion, false);
+          }
           return;
         }
 
@@ -508,14 +612,24 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         throw new Error("La IA devolvio una respuesta vacia.");
       }
 
-      updateGenerationRegion(generatedMarkdown, generationRegion, true);
-      setGenerationPrompt("");
+      const finalMarkdown = options.formatGeneratedMarkdown ? options.formatGeneratedMarkdown(generatedMarkdown) : generatedMarkdown;
+      if (!finalMarkdown.trim()) {
+        throw new Error("La IA devolvio una respuesta vacia.");
+      }
+
+      updateGenerationRegion(finalMarkdown, generationRegion, true);
+      if (options.onSuccess) {
+        options.onSuccess();
+      } else {
+        setGenerationPrompt("");
+      }
     } catch (error) {
-      updateGenerationRegion(originalSelectionMarkdown, generationRegion, true);
+      updateGenerationRegion(options.placement === "after-selection" ? "" : originalSelectionMarkdown, generationRegion, true);
       setGenerationError(error instanceof Error ? error.message : "No se pudo generar contenido con IA.");
     } finally {
       setIsGeneratingMarkdown(false);
       setGenerationDialogOpen(false);
+      setMermaidDialogOpen(false);
       setGenerationSelectionSummary("");
       generationSelectionRef.current = null;
       generationBaseMarkdownRef.current = null;
@@ -534,6 +648,48 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       void startMarkdownGeneration(prompt, generationIncludesContext);
     }, 0);
   }, [generationIncludesContext, generationPrompt, startMarkdownGeneration]);
+
+  const openMermaidGenerationDialog = React.useCallback((template: MermaidDiagramTemplate) => {
+    if (editorInteractionDisabled) {
+      return;
+    }
+
+    const selectionSnapshot = captureGenerationSelection();
+    setGenerationSelectionSummary(describeMermaidSelectionSnapshot(selectionSnapshot));
+    setMermaidDiagramTypeId(resolveMermaidGenerationType(template.id).id);
+    setMermaidIncludesSelection(hasSelectionContent(selectionSnapshot));
+    setGenerationError("");
+    setMermaidDialogOpen(true);
+  }, [captureGenerationSelection, editorInteractionDisabled]);
+
+  const confirmMermaidGeneration = React.useCallback(() => {
+    const selectionSnapshot = generationSelectionRef.current ?? captureEditorSelection(resolveEditorContentElement(), editorRef.current);
+    generationSelectionRef.current = selectionSnapshot;
+
+    const includeSelection = mermaidIncludesSelection && hasSelectionContent(selectionSnapshot);
+    const additionalInstructions = mermaidPrompt.trim();
+    if (!additionalInstructions && !includeSelection) {
+      return;
+    }
+
+    const diagramType = resolveMermaidGenerationType(mermaidDiagramTypeId);
+    const prompt = buildMermaidGenerationPrompt({
+      additionalInstructions,
+      diagramType,
+      includeSelection,
+      selectionMarkdown: resolveSelectionMarkdownContent(selectionSnapshot) || selectionSnapshot.selectionPlainText
+    });
+
+    setMermaidDialogOpen(false);
+    window.setTimeout(() => {
+      void startMarkdownGeneration(prompt, false, {
+        formatGeneratedMarkdown: buildMermaidMarkdownBlock,
+        onSuccess: () => setMermaidPrompt(""),
+        placement: "after-selection",
+        streamIntoEditor: false
+      });
+    }, 0);
+  }, [mermaidDiagramTypeId, mermaidIncludesSelection, mermaidPrompt, resolveEditorContentElement, startMarkdownGeneration]);
 
   const replaceActiveAnchor = React.useCallback((reference: ReferenceSearchResult) => {
     if (!activeAnchor || !editorRef.current) {
@@ -927,6 +1083,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         user={store.session.user}
         allowReadOnlyTaskCheckboxToggle={allowReadOnlyTaskCheckboxToggle}
         onTaskCheckboxToggle={onTaskCheckboxToggle}
+        onMermaidTemplateSelect={openMermaidGenerationDialog}
         printTitle={printTitle ?? label}
         printDisabled={printDisabled || isGeneratingMarkdown}
         toolbarExtras={({ sourceModeActive }) => {
@@ -1089,42 +1246,33 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
           generationSelectionRef.current = null;
         }}
       />
+      <MermaidGenerationDialog
+        open={mermaidDialogOpen}
+        typeId={mermaidDiagramTypeId}
+        typeOptions={MERMAID_DIAGRAM_GENERATION_TYPES}
+        prompt={mermaidPrompt}
+        includeSelection={mermaidIncludesSelection}
+        selectionAvailable={generationSelectionRef.current ? hasSelectionContent(generationSelectionRef.current) : false}
+        selectionSummary={generationSelectionSummary}
+        submitting={isGeneratingMarkdown}
+        onTypeChange={(nextTypeId) => setMermaidDiagramTypeId(resolveMermaidGenerationType(nextTypeId).id)}
+        onPromptChange={setMermaidPrompt}
+        onIncludeSelectionChange={setMermaidIncludesSelection}
+        onConfirm={confirmMermaidGeneration}
+        onCancel={() => {
+          if (isGeneratingMarkdown) {
+            return;
+          }
+          setMermaidDialogOpen(false);
+          setGenerationSelectionSummary("");
+          generationSelectionRef.current = null;
+        }}
+      />
     </div>
   );
 
   return editorField;
 });
-
-function measureRichDescriptionContentHeight(content: HTMLElement) {
-  const currentHeight = content.getBoundingClientRect().height;
-  const liveHeight = content.scrollHeight;
-  if (liveHeight > Math.ceil(currentHeight)) {
-    return liveHeight;
-  }
-  return measureRichDescriptionContentHeightWithClone(content);
-}
-
-function measureRichDescriptionContentHeightWithClone(content: HTMLElement) {
-  const contentRect = content.getBoundingClientRect();
-  const clone = content.cloneNode(true) as HTMLElement;
-  clone.setAttribute("aria-hidden", "true");
-  clone.contentEditable = "false";
-  clone.style.position = "absolute";
-  clone.style.visibility = "hidden";
-  clone.style.pointerEvents = "none";
-  clone.style.left = "-10000px";
-  clone.style.top = "0";
-  clone.style.width = `${contentRect.width}px`;
-  clone.style.height = "auto";
-  clone.style.minHeight = "0";
-  clone.style.maxHeight = "none";
-  clone.style.overflow = "hidden";
-
-  document.body.appendChild(clone);
-  const measuredHeight = clone.scrollHeight;
-  clone.remove();
-  return measuredHeight || content.scrollHeight;
-}
 
 function keepRichDescriptionEditorVisibleInDrawer(field: HTMLElement | null, isMaximized: boolean) {
   if (!field || isMaximized) {
@@ -1438,6 +1586,23 @@ function describeSelectionSnapshot(snapshot: EditorSelectionSnapshot) {
   return `Se reemplazara la seleccion actual: "${truncateInlinePreview(selectedText)}".`;
 }
 
+function describeMermaidSelectionSnapshot(snapshot: EditorSelectionSnapshot) {
+  if (snapshot.collapsed) {
+    if (snapshot.startOffset == null) {
+      return "Sin seleccion activa. El diagrama se insertara en la posicion actual del cursor.";
+    }
+
+    return `Sin seleccion activa. El diagrama se insertara cerca de la posicion ${snapshot.startOffset}.`;
+  }
+
+  const selectedText = snapshot.selectionPlainText.trim() || snapshot.selectionMarkdown.trim();
+  if (!selectedText) {
+    return "La seleccion se mantendra y el diagrama se insertara al final.";
+  }
+
+  return `La seleccion se mantendra; el diagrama se insertara al final de: "${truncateInlinePreview(selectedText)}".`;
+}
+
 function truncateInlinePreview(value: string, maxLength = 72) {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) {
@@ -1445,6 +1610,58 @@ function truncateInlinePreview(value: string, maxLength = 72) {
   }
 
   return `${normalized.slice(0, maxLength - 1).trimEnd()}...`;
+}
+
+function resolveMermaidGenerationType(typeId: string | null | undefined): MermaidDiagramGenerationType {
+  return MERMAID_DIAGRAM_GENERATION_TYPES.find((diagramType) => diagramType.id === typeId)
+    ?? MERMAID_DIAGRAM_GENERATION_TYPES[0];
+}
+
+function hasSelectionContent(snapshot: EditorSelectionSnapshot) {
+  return Boolean((resolveSelectionMarkdownContent(snapshot) || snapshot.selectionPlainText).trim());
+}
+
+function buildMermaidGenerationPrompt(args: {
+  additionalInstructions: string;
+  diagramType: MermaidDiagramGenerationType;
+  includeSelection: boolean;
+  selectionMarkdown: string;
+}) {
+  const promptSections = [
+    `Debes responder con un diagrama mermaid en formato valido de tipo ${args.diagramType.promptType}, segun las siguientes instrucciones ${args.diagramType.instructions}.`
+  ];
+
+  const selectionMarkdown = args.selectionMarkdown.trim();
+  if (args.includeSelection && selectionMarkdown) {
+    promptSections.push([
+      "Considera el siguiente bloque descriptivo:",
+      selectionMarkdown
+    ].join("\n\n"));
+  }
+
+  const additionalInstructions = args.additionalInstructions.trim();
+  if (additionalInstructions) {
+    promptSections.push([
+      "Ademas, considera las siguientes aclaraciones:",
+      additionalInstructions
+    ].join("\n\n"));
+  }
+
+  return promptSections.join("\n\n");
+}
+
+function buildMermaidMarkdownBlock(generatedMarkdown: string) {
+  const mermaidSource = extractMermaidSource(generatedMarkdown);
+  return `\n\n\`\`\`mermaid\n${mermaidSource}\n\`\`\`\n\n`;
+}
+
+function extractMermaidSource(value: string) {
+  const trimmed = value.trim();
+  const fencedMermaid = /```(?:mermaid|mmd)?\s*([\s\S]*?)```/i.exec(trimmed);
+  if (fencedMermaid?.[1]?.trim()) {
+    return decodeMermaidHtmlEntities(fencedMermaid[1].trim());
+  }
+  return decodeMermaidHtmlEntities(trimmed);
 }
 
 type MarkdownGenerationStreamMessage =

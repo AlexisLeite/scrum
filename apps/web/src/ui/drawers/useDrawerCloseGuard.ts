@@ -10,6 +10,7 @@ type DrawerCloseGuardOptions = {
   message?: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  onConfirm?: () => Promise<void> | void;
 };
 
 export function useDrawerCloseGuard(options: DrawerCloseGuardOptions) {
@@ -20,7 +21,8 @@ export function useDrawerCloseGuard(options: DrawerCloseGuardOptions) {
     title = "Descartar cambios",
     message = "Hay cambios sin guardar en este drawer. Si lo cierras ahora, se perderan.",
     confirmLabel = "Descartar cambios",
-    cancelLabel = "Seguir editando"
+    cancelLabel = "Seguir editando",
+    onConfirm
   } = options;
 
   const guard = React.useCallback(async () => {
@@ -28,14 +30,24 @@ export function useDrawerCloseGuard(options: DrawerCloseGuardOptions) {
       return true;
     }
 
-    return ModalsController.confirm({
+    const confirmed = await ModalsController.confirm({
       title,
       message,
       confirmLabel,
       cancelLabel,
       tone: "danger"
     });
-  }, [cancelLabel, confirmLabel, message, title, when]);
+    if (!confirmed) {
+      return false;
+    }
+
+    try {
+      await onConfirm?.();
+    } catch (error) {
+      console.error("Drawer discard cleanup failed", error);
+    }
+    return true;
+  }, [cancelLabel, confirmLabel, message, onConfirm, title, when]);
 
   React.useEffect(() => {
     if (!controller || !drawerId) {

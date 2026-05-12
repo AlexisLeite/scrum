@@ -8,6 +8,8 @@ import {
 
 const MESSAGE_UPDATE = 0;
 const MESSAGE_AWARENESS = 1;
+const MESSAGE_DISCARD = 2;
+const MESSAGE_DISCARD_RESULT = 3;
 
 type ProviderStatus = "connecting" | "connected" | "disconnected";
 type StatusListener = (status: ProviderStatus) => void;
@@ -30,8 +32,11 @@ export class ScrumYjsProvider {
   private socket: WebSocket | null = null;
   private readonly statusListeners = new Set<StatusListener>();
   private readonly syncedListeners = new Set<SyncedListener>();
+  private pendingDiscardResolver: ((discarded: boolean) => void) | null = null;
   private synced = false;
   private destroyed = false;
+  private discardConfirmed = false;
+  private discardInProgress = false;
 
   constructor(
     private readonly documentName: string,
@@ -75,6 +80,8 @@ export class ScrumYjsProvider {
 
   destroy() {
     this.destroyed = true;
+    this.discardConfirmed = true;
+    this.resolvePendingDiscard(false);
     removeAwarenessStates(this.awareness, [this.doc.clientID], this);
     this.doc.off("update", this.handleDocUpdate);
     this.awareness.off("update", this.handleAwarenessUpdate);
@@ -87,6 +94,26 @@ export class ScrumYjsProvider {
     }
     this.statusListeners.clear();
     this.syncedListeners.clear();
+  }
+
+  discardIfSoleActiveEditor() {
+    const socket = this.socket;
+    if (this.destroyed || !socket || socket.readyState !== WebSocket.OPEN || this.pendingDiscardResolver) {
+      return Promise.resolve(false);
+    }
+
+    this.discardInProgress = true;
+    this.discardConfirmed = false;
+    return new Promise<boolean>((resolve) => {
+      const timeoutId = window.setTimeout(() => {
+        this.resolvePendingDiscard(false);
+      }, 800);
+      this.pendingDiscardResolver = (discarded) => {
+        window.clearTimeout(timeoutId);
+        resolve(discarded);
+      };
+      this.send(MESSAGE_DISCARD, new Uint8Array());
+    });
   }
 
   private connect() {
@@ -126,6 +153,10 @@ export class ScrumYjsProvider {
       }
       if (message.type === MESSAGE_AWARENESS) {
         applyAwarenessUpdate(this.awareness, message.payload, this);
+        return;
+      }
+      if (message.type === MESSAGE_DISCARD_RESULT) {
+        this.resolvePendingDiscard(message.payload[0] === 1);
       }
     });
 
@@ -135,7 +166,8 @@ export class ScrumYjsProvider {
       }
       this.emitStatus("disconnected");
       this.socket = null;
-      if (!this.destroyed && event.code !== 1008) {
+      this.resolvePendingDiscard(false);
+      if (!this.destroyed && !this.discardConfirmed && !this.discardInProgress && event.code !== 1008) {
         window.setTimeout(() => this.connect(), 1200);
       }
     });
@@ -167,6 +199,19 @@ export class ScrumYjsProvider {
 
   private emitStatus(status: ProviderStatus) {
     this.statusListeners.forEach((listener) => listener(status));
+  }
+
+  private resolvePendingDiscard(discarded: boolean) {
+    const resolver = this.pendingDiscardResolver;
+    this.discardInProgress = false;
+    if (discarded) {
+      this.discardConfirmed = true;
+    }
+    if (!resolver) {
+      return;
+    }
+    this.pendingDiscardResolver = null;
+    resolver(discarded);
   }
 }
 

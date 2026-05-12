@@ -63,6 +63,34 @@ const videoNodeSpec: NodeSpec = {
   }
 };
 
+const aiGenerationPlaceholderNodeSpec: NodeSpec = {
+  inline: true,
+  group: "inline",
+  atom: true,
+  selectable: false,
+  attrs: {
+    id: { default: "" }
+  },
+  parseDOM: [{
+    tag: "span[data-ai-generation-placeholder]",
+    getAttrs(dom: HTMLElement) {
+      return {
+        id: dom.getAttribute("data-ai-generation-placeholder") ?? ""
+      };
+    }
+  }],
+  toDOM(node: ProseMirrorNode) {
+    return [
+      "span",
+      {
+        "data-ai-generation-placeholder": node.attrs.id,
+        "aria-label": "Generando contenido con IA",
+        contenteditable: "false"
+      }
+    ];
+  }
+};
+
 const imageNodeSpec: NodeSpec = {
   inline: true,
   group: "inline",
@@ -98,6 +126,7 @@ export const markdownSchema: Schema = new Schema({
     .update("list_item", taskListItemSpec)
     .update("image", imageNodeSpec)
     .append({
+      ai_generation_placeholder: aiGenerationPlaceholderNodeSpec,
       video: videoNodeSpec
     })
     .append(tableNodes({
@@ -158,6 +187,14 @@ export const markdownParser = new MarkdownParser(markdownSchema, markdownIt, {
     getAttrs(token: { content: string }) {
       return parseVideoMarkdown(token.content);
     }
+  },
+  scrum_ai_generation_placeholder: {
+    node: "ai_generation_placeholder",
+    getAttrs(token: { attrGet?: (name: string) => string | null; content?: string }) {
+      return {
+        id: token.attrGet?.("data-ai-generation-placeholder") ?? parseAiGenerationPlaceholderMarkdown(token.content ?? "").id
+      };
+    }
   }
 });
 
@@ -185,6 +222,9 @@ export const markdownSerializer = new MarkdownSerializer({
   },
   video(state, node) {
     state.write(buildVideoMarkdown(node.attrs.title || "Video", node.attrs.src || ""));
+  },
+  ai_generation_placeholder(state, node) {
+    state.write(`<span data-ai-generation-placeholder="${escapeHtmlAttribute(String(node.attrs.id ?? ""))}"></span>`);
   },
   table(state, node) {
     state.ensureNewLine();
@@ -270,7 +310,13 @@ function serializeTableCell(cell: ProseMirrorNode) {
 }
 
 function normalizeUnsupportedHtml(markdown: string) {
-  return markdown.replace(/<(?!\/?(?:video|img|br)\b)[^>\n]+>/gi, (match) => match.replace(/</g, "&lt;").replace(/>/g, "&gt;"));
+  return markdown.replace(/<[^>\n]+>/gi, (match) => {
+    if (isSupportedHtmlMarkdownTag(match)) {
+      return match;
+    }
+
+    return match.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  });
 }
 
 type MarkdownToken = {
@@ -361,6 +407,20 @@ function normalizeHtmlTokens(tokens: MarkdownToken[]) {
       token.type = "scrum_video";
       continue;
     }
+    const generationPlaceholderAttrs = parseAiGenerationPlaceholderMarkdown(token.content);
+    if ((token.type === "html_inline" || token.type === "html_block") && generationPlaceholderAttrs.id) {
+      if (token.type === "html_block") {
+        tokens.splice(index, 1, ...createAiGenerationPlaceholderParagraphTokens(token, generationPlaceholderAttrs));
+        index += 2;
+        continue;
+      }
+      applyAiGenerationPlaceholderAttrsToToken(token, generationPlaceholderAttrs);
+      const nextToken = tokens[index + 1];
+      if (nextToken?.type === "html_inline" && /^<\/span>$/i.test(nextToken.content.trim())) {
+        tokens.splice(index + 1, 1);
+      }
+      continue;
+    }
     const imageAttrs = parseImageMarkdown(token.content);
     if ((token.type === "html_inline" || token.type === "html_block") && imageAttrs.src) {
       if (token.type === "html_block") {
@@ -379,6 +439,39 @@ function normalizeHtmlTokens(tokens: MarkdownToken[]) {
       token.markup = "\\";
     }
   }
+}
+
+function createAiGenerationPlaceholderParagraphTokens(referenceToken: MarkdownToken, attrs: ReturnType<typeof parseAiGenerationPlaceholderMarkdown>) {
+  const paragraphOpen = createMarkdownToken(referenceToken, "paragraph_open", "p", 1);
+  paragraphOpen.block = true;
+  paragraphOpen.map = referenceToken.map ?? null;
+
+  const inlineToken = createMarkdownToken(referenceToken, "inline", "", 0);
+  inlineToken.block = true;
+  inlineToken.content = referenceToken.content;
+  inlineToken.map = referenceToken.map ?? null;
+  inlineToken.children = [createAiGenerationPlaceholderToken(referenceToken, attrs)];
+
+  const paragraphClose = createMarkdownToken(referenceToken, "paragraph_close", "p", -1);
+  paragraphClose.block = true;
+
+  return [paragraphOpen, inlineToken, paragraphClose];
+}
+
+function createAiGenerationPlaceholderToken(referenceToken: MarkdownToken, attrs: ReturnType<typeof parseAiGenerationPlaceholderMarkdown>) {
+  const placeholderToken = createMarkdownToken(referenceToken, "scrum_ai_generation_placeholder", "span", 0);
+  applyAiGenerationPlaceholderAttrsToToken(placeholderToken, attrs);
+  return placeholderToken;
+}
+
+function applyAiGenerationPlaceholderAttrsToToken(token: MarkdownToken, attrs: ReturnType<typeof parseAiGenerationPlaceholderMarkdown>) {
+  token.type = "scrum_ai_generation_placeholder";
+  token.tag = "span";
+  token.nesting = 0;
+  token.content = "";
+  token.children = [];
+  token.attrs = [];
+  setMarkdownTokenAttribute(token, "data-ai-generation-placeholder", attrs.id);
 }
 
 function createImageParagraphTokens(referenceToken: MarkdownToken, imageAttrs: ReturnType<typeof parseImageMarkdown>) {
@@ -701,6 +794,28 @@ function parseVideoMarkdown(value: string) {
     src: extractHtmlAttribute(attributes, "src") ?? "",
     title: extractHtmlAttribute(attributes, "title") ?? ""
   };
+}
+
+function parseAiGenerationPlaceholderMarkdown(value: string) {
+  const match = /^<span\b([^>]*)>(?:\s*<\/span>)?$/i.exec(value.trim());
+  if (!match) {
+    return { id: "" };
+  }
+
+  return {
+    id: extractHtmlAttribute(match[1] ?? "", "data-ai-generation-placeholder") ?? ""
+  };
+}
+
+function isSupportedHtmlMarkdownTag(value: string) {
+  const normalized = value.trim();
+  if (/^<\/?(?:video|img|br)\b/i.test(normalized)) {
+    return true;
+  }
+  if (/^<span\b[^>]*data-ai-generation-placeholder=/i.test(normalized)) {
+    return true;
+  }
+  return /^<\/span>$/i.test(normalized);
 }
 
 function extractHtmlAttribute(attributes: string, name: string) {

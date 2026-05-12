@@ -8,7 +8,7 @@ import { productRootDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import type { ProductDrawerRouteDescriptor } from "../drawer-route-state";
-import { RichDescriptionField } from "../product-workspace/RichDescriptionField";
+import { RichDescriptionField, type RichDescriptionFieldHandle } from "../product-workspace/RichDescriptionField";
 import { ActivityFeed } from "../product-workspace/ActivityFeed";
 import { Drawer, DrawerRenderContext } from "../Drawer";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
@@ -126,6 +126,7 @@ export function ProductUpsertionForm(props: {
   const [activityError, setActivityError] = React.useState("");
   const [accessUsers, setAccessUsers] = React.useState<ProductAccessUser[]>([]);
   const [accessError, setAccessError] = React.useState("");
+  const descriptionEditorRef = React.useRef<RichDescriptionFieldHandle | null>(null);
   const canDeleteProduct = canDeleteProductsAdministration(store.session.user);
   const [closeBaseline, setCloseBaseline] = React.useState<ProductCloseSnapshot>(() => normalizeProductCloseSnapshot({
     name: product?.name ?? "",
@@ -163,7 +164,11 @@ export function ProductUpsertionForm(props: {
   useDrawerCloseGuard({
     controller: drawerController,
     drawerId,
-    when: hasUnsavedChanges
+    when: hasUnsavedChanges,
+    onConfirm: async () => {
+      await descriptionEditorRef.current?.discardCollaboration();
+      await clearDraft();
+    }
   });
 
   React.useEffect(() => {
@@ -311,6 +316,7 @@ export function ProductUpsertionForm(props: {
         />
       </label>
       <RichDescriptionField
+        ref={descriptionEditorRef}
         label="Descripcion"
         value={description}
         onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}

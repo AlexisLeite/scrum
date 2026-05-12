@@ -42,6 +42,21 @@
   resize: vertical;
 }
 
+.markdown-generation-dialog-field select {
+  min-height: 38px;
+  padding: 0 0.65rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--field-bg);
+  color: var(--text-main);
+  font: inherit;
+}
+
+.markdown-generation-dialog-field select option {
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+
 .markdown-generation-dialog-toggle {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -56,4 +71,8 @@
 .markdown-generation-dialog-selection,
 .markdown-generation-dialog-help {
   margin: 0;
+}
+
+.markdown-generation-dialog-actions {
+  justify-content: flex-end;
 }

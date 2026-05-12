@@ -18,6 +18,8 @@ const COLLABORATION_PATH = "/api/v1/collaboration";
 const YDOC_FRAGMENT_NAME = "prosemirror";
 const MESSAGE_UPDATE = 0;
 const MESSAGE_AWARENESS = 1;
+const MESSAGE_DISCARD = 2;
+const MESSAGE_DISCARD_RESULT = 3;
 const CollaborativeDocumentType = {
   PRODUCT_DESCRIPTION: "PRODUCT_DESCRIPTION",
   STORY_DESCRIPTION: "STORY_DESCRIPTION",
@@ -114,7 +116,7 @@ export class CollaborationService {
 
   private handleMessage(room: CollaborationRoom, socket: CollaborationConnection, data: RawData) {
     const message = normalizeMessage(data);
-    if (!message || message.payload.length === 0 && message.type !== MESSAGE_UPDATE) {
+    if (!message || message.payload.length === 0 && message.type !== MESSAGE_UPDATE && message.type !== MESSAGE_DISCARD) {
       return;
     }
 
@@ -123,6 +125,18 @@ export class CollaborationService {
         return;
       }
       Y.applyUpdate(room.ydoc, message.payload, socket);
+      return;
+    }
+
+    if (message.type === MESSAGE_DISCARD) {
+      const discarded = socket.canEditDocument ? this.discardRoomIfSoleActiveEditor(room, socket) : false;
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(encodeMessage(MESSAGE_DISCARD_RESULT, new Uint8Array([discarded ? 1 : 0])), () => {
+          if (discarded && socket.readyState === WebSocket.OPEN) {
+            socket.close(1000, "Collaboration discarded");
+          }
+        });
+      }
       return;
     }
 
@@ -148,6 +162,26 @@ export class CollaborationService {
       this.rooms.delete(room.name);
       room.ydoc.destroy();
     }
+  }
+
+  private discardRoomIfSoleActiveEditor(room: CollaborationRoom, socket: CollaborationConnection) {
+    const hasOtherActiveEditor = Array.from(room.connections).some((connection) =>
+      connection !== socket
+      && connection.canEditDocument
+      && connection.readyState === WebSocket.OPEN
+    );
+    if (hasOtherActiveEditor) {
+      return false;
+    }
+
+    this.rooms.delete(room.name);
+    room.connections.forEach((connection) => {
+      if (connection !== socket && connection.readyState === WebSocket.OPEN) {
+        connection.close(1000, "Collaboration discarded");
+      }
+    });
+    room.ydoc.destroy();
+    return true;
   }
 
   private async getRoom(

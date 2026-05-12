@@ -62,6 +62,10 @@ class OverlayEscapeStack {
 
 const overlayEscapeStack = new OverlayEscapeStack();
 
+export function registerOverlayEscape(handler: OverlayEscapeHandler) {
+  return overlayEscapeStack.register(handler);
+}
+
 export function useOverlayEscape(handler: OverlayEscapeHandler, enabled: boolean = true) {
   const handlerRef = React.useRef(handler);
 

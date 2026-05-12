@@ -10,7 +10,7 @@ import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import type { SprintDrawerRouteDescriptor } from "../drawer-route-state";
 import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { ActivityTimeline } from "./ActivityTimeline";
-import { RichDescriptionField } from "./RichDescriptionField";
+import { RichDescriptionField, type RichDescriptionFieldHandle } from "./RichDescriptionField";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import "./sprint-upsertion-form.css";
 
@@ -130,6 +130,7 @@ export function SprintUpsertionForm(props: {
 
   const [name, setName] = React.useState(sprint?.name ?? "");
   const [goal, setGoal] = React.useState(sprint?.goal ?? "");
+  const goalEditorRef = React.useRef<RichDescriptionFieldHandle | null>(null);
   const [startDate, setStartDate] = React.useState(asDateInput(sprint?.startDate));
   const [endDate, setEndDate] = React.useState(asDateInput(sprint?.endDate));
   const [error, setError] = React.useState("");
@@ -163,7 +164,10 @@ export function SprintUpsertionForm(props: {
   useDrawerCloseGuard({
     controller: drawerController,
     drawerId,
-    when: hasUnsavedChanges
+    when: hasUnsavedChanges,
+    onConfirm: async () => {
+      await goalEditorRef.current?.discardCollaboration();
+    }
   });
 
   const loadTaskPools = React.useCallback(async () => {
@@ -391,6 +395,7 @@ export function SprintUpsertionForm(props: {
       </div>
 
       <RichDescriptionField
+        ref={goalEditorRef}
         label="Objetivo"
         value={goal}
         onChange={setGoal}

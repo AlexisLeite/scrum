@@ -13,7 +13,7 @@ import { useDrawerCloseGuard } from "../useDrawerCloseGuard";
 import { SearchableSelect, buildSearchableSelectOptions } from "../../SearchableSelect";
 import { ActivityTimeline, type ActivityEntry, type ActivityListResult } from "./ActivityTimeline";
 import { TaskCollaborationPanel, type TaskCollaborationDetail } from "./TaskCollaborationPanel";
-import { RichDescriptionField } from "./RichDescriptionField";
+import { RichDescriptionField, type RichDescriptionFieldHandle } from "./RichDescriptionField";
 import { TaskCompletionDialog } from "./TaskCompletionDialog";
 import { StoryUpsertionDrawer } from "./StoryUpsertionDrawer";
 import { isStoryClosedStatus } from "../../../views/product-workspace/ProductWorkspaceViewShared";
@@ -414,6 +414,7 @@ export function TaskUpsertionForm(props: {
   const initialEffortPoints = React.useMemo(() => getInitialEffortPoints(task), [task]);
   const [creationPlacement, setCreationPlacement] = React.useState<TaskCreationPlacement>("end");
   const customHoursInputRef = React.useRef<HTMLInputElement | null>(null);
+  const descriptionEditorRef = React.useRef<RichDescriptionFieldHandle | null>(null);
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false);
@@ -817,7 +818,11 @@ export function TaskUpsertionForm(props: {
   useDrawerCloseGuard({
     controller: drawerController,
     drawerId,
-    when: hasUnsavedChanges
+    when: hasUnsavedChanges,
+    onConfirm: async () => {
+      await descriptionEditorRef.current?.discardCollaboration();
+      await clearDraft();
+    }
   });
 
   return (
@@ -885,6 +890,7 @@ export function TaskUpsertionForm(props: {
         {catalogLoading ? <p className="muted">Actualizando opciones de la tarea...</p> : null}
 
         <RichDescriptionField
+          ref={descriptionEditorRef}
           label="Descripcion"
           value={description}
           onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}

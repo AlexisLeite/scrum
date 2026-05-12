@@ -145,6 +145,16 @@ export function replaceSelectionInMarkdown(
   return `${snapshot.currentMarkdown.slice(0, range.start)}${replacement}${snapshot.currentMarkdown.slice(range.end)}`;
 }
 
+export function insertAfterSelectionInMarkdown(
+  snapshot: EditorSelectionSnapshot,
+  insertion: string
+): string {
+  const range = resolveSelectionMarkdownRange(snapshot);
+  const insertionIndex = range?.end ?? snapshot.currentMarkdown.length;
+  const separator = resolveMarkdownInsertionSeparator(snapshot.currentMarkdown, insertionIndex);
+  return `${snapshot.currentMarkdown.slice(0, insertionIndex)}${separator}${insertion}${snapshot.currentMarkdown.slice(insertionIndex)}`;
+}
+
 export function resolveSelectionMarkdownContent(snapshot: EditorSelectionSnapshot) {
   const range = resolveSelectionMarkdownRange(snapshot);
   if (!range) {
@@ -237,6 +247,21 @@ function resolveCollapsedSelectionMarkdownRange(markdown: string, plainTextOffse
     start: markdownIndex,
     end: markdownIndex
   };
+}
+
+function resolveMarkdownInsertionSeparator(markdown: string, insertionIndex: number) {
+  if (insertionIndex <= 0) {
+    return "";
+  }
+
+  const beforeInsertion = markdown.slice(0, insertionIndex);
+  if (/\n\n$/.test(beforeInsertion)) {
+    return "";
+  }
+  if (/\n$/.test(beforeInsertion)) {
+    return "\n";
+  }
+  return "\n\n";
 }
 
 function findSnippetRange(markdown: string, snippet: string, plainTextOffset: number | null) {

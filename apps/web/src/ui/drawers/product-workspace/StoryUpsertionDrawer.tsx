@@ -14,7 +14,7 @@ import { ModalsController } from "../../modals/ModalsController";
 import { SearchableSelect, buildSearchableSelectOptions } from "../../SearchableSelect";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { MarkdownPreview } from "./MarkdownPreview";
-import { RichDescriptionField } from "./RichDescriptionField";
+import { RichDescriptionField, type RichDescriptionFieldHandle } from "./RichDescriptionField";
 import { TaskUpsertionDrawer } from "./TaskUpsertionDrawer";
 import { buildStatusOptions, getStoryStatusLabel, isStoryClosedStatus } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 
@@ -132,6 +132,7 @@ export function StoryUpsertionForm(props: {
   const [deleting, setDeleting] = React.useState(false);
   const [taskError, setTaskError] = React.useState("");
   const [tasksLoading, setTasksLoading] = React.useState(false);
+  const descriptionEditorRef = React.useRef<RichDescriptionFieldHandle | null>(null);
   const canDeleteStory = canDeleteStories(store.session.user, productId);
   const draft = useDraftPersistence({
     userId: store.session.user?.id,
@@ -177,7 +178,11 @@ export function StoryUpsertionForm(props: {
   useDrawerCloseGuard({
     controller: drawerController,
     drawerId,
-    when: hasUnsavedChanges
+    when: hasUnsavedChanges,
+    onConfirm: async () => {
+      await descriptionEditorRef.current?.discardCollaboration();
+      await clearDraft();
+    }
   });
 
   const storyScopeKey = story?.id ? storyCollectionScope(story.id) : null;
@@ -479,6 +484,7 @@ export function StoryUpsertionForm(props: {
       )}
 
       <RichDescriptionField
+        ref={descriptionEditorRef}
         label="Descripcion"
         value={description}
         onChange={(nextValue) => setForm((current) => ({ ...current, description: nextValue }))}
