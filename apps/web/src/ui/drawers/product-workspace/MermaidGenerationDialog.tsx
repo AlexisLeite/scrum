@@ -10,6 +10,7 @@ export type MermaidDiagramTypeOption = {
 
 type MermaidGenerationDialogProps = {
   includeSelection: boolean;
+  mode?: "create" | "improve";
   open: boolean;
   prompt: string;
   selectionAvailable: boolean;
@@ -27,6 +28,7 @@ type MermaidGenerationDialogProps = {
 export function MermaidGenerationDialog(props: MermaidGenerationDialogProps) {
   const {
     includeSelection,
+    mode = "create",
     open,
     prompt,
     selectionAvailable,
@@ -47,7 +49,13 @@ export function MermaidGenerationDialog(props: MermaidGenerationDialogProps) {
     return null;
   }
 
-  const canSubmit = !submitting && (prompt.trim().length > 0 || (includeSelection && selectionAvailable));
+  const improveMode = mode === "improve";
+  const canSubmit = !submitting && (
+    improveMode
+      ? prompt.trim().length > 0
+      : prompt.trim().length > 0 || (includeSelection && selectionAvailable)
+  );
+  const title = improveMode ? "Mejorar diagrama Mermaid" : "Crear diagrama Mermaid";
 
   return createPortal(
     <div className="markdown-generation-dialog-backdrop" onMouseDown={submitting ? undefined : onCancel} role="presentation">
@@ -55,34 +63,36 @@ export function MermaidGenerationDialog(props: MermaidGenerationDialogProps) {
         className="markdown-generation-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Crear diagrama Mermaid"
+        aria-label={title}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="markdown-generation-dialog-head">
           <div>
             <p className="workspace-context">Asistente de IA</p>
-            <h3>Crear diagrama Mermaid</h3>
+            <h3>{title}</h3>
           </div>
         </div>
-        {selectionSummary ? (
+        {!improveMode && selectionSummary ? (
           <p className="markdown-generation-dialog-selection">
             <strong>Seleccion actual:</strong> {selectionSummary}
           </p>
         ) : null}
-        <label className="markdown-generation-dialog-field">
-          Seleccion de tipo
-          <select
-            value={typeId}
-            onChange={(event) => onTypeChange(event.target.value)}
-            disabled={submitting}
-          >
-            {typeOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {improveMode ? null : (
+          <label className="markdown-generation-dialog-field">
+            Seleccion de tipo
+            <select
+              value={typeId}
+              onChange={(event) => onTypeChange(event.target.value)}
+              disabled={submitting}
+            >
+              {typeOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="markdown-generation-dialog-field">
           Prompt
           <textarea
@@ -96,24 +106,26 @@ export function MermaidGenerationDialog(props: MermaidGenerationDialogProps) {
                 }
               }
             }}
-            placeholder="Describe el proceso, modelo o relaciones que debe representar."
+            placeholder={improveMode ? "Describe que debe mejorar la IA en este diagrama." : "Describe el proceso, modelo o relaciones que debe representar."}
             rows={5}
             autoFocus
             disabled={submitting}
           />
         </label>
-        <label className="markdown-generation-dialog-toggle">
-          <input
-            type="checkbox"
-            checked={includeSelection}
-            onChange={(event) => onIncludeSelectionChange(event.target.checked)}
-            disabled={submitting}
-          />
-          <span>Incluir seleccion</span>
-        </label>
+        {improveMode ? null : (
+          <label className="markdown-generation-dialog-toggle">
+            <input
+              type="checkbox"
+              checked={includeSelection}
+              onChange={(event) => onIncludeSelectionChange(event.target.checked)}
+              disabled={submitting}
+            />
+            <span>Incluir seleccion</span>
+          </label>
+        )}
         <div className="row-actions compact markdown-generation-dialog-actions">
           <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={!canSubmit}>
-            {submitting ? "Creando..." : "Crear"}
+            {submitting ? (improveMode ? "Mejorando..." : "Creando...") : (improveMode ? "Mejorar" : "Crear")}
           </button>
         </div>
       </section>

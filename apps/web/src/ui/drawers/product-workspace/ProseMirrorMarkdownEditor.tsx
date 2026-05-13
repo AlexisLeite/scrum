@@ -2,7 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FiBold, FiCheckSquare, FiChevronDown, FiCode, FiImage, FiItalic, FiLink, FiList, FiMaximize2, FiMinimize2, FiMinus, FiPrinter, FiRotateCcw, FiRotateCw, FiShare2, FiTable } from "react-icons/fi";
 import type { IconType } from "react-icons";
-import { LuListOrdered, LuQuote } from "react-icons/lu";
+import { LuListOrdered, LuQuote, LuWandSparkles } from "react-icons/lu";
 import { EditorState, Plugin, Selection, TextSelection, type Transaction } from "prosemirror-state";
 import { EditorView, type NodeView, type ViewMutationRecord } from "prosemirror-view";
 import { Fragment, Node as ProseMirrorNode, Slice } from "prosemirror-model";
@@ -76,7 +76,7 @@ const DEFAULT_PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [2, 3];
 const PRINT_TOC_LEVELS: MarkdownPrintTocLevel[] = [1, 2, 3, 4, 5, 6];
 const MERMAID_INSERT_FOCUS_WINDOW_MS = 2000;
 const CODE_BLOCK_INDENT = "  ";
-type MermaidPreviewToolIcon = "maximize" | "minimize" | "reset";
+type MermaidPreviewToolIcon = "improve" | "maximize" | "minimize" | "reset";
 
 const codeMirrorCodeBlockTheme = CodeMirrorView.theme({
   "&": {
@@ -157,6 +157,7 @@ const codeMirrorSyntaxHighlight = syntaxHighlighting(HighlightStyle.define([
 }));
 
 const MERMAID_PREVIEW_TOOL_ICONS: Record<MermaidPreviewToolIcon, IconType> = {
+  improve: LuWandSparkles,
   maximize: FiMaximize2,
   minimize: FiMinimize2,
   reset: FiRotateCcw
@@ -343,6 +344,15 @@ flowchart LR
 
 export type MermaidDiagramTemplate = typeof MERMAID_DIAGRAM_TEMPLATES[number];
 
+export type MermaidDiagramImproveRequest = {
+  currentMarkdown: string;
+  diagramType: string;
+  markdownEndIndex: number;
+  markdownStartIndex: number;
+  selectionMarkdown: string;
+  source: string;
+};
+
 let pendingInsertedMermaidSourceFocus = 0;
 let pendingInsertedMermaidSourceFocusUntil = 0;
 
@@ -421,6 +431,7 @@ type ProseMirrorMarkdownEditorProps = {
   onInternalReferenceOpen?: (href: string) => Promise<void> | void;
   printTitle?: string;
   printDisabled?: boolean;
+  onMermaidImproveRequest?: (request: MermaidDiagramImproveRequest) => void;
   onMermaidTemplateSelect?: (template: MermaidDiagramTemplate) => void;
   toolbarExtras?: React.ReactNode | ((state: ToolbarExtrasRenderState) => React.ReactNode);
 };
@@ -442,6 +453,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
       onInternalReferenceOpen,
       printTitle,
       printDisabled = false,
+      onMermaidImproveRequest,
       onMermaidTemplateSelect,
       toolbarExtras
     } = props;
@@ -456,6 +468,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     const allowReadOnlyTaskCheckboxToggleRef = React.useRef(allowReadOnlyTaskCheckboxToggle);
     const onTaskCheckboxToggleRef = React.useRef(onTaskCheckboxToggle);
     const onInternalReferenceOpenRef = React.useRef(onInternalReferenceOpen);
+    const onMermaidImproveRequestRef = React.useRef(onMermaidImproveRequest);
     const onChangeRef = React.useRef(onChange);
     const providerRef = React.useRef<ScrumYjsProvider | null>(null);
     const ydocRef = React.useRef<Y.Doc | null>(null);
@@ -474,6 +487,7 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
     allowReadOnlyTaskCheckboxToggleRef.current = allowReadOnlyTaskCheckboxToggle;
     onTaskCheckboxToggleRef.current = onTaskCheckboxToggle;
     onInternalReferenceOpenRef.current = onInternalReferenceOpen;
+    onMermaidImproveRequestRef.current = onMermaidImproveRequest;
     onChangeRef.current = onChange;
     sourceModeActiveRef.current = sourceModeActive;
 
@@ -568,7 +582,13 @@ export const ProseMirrorMarkdownEditor = React.forwardRef<ProseMirrorMarkdownEdi
             () => allowReadOnlyTaskCheckboxToggleRef.current,
             () => onTaskCheckboxToggleRef.current
           ),
-          code_block: (node, view, getPos) => new CodeBlockNodeView(node, view, getPos),
+          code_block: (node, view, getPos) => new CodeBlockNodeView(
+            node,
+            view,
+            getPos,
+            () => readOnlyRef.current,
+            () => onMermaidImproveRequestRef.current
+          ),
           image: (node, view, getPos) => new ImageNodeView(node, view, getPos, () => readOnlyRef.current, () => onImageCropRef.current),
           table: (node, view, getPos) => new TableNodeView(node, view, getPos, () => readOnlyRef.current)
         },
@@ -3510,6 +3530,7 @@ class CodeBlockNodeView implements NodeView {
   private mermaidPreview: HTMLElement;
   private mermaidSvgHost: HTMLElement;
   private mermaidPreviewToolbar: HTMLElement;
+  private mermaidImproveButton: HTMLButtonElement;
   private mermaidResetButton: HTMLButtonElement;
   private mermaidMaximizeButton: HTMLButtonElement;
   private mermaidError: HTMLElement;
@@ -3526,7 +3547,9 @@ class CodeBlockNodeView implements NodeView {
   constructor(
     private node: ProseMirrorNode,
     private view: EditorView,
-    private getPos: (() => number | undefined) | boolean
+    private getPos: (() => number | undefined) | boolean,
+    private isReadOnly: () => boolean,
+    private onMermaidImproveRequest: () => ((request: MermaidDiagramImproveRequest) => void) | undefined
   ) {
     this.dom = document.createElement("div");
     this.dom.className = "prosemirror-code-block";
@@ -3578,6 +3601,8 @@ class CodeBlockNodeView implements NodeView {
     this.mermaidPreviewToolbar.className = "prosemirror-mermaid-preview-toolbar";
     this.mermaidPreviewToolbar.addEventListener("pointerdown", stopMermaidToolbarEvent);
     this.mermaidPreviewToolbar.addEventListener("wheel", stopMermaidToolbarEvent);
+    this.mermaidImproveButton = createMermaidPreviewToolButton("Solicitar mejoras a la IA", "improve");
+    this.mermaidImproveButton.addEventListener("click", this.handleMermaidImproveClick);
     this.mermaidResetButton = createMermaidPreviewToolButton("Restablecer zoom y posicion", "reset");
     this.mermaidResetButton.addEventListener("click", (event) => {
       event.preventDefault();
@@ -3590,7 +3615,8 @@ class CodeBlockNodeView implements NodeView {
       event.stopPropagation();
       this.setMermaidPreviewMaximized(!this.mermaidPreview.classList.contains("is-maximized"));
     });
-    this.mermaidPreviewToolbar.append(this.mermaidResetButton, this.mermaidMaximizeButton);
+    this.mermaidPreviewToolbar.append(this.mermaidResetButton, this.mermaidImproveButton, this.mermaidMaximizeButton);
+    window.requestAnimationFrame(() => this.updateMermaidImproveButtonState());
     this.mermaidError = document.createElement("div");
     this.mermaidError.className = "prosemirror-mermaid-preview-error";
     this.mermaidError.setAttribute("role", "alert");
@@ -3710,6 +3736,7 @@ class CodeBlockNodeView implements NodeView {
     this.cleanupMermaidPreviewEscape = null;
     this.mermaidPanZoom.destroy();
     this.mermaidPreview.removeEventListener("dblclick", this.handleMermaidPreviewDoubleClick);
+    this.mermaidImproveButton.removeEventListener("click", this.handleMermaidImproveClick);
     this.editor.dom.removeEventListener("focusin", this.handleCodeMirrorFocusIn);
     this.editor.dom.removeEventListener("focusout", this.handleCodeMirrorFocusOut);
     this.editor.destroy();
@@ -3876,6 +3903,13 @@ class CodeBlockNodeView implements NodeView {
 
     this.toolbar.hidden = mermaid && !this.mermaidEditing;
     this.editorHost.hidden = mermaid && !this.mermaidEditing;
+    this.updateMermaidImproveButtonState();
+  }
+
+  private updateMermaidImproveButtonState() {
+    const canImprove = Boolean(this.onMermaidImproveRequest()) && isMermaidLanguage(this.node.attrs.params);
+    this.mermaidImproveButton.hidden = !canImprove;
+    this.mermaidImproveButton.disabled = false;
   }
 
   private scheduleMermaidPreviewRender(delay = 160) {
@@ -3928,6 +3962,7 @@ class CodeBlockNodeView implements NodeView {
       this.mermaidPanZoom.reset();
       this.mermaidPreview.classList.remove("is-loading", "is-error");
       this.mermaidPreview.classList.add("is-ready");
+      this.updateMermaidImproveButtonState();
     } catch (error: unknown) {
       if (renderVersion !== this.mermaidRenderVersion) {
         return;
@@ -3963,9 +3998,94 @@ class CodeBlockNodeView implements NodeView {
     this.mermaidMaximizeButton.title = maximized ? "Restaurar visualizador de diagrama" : "Maximizar visualizador de diagrama";
     window.requestAnimationFrame(() => this.mermaidPanZoom.reset());
   }
+
+  private handleMermaidImproveClick = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const onMermaidImproveRequest = this.onMermaidImproveRequest();
+    if (!onMermaidImproveRequest || this.isReadOnly() || !isMermaidLanguage(this.node.attrs.params)) {
+      return;
+    }
+
+    const position = this.resolvePosition();
+    if (position == null) {
+      return;
+    }
+
+    const currentMarkdown = serializeMarkdown(this.view.state.doc);
+    const markdownRange = resolveSerializedCodeBlockRange(this.view.state.doc, position, currentMarkdown);
+    if (!markdownRange) {
+      return;
+    }
+
+    const source = this.editor.state.doc.toString();
+    onMermaidImproveRequest({
+      currentMarkdown,
+      diagramType: resolveMermaidDiagramType(source),
+      markdownEndIndex: markdownRange.end,
+      markdownStartIndex: markdownRange.start,
+      selectionMarkdown: currentMarkdown.slice(markdownRange.start, markdownRange.end),
+      source
+    });
+  };
 }
 
-function createMermaidPreviewToolButton(label: string, icon: "maximize" | "reset") {
+function resolveSerializedCodeBlockRange(doc: ProseMirrorNode, nodePosition: number, markdown: string) {
+  const codeBlockIndex = resolveCodeBlockIndex(doc, nodePosition);
+  if (codeBlockIndex < 0) {
+    return null;
+  }
+
+  return collectSerializedCodeBlockRanges(markdown)[codeBlockIndex] ?? null;
+}
+
+function resolveCodeBlockIndex(doc: ProseMirrorNode, nodePosition: number) {
+  let currentIndex = -1;
+  let matchedIndex = -1;
+
+  doc.descendants((node, position) => {
+    if (node.type.name !== "code_block") {
+      return true;
+    }
+
+    currentIndex += 1;
+    if (position === nodePosition) {
+      matchedIndex = currentIndex;
+      return false;
+    }
+
+    return false;
+  });
+
+  return matchedIndex;
+}
+
+function collectSerializedCodeBlockRanges(markdown: string) {
+  const ranges: Array<{ start: number; end: number }> = [];
+  const codeBlockPattern = /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?\n\2(?=\n|$)/g;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = codeBlockPattern.exec(markdown)) !== null) {
+    const leadingNewlineLength = match[1] ? 1 : 0;
+    ranges.push({
+      start: match.index + leadingNewlineLength,
+      end: match.index + match[0].length
+    });
+  }
+
+  return ranges;
+}
+
+function resolveMermaidDiagramType(source: string) {
+  return source
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && !line.startsWith("%%"))
+    || "mermaid";
+}
+
+function createMermaidPreviewToolButton(label: string, icon: MermaidPreviewToolIcon) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = `prosemirror-mermaid-preview-tool-button is-${icon}`;

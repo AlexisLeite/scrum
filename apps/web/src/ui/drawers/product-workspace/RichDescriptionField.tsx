@@ -15,7 +15,7 @@ import { openInternalReference } from "../reference/openInternalReference";
 import { ImageLightbox } from "./ImageLightbox";
 import { MarkdownGenerationDialog } from "./MarkdownGenerationDialog";
 import { MermaidGenerationDialog } from "./MermaidGenerationDialog";
-import { ProseMirrorMarkdownEditor, type MermaidDiagramTemplate, type ProseMirrorMarkdownEditorHandle } from "./ProseMirrorMarkdownEditor";
+import { ProseMirrorMarkdownEditor, type MermaidDiagramImproveRequest, type MermaidDiagramTemplate, type ProseMirrorMarkdownEditorHandle } from "./ProseMirrorMarkdownEditor";
 import type { RichDescriptionCollaboration } from "./yjs-collaboration-provider";
 import {
   captureEditorSelection,
@@ -91,6 +91,7 @@ const IMAGE_ORIGIN_FALLBACK = "contaboserver.net:5444";
 const IMAGE_ORIGIN_PUBLIC = "contaboserver.net:3000";
 
 type MermaidDiagramTypeId = MermaidDiagramTemplate["id"];
+type MermaidDialogMode = "create" | "improve";
 
 type MermaidDiagramGenerationType = {
   id: MermaidDiagramTypeId;
@@ -226,6 +227,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const [generationSelectionSummary, setGenerationSelectionSummary] = React.useState("");
   const [isGeneratingMarkdown, setIsGeneratingMarkdown] = React.useState(false);
   const [mermaidDialogOpen, setMermaidDialogOpen] = React.useState(false);
+  const [mermaidDialogMode, setMermaidDialogMode] = React.useState<MermaidDialogMode>("create");
   const [mermaidDiagramTypeId, setMermaidDiagramTypeId] = React.useState<MermaidDiagramTypeId>("sequence");
   const [mermaidPrompt, setMermaidPrompt] = React.useState("");
   const [mermaidIncludesSelection, setMermaidIncludesSelection] = React.useState(true);
@@ -233,6 +235,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
   const [localIsMaximized, setLocalIsMaximized] = React.useState(false);
   const generationSelectionRef = React.useRef<EditorSelectionSnapshot | null>(null);
   const generationBaseMarkdownRef = React.useRef<string | null>(null);
+  const mermaidImproveRequestRef = React.useRef<MermaidDiagramImproveRequest | null>(null);
   const editorInteractionDisabled = disabled || isGeneratingMarkdown;
   const maximizedEditorKey = searchParams.get(MAXIMIZED_EDITOR_PARAM);
   const isUrlDriven = Boolean(uriStateKey);
@@ -630,9 +633,11 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       setIsGeneratingMarkdown(false);
       setGenerationDialogOpen(false);
       setMermaidDialogOpen(false);
+      setMermaidDialogMode("create");
       setGenerationSelectionSummary("");
       generationSelectionRef.current = null;
       generationBaseMarkdownRef.current = null;
+      mermaidImproveRequestRef.current = null;
       scheduleHeightSync();
     }
   }, [resolveEditorContentElement, scheduleHeightSync, updateGenerationRegion]);
@@ -657,12 +662,55 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
     const selectionSnapshot = captureGenerationSelection();
     setGenerationSelectionSummary(describeMermaidSelectionSnapshot(selectionSnapshot));
     setMermaidDiagramTypeId(resolveMermaidGenerationType(template.id).id);
+    setMermaidDialogMode("create");
+    mermaidImproveRequestRef.current = null;
     setMermaidIncludesSelection(hasSelectionContent(selectionSnapshot));
     setGenerationError("");
     setMermaidDialogOpen(true);
   }, [captureGenerationSelection, editorInteractionDisabled]);
 
+  const openMermaidImprovementDialog = React.useCallback((request: MermaidDiagramImproveRequest) => {
+    if (editorInteractionDisabled) {
+      return;
+    }
+
+    mermaidImproveRequestRef.current = request;
+    generationSelectionRef.current = buildMermaidImproveSelectionSnapshot(request);
+    setGenerationSelectionSummary("Se reemplazara el diagrama Mermaid actual con la version mejorada.");
+    setMermaidDialogMode("improve");
+    setMermaidIncludesSelection(false);
+    setMermaidPrompt("");
+    setGenerationError("");
+    setMermaidDialogOpen(true);
+  }, [editorInteractionDisabled]);
+
   const confirmMermaidGeneration = React.useCallback(() => {
+    if (mermaidDialogMode === "improve") {
+      const improveRequest = mermaidImproveRequestRef.current;
+      const additionalInstructions = mermaidPrompt.trim();
+      if (!improveRequest || !additionalInstructions) {
+        return;
+      }
+
+      generationSelectionRef.current = buildMermaidImproveSelectionSnapshot(improveRequest);
+      const prompt = buildMermaidImprovementPrompt({
+        diagramType: improveRequest.diagramType,
+        instructions: additionalInstructions,
+        source: improveRequest.source
+      });
+
+      setMermaidDialogOpen(false);
+      window.setTimeout(() => {
+        void startMarkdownGeneration(prompt, false, {
+          formatGeneratedMarkdown: buildMermaidMarkdownReplacementBlock,
+          onSuccess: () => setMermaidPrompt(""),
+          placement: "replace-selection",
+          streamIntoEditor: false
+        });
+      }, 0);
+      return;
+    }
+
     const selectionSnapshot = generationSelectionRef.current ?? captureEditorSelection(resolveEditorContentElement(), editorRef.current);
     generationSelectionRef.current = selectionSnapshot;
 
@@ -689,7 +737,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         streamIntoEditor: false
       });
     }, 0);
-  }, [mermaidDiagramTypeId, mermaidIncludesSelection, mermaidPrompt, resolveEditorContentElement, startMarkdownGeneration]);
+  }, [mermaidDiagramTypeId, mermaidDialogMode, mermaidIncludesSelection, mermaidPrompt, resolveEditorContentElement, startMarkdownGeneration]);
 
   const replaceActiveAnchor = React.useCallback((reference: ReferenceSearchResult) => {
     if (!activeAnchor || !editorRef.current) {
@@ -1093,6 +1141,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
         allowReadOnlyTaskCheckboxToggle={allowReadOnlyTaskCheckboxToggle}
         onTaskCheckboxToggle={onTaskCheckboxToggle}
         onInternalReferenceOpen={handleInternalReferenceOpen}
+        onMermaidImproveRequest={openMermaidImprovementDialog}
         onMermaidTemplateSelect={openMermaidGenerationDialog}
         printTitle={printTitle ?? label}
         printDisabled={printDisabled || isGeneratingMarkdown}
@@ -1258,6 +1307,7 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
       />
       <MermaidGenerationDialog
         open={mermaidDialogOpen}
+        mode={mermaidDialogMode}
         typeId={mermaidDiagramTypeId}
         typeOptions={MERMAID_DIAGRAM_GENERATION_TYPES}
         prompt={mermaidPrompt}
@@ -1274,8 +1324,10 @@ export const RichDescriptionField = React.forwardRef<RichDescriptionFieldHandle,
             return;
           }
           setMermaidDialogOpen(false);
+          setMermaidDialogMode("create");
           setGenerationSelectionSummary("");
           generationSelectionRef.current = null;
+          mermaidImproveRequestRef.current = null;
         }}
       />
     </div>
@@ -1637,8 +1689,35 @@ function resolveMermaidGenerationType(typeId: string | null | undefined): Mermai
     ?? MERMAID_DIAGRAM_GENERATION_TYPES[0];
 }
 
+function buildMermaidImproveSelectionSnapshot(request: MermaidDiagramImproveRequest): EditorSelectionSnapshot {
+  return {
+    currentMarkdown: request.currentMarkdown,
+    selectionMarkdown: request.selectionMarkdown,
+    selectionPlainText: request.source,
+    startOffset: null,
+    endOffset: null,
+    markdownStartIndex: request.markdownStartIndex,
+    markdownEndIndex: request.markdownEndIndex,
+    collapsed: false,
+    range: null
+  };
+}
+
 function hasSelectionContent(snapshot: EditorSelectionSnapshot) {
   return Boolean((resolveSelectionMarkdownContent(snapshot) || snapshot.selectionPlainText).trim());
+}
+
+function buildMermaidImprovementPrompt(args: {
+  diagramType: string;
+  instructions: string;
+  source: string;
+}) {
+  return [
+    `Mejora el siguiente diagrama mermaid de tipo ${args.diagramType}:`,
+    args.source.trim(),
+    "Segun las instrucciones a continuacion:",
+    args.instructions.trim()
+  ].join("\n\n");
 }
 
 function buildMermaidGenerationPrompt(args: {
@@ -1673,6 +1752,11 @@ function buildMermaidGenerationPrompt(args: {
 function buildMermaidMarkdownBlock(generatedMarkdown: string) {
   const mermaidSource = extractMermaidSource(generatedMarkdown);
   return `\n\n\`\`\`mermaid\n${mermaidSource}\n\`\`\`\n\n`;
+}
+
+function buildMermaidMarkdownReplacementBlock(generatedMarkdown: string) {
+  const mermaidSource = extractMermaidSource(generatedMarkdown);
+  return `\`\`\`mermaid\n${mermaidSource}\n\`\`\``;
 }
 
 function extractMermaidSource(value: string) {
