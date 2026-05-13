@@ -384,9 +384,10 @@ function renderBlockCommentSegment(
   closeToken: string,
   segments: InlineContent[],
   state: HighlightState,
-  kind: HighlightState["blockComment"]
+  kind: HighlightState["blockComment"],
+  searchStart: number
 ) {
-  const closeIndex = line.indexOf(closeToken, start + 2);
+  const closeIndex = line.indexOf(closeToken, searchStart);
   if (closeIndex === -1) {
     pushHighlightedSegment(segments, line.slice(start), "comment");
     state.blockComment = kind;
@@ -566,9 +567,9 @@ function highlightLine(line: string, family: CodeLanguageFamily, state: Highligh
   let cursor = 0;
 
   if (state.blockComment === "clike") {
-    cursor = renderBlockCommentSegment(line, 0, "*/", segments, state, "clike");
+    cursor = renderBlockCommentSegment(line, 0, "*/", segments, state, "clike", 0);
   } else if (state.blockComment === "markup") {
-    cursor = renderBlockCommentSegment(line, 0, "-->", segments, state, "markup");
+    cursor = renderBlockCommentSegment(line, 0, "-->", segments, state, "markup", 0);
   }
 
   while (cursor < line.length) {
@@ -578,12 +579,12 @@ function highlightLine(line: string, family: CodeLanguageFamily, state: Highligh
     const tail = line.slice(cursor);
 
     if (family === "markup" && nextFour === "<!--") {
-      cursor = renderBlockCommentSegment(line, cursor, "-->", segments, state, "markup");
+      cursor = renderBlockCommentSegment(line, cursor, "-->", segments, state, "markup", cursor + nextFour.length);
       continue;
     }
 
     if (nextTwo === "/*" && (family === "clike" || family === "css" || family === "sql")) {
-      cursor = renderBlockCommentSegment(line, cursor, "*/", segments, state, "clike");
+      cursor = renderBlockCommentSegment(line, cursor, "*/", segments, state, "clike", cursor + nextTwo.length);
       continue;
     }
 
