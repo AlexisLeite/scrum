@@ -19,6 +19,7 @@ import {
   FiDownload,
   FiExternalLink,
   FiFileText,
+  FiFilter,
   FiInfo,
   FiList,
   FiMenu,
@@ -31,6 +32,7 @@ import { Link } from "react-router-dom";
 import { ProductController } from "../../../controllers";
 import { productStoryDefinitionPath, productTaskDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
+import { SearchableSelect } from "../../SearchableSelect";
 import {
   buildProductDescriptionPrintItem,
   buildProductPrintLayoutSnapshot,
@@ -48,6 +50,7 @@ import {
 import { downloadProductDocument, printProductDocument } from "../../../util/product-print-pdf";
 import {
   normalizeSearchValue,
+  statusClass,
   type ProductItem,
   type StoryItem,
   type StoryTaskSummary
@@ -71,11 +74,16 @@ type AddableItem = {
   title: string;
   description: string;
   sourceId?: string;
+  storyId?: string | null;
+  storyTitle?: string | null;
+  status?: string | null;
 };
 
 type LayoutStatus = "idle" | "saving" | "saved" | "error";
 type DocumentAction = "idle" | "printing" | "downloading";
 type ProductPrintBooleanOptionKey = Exclude<keyof ProductPrintOptionsState, "tocLevels">;
+type ProductPrintAddKindFilter = "all" | "product" | "story" | "task";
+type ProductPrintAddSortOption = "title-asc" | "title-desc" | "kind-asc" | "story-asc" | "status-asc";
 
 type ContentPersistenceState = {
   saving: boolean;
@@ -90,6 +98,40 @@ type PopoverPlacement = {
   top: number;
   left: number;
 };
+
+const DEFAULT_PRODUCT_PRINT_ADD_SORT: ProductPrintAddSortOption = "title-asc";
+
+const productPrintAddSortOptions: Array<{ value: ProductPrintAddSortOption; label: string }> = [
+  { value: "title-asc", label: "Titulo ascendente" },
+  { value: "title-desc", label: "Titulo descendente" },
+  { value: "kind-asc", label: "Tipo de elemento" },
+  { value: "story-asc", label: "Historia asociada" },
+  { value: "status-asc", label: "Estado de tarea" }
+];
+
+const productPrintKindFilterOptions: Array<{ value: ProductPrintAddKindFilter; label: string }> = [
+  { value: "all", label: "Todos" },
+  { value: "product", label: "Producto" },
+  { value: "story", label: "Historias" },
+  { value: "task", label: "Tareas" }
+];
+
+const productPrintAddFilterPopoverStyle = {
+  minWidth: 320,
+  maxWidth: "min(92vw, 480px)"
+} as const;
+
+const productPrintAddFilterFieldStyle = {
+  display: "grid",
+  gap: "0.35rem"
+} as const;
+
+const productPrintAddFilterActionsStyle = {
+  display: "flex",
+  gap: "0.5rem",
+  justifyContent: "space-between",
+  flexWrap: "wrap"
+} as const;
 
 function kindLabel(kind: ProductPrintItemState["kind"]) {
   switch (kind) {
@@ -133,6 +175,63 @@ function summarizeMarkdown(value: string, maxLength: number = 180) {
   return cleaned.length <= maxLength ? cleaned : `${cleaned.slice(0, maxLength).trim()}...`;
 }
 
+function addableKindFilter(kind: ProductPrintItemState["kind"]): ProductPrintAddKindFilter {
+  if (kind === "product_title" || kind === "product_description") {
+    return "product";
+  }
+  return kind;
+}
+
+function addableKindSortValue(kind: ProductPrintItemState["kind"]) {
+  switch (kind) {
+    case "product_title":
+      return 0;
+    case "product_description":
+      return 1;
+    case "story":
+      return 2;
+    case "task":
+      return 3;
+    default:
+      return 4;
+  }
+}
+
+function compareText(left: string | null | undefined, right: string | null | undefined) {
+  return (left ?? "").localeCompare(right ?? "", undefined, { sensitivity: "base" });
+}
+
+function sortAddableItems(items: AddableItem[], sortBy: ProductPrintAddSortOption) {
+  const sortedItems = [...items];
+  sortedItems.sort((left, right) => {
+    const byTitle = compareText(left.title, right.title);
+
+    switch (sortBy) {
+      case "title-desc":
+        return compareText(right.title, left.title) || compareText(left.id, right.id);
+      case "kind-asc": {
+        const byKind = addableKindSortValue(left.kind) - addableKindSortValue(right.kind);
+        return byKind || byTitle || compareText(left.id, right.id);
+      }
+      case "story-asc": {
+        const leftStory = left.storyTitle ?? (left.kind === "story" ? left.title : "");
+        const rightStory = right.storyTitle ?? (right.kind === "story" ? right.title : "");
+        const byStory = compareText(leftStory, rightStory);
+        return byStory || byTitle || compareText(left.id, right.id);
+      }
+      case "status-asc": {
+        const leftStatus = left.kind === "task" ? left.status ?? "" : "~~~~";
+        const rightStatus = right.kind === "task" ? right.status ?? "" : "~~~~";
+        return compareText(leftStatus, rightStatus) || byTitle || compareText(left.id, right.id);
+      }
+      case "title-asc":
+      default:
+        return byTitle || compareText(left.id, right.id);
+    }
+  });
+  return sortedItems;
+}
+
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
@@ -168,7 +267,11 @@ function buildAvailableItems(
   tasks: ProductPrintSourceTask[],
   items: ProductPrintItemState[],
   options: ProductPrintOptionsState,
-  query: string
+  query: string,
+  kindFilter: ProductPrintAddKindFilter,
+  taskStatusFilter: string,
+  taskStoryFilter: string,
+  sortBy: ProductPrintAddSortOption
 ) {
   const existingIds = new Set(items.map((item) => item.id));
   const normalizedQuery = normalizeSearchValue(query);
@@ -219,6 +322,9 @@ function buildAvailableItems(
         kind: "task",
         title: task.title,
         sourceId: task.id,
+        storyId: task.storyId ?? null,
+        storyTitle: task.storyTitle ?? null,
+        status: task.status ?? null,
         description: [
           task.storyTitle ? `Historia: ${task.storyTitle}` : "",
           task.status ? `Estado: ${task.status}` : "",
@@ -228,13 +334,29 @@ function buildAvailableItems(
     }
   }
 
-  if (!normalizedQuery) {
-    return candidates;
-  }
+  const filteredCandidates = candidates.filter((candidate) => {
+    if (kindFilter !== "all" && addableKindFilter(candidate.kind) !== kindFilter) {
+      return false;
+    }
+    if (taskStatusFilter && (candidate.kind !== "task" || candidate.status !== taskStatusFilter)) {
+      return false;
+    }
+    if (taskStoryFilter && (candidate.kind !== "task" || candidate.storyId !== taskStoryFilter)) {
+      return false;
+    }
+    if (!normalizedQuery) {
+      return true;
+    }
+    return normalizeSearchValue([
+      candidate.title,
+      candidate.description,
+      candidate.storyTitle ?? "",
+      candidate.status ?? "",
+      kindLabel(candidate.kind)
+    ].join("\n")).includes(normalizedQuery);
+  });
 
-  return candidates.filter((candidate) =>
-    normalizeSearchValue(`${candidate.title}\n${candidate.description}\n${candidate.kind}`).includes(normalizedQuery)
-  );
+  return sortAddableItems(filteredCandidates, sortBy);
 }
 
 function buildTaskSourcesFromStories(
@@ -448,7 +570,7 @@ function MarkdownInfoPopover(props: {
   );
 }
 
-function ProductPrintAddCard(props: {
+function ProductPrintAddTableRow(props: {
   item: AddableItem;
   productId: string;
   descriptionMarkdown: string | null | undefined;
@@ -462,48 +584,56 @@ function ProductPrintAddCard(props: {
       : "";
 
   return (
-    <article className="product-print-add-item">
-      <div className="product-print-add-copy">
-        <div className="product-print-add-head">
-          <div className="product-print-row-top">
-            <span className="pill product-print-kind-pill">{kindLabel(item.kind)}</span>
-          </div>
-          <div className="row-actions compact product-print-add-actions">
-            {(item.kind === "story" || item.kind === "task") && item.sourceId ? (
-              <MarkdownInfoPopover
-                label={`Ver descripcion rapida de ${item.title}`}
-                title={item.title}
-                markdown={descriptionMarkdown}
-                emptyLabel="Sin descripcion"
-              />
-            ) : null}
-            <button
-              type="button"
-              className="sm btn btn-primary"
-              onClick={() => onAdd(item)}
-            >
-              Agregar
-            </button>
+    <tr className="product-print-add-table-row">
+      <td className="product-print-add-title-cell">
+        <div className="product-print-title-row product-print-add-title-row">
+          <span className="pill product-print-kind-pill">{kindLabel(item.kind)}</span>
+          <div className="product-print-add-title-stack">
+            {itemHref ? (
+              <Link
+                className="product-print-add-link"
+                to={itemHref}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span>{item.title}</span>
+                <FiExternalLink aria-hidden="true" />
+              </Link>
+            ) : (
+              <strong>{item.title}</strong>
+            )}
+            <div className="sprint-task-meta product-print-add-meta">
+              {item.kind === "task" && item.storyTitle ? <span>{item.storyTitle}</span> : null}
+              {item.kind === "task" && item.status ? <span className={statusClass(item.status)}>{item.status}</span> : null}
+            </div>
           </div>
         </div>
-
-        {itemHref ? (
-          <Link
-            className="product-print-add-link"
-            to={itemHref}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <span>{item.title}</span>
-            <FiExternalLink aria-hidden="true" />
-          </Link>
+      </td>
+      <td className="product-print-info-cell">
+        {item.kind === "product_title" ? (
+          <span className="muted">-</span>
         ) : (
-          <strong>{item.title}</strong>
+          <MarkdownInfoPopover
+            label={`Ver descripcion rapida de ${item.title}`}
+            title={item.title}
+            markdown={descriptionMarkdown}
+            emptyLabel="Sin descripcion"
+          />
         )}
-
-        <p className="muted">{item.description}</p>
-      </div>
-    </article>
+      </td>
+      <td className="product-print-add-summary-cell">
+        <span>{item.description}</span>
+      </td>
+      <td className="product-print-add-actions-cell">
+        <button
+          type="button"
+          className="sm btn btn-primary"
+          onClick={() => onAdd(item)}
+        >
+          Agregar
+        </button>
+      </td>
+    </tr>
   );
 }
 
@@ -745,8 +875,14 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
   const [taskSources, setTaskSources] = React.useState<ProductPrintSourceTask[]>(initialTaskSources);
   const [printOptions, setPrintOptions] = React.useState<ProductPrintOptionsState>(initialLayout.options);
   const [items, setItems] = React.useState<ProductPrintItemState[]>(initialLayout.items);
-  const [expandedItemId, setExpandedItemId] = React.useState<string>(initialLayout.items[0]?.id ?? "");
+  const [expandedItemId, setExpandedItemId] = React.useState("");
   const [query, setQuery] = React.useState("");
+  const addFiltersRef = React.useRef<HTMLDivElement | null>(null);
+  const [addFiltersOpen, setAddFiltersOpen] = React.useState(false);
+  const [addKindFilter, setAddKindFilter] = React.useState<ProductPrintAddKindFilter>("all");
+  const [addTaskStatusFilter, setAddTaskStatusFilter] = React.useState("");
+  const [addTaskStoryFilter, setAddTaskStoryFilter] = React.useState("");
+  const [addSortBy, setAddSortBy] = React.useState<ProductPrintAddSortOption>(DEFAULT_PRODUCT_PRINT_ADD_SORT);
   const [layoutStatus, setLayoutStatus] = React.useState<LayoutStatus>("idle");
   const [layoutError, setLayoutError] = React.useState("");
   const [documentError, setDocumentError] = React.useState("");
@@ -778,9 +914,103 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
     }
   }, [expandedItemId, items]);
 
+  React.useEffect(() => {
+    if (!addFiltersOpen || typeof document === "undefined") {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (target instanceof Element && target.closest(".searchable-select-popover")) {
+        return;
+      }
+      if (!addFiltersRef.current?.contains(target)) {
+        setAddFiltersOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAddFiltersOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [addFiltersOpen]);
+
+  const addTaskStatusOptions = React.useMemo(() => {
+    const statuses = Array.from(new Set(
+      taskSources
+        .map((task) => task.status?.trim())
+        .filter((status): status is string => Boolean(status))
+    )).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+
+    return [
+      { value: "", label: "Todos" },
+      ...statuses.map((status) => ({ value: status, label: status }))
+    ];
+  }, [taskSources]);
+
+  const addTaskStoryOptions = React.useMemo(() => {
+    const storiesById = new Map<string, { value: string; label: string }>();
+
+    for (const task of taskSources) {
+      if (!task.storyId) {
+        continue;
+      }
+      storiesById.set(task.storyId, {
+        value: task.storyId,
+        label: task.storyTitle?.trim() || task.storyId
+      });
+    }
+
+    return [
+      { value: "", label: "Todas" },
+      ...Array.from(storiesById.values()).sort((left, right) =>
+        left.label.localeCompare(right.label, undefined, { sensitivity: "base" })
+      )
+    ];
+  }, [taskSources]);
+
+  const hasActiveAddFilters =
+    addKindFilter !== "all"
+    || addTaskStatusFilter !== ""
+    || addTaskStoryFilter !== ""
+    || addSortBy !== DEFAULT_PRODUCT_PRINT_ADD_SORT;
+
   const availableItems = React.useMemo(
-    () => buildAvailableItems(productSource, storySources, taskSources, items, printOptions, query),
-    [items, printOptions, productSource, query, storySources, taskSources]
+    () => buildAvailableItems(
+      productSource,
+      storySources,
+      taskSources,
+      items,
+      printOptions,
+      query,
+      addKindFilter,
+      addTaskStatusFilter,
+      addTaskStoryFilter,
+      addSortBy
+    ),
+    [
+      addKindFilter,
+      addSortBy,
+      addTaskStatusFilter,
+      addTaskStoryFilter,
+      items,
+      printOptions,
+      productSource,
+      query,
+      storySources,
+      taskSources
+    ]
   );
 
   const layoutSnapshot = React.useMemo(
@@ -836,6 +1066,24 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
   });
 
   const hasContentSaveInFlight = Object.values(contentState).some((entry) => entry?.saving);
+
+  const handleAddKindFilterChange = (value: string) => {
+    const nextFilter = productPrintKindFilterOptions.some((option) => option.value === value)
+      ? value as ProductPrintAddKindFilter
+      : "all";
+    setAddKindFilter(nextFilter);
+    if (nextFilter === "story" || nextFilter === "product") {
+      setAddTaskStatusFilter("");
+      setAddTaskStoryFilter("");
+    }
+  };
+
+  const clearAddFilters = () => {
+    setAddKindFilter("all");
+    setAddTaskStatusFilter("");
+    setAddTaskStoryFilter("");
+    setAddSortBy(DEFAULT_PRODUCT_PRINT_ADD_SORT);
+  };
 
   const handleToggleOption = (key: ProductPrintBooleanOptionKey) => {
     setDocumentError("");
@@ -1122,39 +1370,123 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
         </div>
 
         <div className="product-print-add-toolbar">
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Filtrar por nombre o tipo"
-            aria-label="Filtrar elementos para imprimir"
-          />
+          <label className="product-print-add-search">
+            <span>Buscar secciones</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Filtrar por nombre, tipo, historia o estado"
+              aria-label="Filtrar elementos para imprimir"
+            />
+          </label>
+          <div className="product-print-add-toolbar-actions">
+            <div ref={addFiltersRef} className="story-list-filters product-print-add-filters">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                aria-expanded={addFiltersOpen}
+                onClick={() => setAddFiltersOpen((current) => !current)}
+              >
+                <FiFilter aria-hidden="true" />
+                Filtros
+              </button>
+              {addFiltersOpen ? (
+                <div
+                  className="story-list-filter-popover product-print-add-filter-popover"
+                  role="dialog"
+                  aria-label="Filtros de secciones disponibles"
+                  style={productPrintAddFilterPopoverStyle}
+                >
+                  <label className="story-list-filter-field" style={productPrintAddFilterFieldStyle}>
+                    <span>Ordenar por</span>
+                    <SearchableSelect
+                      value={addSortBy}
+                      onChange={(value) => setAddSortBy(value as ProductPrintAddSortOption)}
+                      options={productPrintAddSortOptions}
+                      ariaLabel="Ordenar secciones disponibles"
+                    />
+                  </label>
+                  <label className="story-list-filter-field" style={productPrintAddFilterFieldStyle}>
+                    <span>Tipo</span>
+                    <SearchableSelect
+                      value={addKindFilter}
+                      onChange={handleAddKindFilterChange}
+                      options={productPrintKindFilterOptions}
+                      ariaLabel="Tipo de seccion"
+                    />
+                  </label>
+                  <label className="story-list-filter-field" style={productPrintAddFilterFieldStyle}>
+                    <span>Estado de tarea</span>
+                    <SearchableSelect
+                      value={addTaskStatusFilter}
+                      onChange={setAddTaskStatusFilter}
+                      options={addTaskStatusOptions}
+                      ariaLabel="Estado de tarea"
+                      disabled={addKindFilter === "story" || addKindFilter === "product"}
+                    />
+                  </label>
+                  <label className="story-list-filter-field" style={productPrintAddFilterFieldStyle}>
+                    <span>Historia de tarea</span>
+                    <SearchableSelect
+                      value={addTaskStoryFilter}
+                      onChange={setAddTaskStoryFilter}
+                      options={addTaskStoryOptions}
+                      ariaLabel="Historia de tarea"
+                      disabled={addKindFilter === "story" || addKindFilter === "product"}
+                    />
+                  </label>
+                  <div className="story-list-filter-actions" style={productPrintAddFilterActionsStyle}>
+                    <button type="button" className="btn btn-secondary" onClick={clearAddFilters} disabled={!hasActiveAddFilters}>
+                      Limpiar
+                    </button>
+                    <button type="button" className="btn btn-primary" onClick={() => setAddFiltersOpen(false)}>
+                      Aplicar
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            {hasActiveAddFilters ? <span className="pill">Filtros activos</span> : null}
+          </div>
         </div>
 
         <div className="product-print-add-scroller">
-          <div className="product-print-add-grid">
-            {availableItems.length === 0 ? (
-              <div className="product-print-empty-state">
-                <strong>No hay mas secciones para agregar.</strong>
-                <p className="muted">Prueba otro filtro o reactiva una opcion del documento para volver a ver elementos disponibles.</p>
-              </div>
-            ) : availableItems.map((entry) => {
-              const sourceDescription = entry.kind === "story" && entry.sourceId
-                ? storySources.find((story) => story.id === entry.sourceId)?.description ?? ""
-                : entry.kind === "task" && entry.sourceId
-                  ? taskSources.find((task) => task.id === entry.sourceId)?.description ?? ""
-                : entry.description;
+          {availableItems.length === 0 ? (
+            <div className="product-print-empty-state">
+              <strong>No hay mas secciones para agregar.</strong>
+              <p className="muted">Prueba otro filtro o reactiva una opcion del documento para volver a ver elementos disponibles.</p>
+            </div>
+          ) : (
+            <table className="table product-print-add-table">
+              <thead>
+                <tr>
+                  <th>Seccion</th>
+                  <th>Info</th>
+                  <th>Detalle</th>
+                  <th aria-label="Acciones"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {availableItems.map((entry) => {
+                  const sourceDescription = entry.kind === "story" && entry.sourceId
+                    ? storySources.find((story) => story.id === entry.sourceId)?.description ?? ""
+                    : entry.kind === "task" && entry.sourceId
+                      ? taskSources.find((task) => task.id === entry.sourceId)?.description ?? ""
+                    : entry.description;
 
-              return (
-                <ProductPrintAddCard
-                  key={entry.id}
-                  item={entry}
-                  productId={productSource.id}
-                  descriptionMarkdown={sourceDescription}
-                  onAdd={handleAddItem}
-                />
-              );
-            })}
-          </div>
+                  return (
+                    <ProductPrintAddTableRow
+                      key={entry.id}
+                      item={entry}
+                      productId={productSource.id}
+                      descriptionMarkdown={sourceDescription}
+                      onAdd={handleAddItem}
+                    />
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
 
       </section>

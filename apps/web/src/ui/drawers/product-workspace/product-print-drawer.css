@@ -175,11 +175,42 @@
 }
 
 .product-print-add-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.75rem;
   margin-bottom: 0.9rem;
 }
 
-.product-print-add-toolbar input {
+.product-print-add-search {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.product-print-add-search>span {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.product-print-add-search input {
   width: 100%;
+}
+
+.product-print-add-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.product-print-add-filters {
+  align-self: end;
+}
+
+.product-print-add-filter-popover {
+  right: 0;
 }
 
 .product-print-add-grid {
@@ -190,10 +221,82 @@
 }
 
 .product-print-add-scroller {
-  max-height: 90vh;
+  max-height: 70vh;
   overflow: auto;
-  padding-right: 0.15rem;
   scrollbar-gutter: stable;
+}
+
+.table.product-print-add-table {
+  width: 100%;
+  min-width: 52rem;
+  border-radius: 8px;
+  table-layout: fixed;
+}
+
+.product-print-add-table th,
+.product-print-add-table td {
+  vertical-align: middle;
+}
+
+.product-print-add-table th:nth-child(2),
+.product-print-add-table td:nth-child(2) {
+  width: var(--crud-icon-column-width);
+  min-width: var(--crud-icon-column-width);
+  max-width: var(--crud-icon-column-width);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.product-print-add-table th:last-child,
+.product-print-add-table td:last-child {
+  width: 7.2rem;
+  min-width: 7.2rem;
+  max-width: 7.2rem;
+  white-space: nowrap;
+}
+
+.product-print-add-table th:nth-child(3),
+.product-print-add-table td:nth-child(3) {
+  width: 36%;
+}
+
+.product-print-add-title-cell {
+  min-width: 18rem;
+}
+
+.product-print-add-title-row {
+  align-items: center;
+}
+
+.product-print-add-title-stack {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.product-print-add-title-stack strong,
+.product-print-add-title-stack .product-print-add-link {
+  min-width: 0;
+}
+
+.product-print-add-title-stack .product-print-add-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-print-add-meta:empty {
+  display: none;
+}
+
+.product-print-add-summary-cell {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.product-print-add-actions-cell {
+  text-align: right;
 }
 
 .product-print-add-item {
@@ -569,6 +672,14 @@
     flex-direction: column;
   }
 
+  .product-print-add-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .product-print-add-toolbar-actions {
+    justify-content: stretch;
+  }
+
   .product-print-sticky-actions {
     flex-direction: column;
     align-items: stretch;
@@ -584,6 +695,11 @@
   }
 
   .product-print-title-row .product-print-source-chip {
+    display: none;
+  }
+
+  .product-print-add-table th:nth-child(3),
+  .product-print-add-table td:nth-child(3) {
     display: none;
   }
 

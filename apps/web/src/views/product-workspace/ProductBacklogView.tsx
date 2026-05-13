@@ -137,6 +137,7 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const [openingTaskId, setOpeningTaskId] = React.useState("");
   const [updatingTaskId, setUpdatingTaskId] = React.useState("");
   const [actionError, setActionError] = React.useState("");
+  const filtersRef = React.useRef<HTMLDivElement | null>(null);
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [showClosedStories, setShowClosedStories] = React.useState(false);
   const [showClosedTasks, setShowClosedTasks] = React.useState(false);
@@ -171,6 +172,38 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
       // Ignore localStorage write failures and keep the in-memory fallback.
     }
   }, [productId, sortBy]);
+
+  React.useEffect(() => {
+    if (!filtersOpen || typeof document === "undefined") {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (target instanceof Element && target.closest(".searchable-select-popover")) {
+        return;
+      }
+      if (!filtersRef.current?.contains(target)) {
+        setFiltersOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFiltersOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [filtersOpen]);
 
   if (!productId) return null;
 
@@ -524,14 +557,8 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
               />
             </label>
             <div
+              ref={filtersRef}
               className="story-list-filters"
-              onBlurCapture={(event) => {
-                const nextTarget = event.relatedTarget;
-                if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
-                  return;
-                }
-                setFiltersOpen(false);
-              }}
             >
               <button
                 type="button"
