@@ -14,7 +14,6 @@ import { SearchableSelect, buildSearchableSelectOptions } from "../../Searchable
 import { ActivityTimeline, type ActivityEntry, type ActivityListResult } from "./ActivityTimeline";
 import { TaskCollaborationPanel, type TaskCollaborationDetail } from "./TaskCollaborationPanel";
 import { RichDescriptionField, type RichDescriptionFieldHandle } from "./RichDescriptionField";
-import { TaskCompletionDialog } from "./TaskCompletionDialog";
 import { StoryUpsertionDrawer } from "./StoryUpsertionDrawer";
 import { isStoryClosedStatus } from "../../../views/product-workspace/ProductWorkspaceViewShared";
 import "./task-upsertion-form.css";
@@ -417,7 +416,6 @@ export function TaskUpsertionForm(props: {
   const descriptionEditorRef = React.useRef<RichDescriptionFieldHandle | null>(null);
   const [error, setError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
-  const [completionDialogOpen, setCompletionDialogOpen] = React.useState(false);
   const [catalog, setCatalog] = React.useState<DeferredTaskDrawerCatalog>(() => ({
     stories: initialStories,
     sprints: initialSprints,
@@ -532,7 +530,6 @@ export function TaskUpsertionForm(props: {
 
   React.useEffect(() => {
     setError("");
-    setCompletionDialogOpen(false);
   }, [task, defaultStoryId, fixedSprintId, defaultStatus, statusOptions]);
 
   React.useEffect(() => {
@@ -656,11 +653,6 @@ export function TaskUpsertionForm(props: {
 
     if (!task && payload.effortPoints === undefined) {
       setError("Debes elegir puntos de esfuerzo.");
-      return;
-    }
-
-    if (status === "Done" && payload.actualHours === undefined) {
-      setCompletionDialogOpen(true);
       return;
     }
 
@@ -1024,7 +1016,7 @@ export function TaskUpsertionForm(props: {
               </label>
             ) : (
               <div className="task-hours-hint muted">
-                Al completar la tarea se pediran las horas reales para comparar estimacion y ejecucion.
+                Las horas reales son opcionales y pueden cargarse al cerrar o actualizarse despues.
               </div>
             )}
           </div>
@@ -1114,18 +1106,6 @@ export function TaskUpsertionForm(props: {
           />
         ) : null}
       </div>
-
-      <TaskCompletionDialog
-        open={completionDialogOpen}
-        taskTitle={title.trim() || task?.title || "esta tarea"}
-        initialHours={actualHours}
-        onCancel={() => setCompletionDialogOpen(false)}
-        onConfirm={(hours) => {
-          setCompletionDialogOpen(false);
-          setForm((current) => ({ ...current, actualHours: String(hours) }));
-          void persistTask(hours);
-        }}
-      />
     </>
   );
 }

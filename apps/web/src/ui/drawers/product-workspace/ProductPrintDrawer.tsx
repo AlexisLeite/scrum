@@ -20,6 +20,7 @@ import {
   FiExternalLink,
   FiFileText,
   FiInfo,
+  FiList,
   FiMenu,
   FiPrinter,
   FiSave,
@@ -28,21 +29,29 @@ import {
 } from "react-icons/fi";
 import { Link } from "react-router-dom";
 import { ProductController } from "../../../controllers";
-import { productStoryDefinitionPath } from "../../../routes/product-routes";
+import { productStoryDefinitionPath, productTaskDefinitionPath } from "../../../routes/product-routes";
 import { useRootStore } from "../../../stores/root-store";
 import {
   buildProductDescriptionPrintItem,
   buildProductPrintLayoutSnapshot,
   buildProductTitlePrintItem,
   buildStoryPrintItem,
+  buildTaskPrintItem,
   hydrateProductPrintLayout,
+  PRODUCT_PRINT_TOC_LEVELS,
   supportsEditableMarkdown,
   type ProductPrintItemState,
   type ProductPrintOptionsState,
-  type ProductPrintSourceStory
+  type ProductPrintSourceStory,
+  type ProductPrintSourceTask
 } from "../../../util/product-print-layout";
 import { downloadProductDocument, printProductDocument } from "../../../util/product-print-pdf";
-import { normalizeSearchValue, type ProductItem, type StoryItem } from "../../../views/product-workspace/ProductWorkspaceViewShared";
+import {
+  normalizeSearchValue,
+  type ProductItem,
+  type StoryItem,
+  type StoryTaskSummary
+} from "../../../views/product-workspace/ProductWorkspaceViewShared";
 import { Drawer, type DrawerRenderContext } from "../Drawer";
 import { DrawerErrorBanner } from "../DrawerErrorBanner";
 import type { ProductPrintDrawerRouteDescriptor } from "../drawer-route-state";
@@ -53,7 +62,7 @@ import "./product-print-drawer.css";
 
 type ProductPrintDrawerOptions = {
   product: ProductItem;
-  stories: Array<Pick<StoryItem, "id" | "title" | "description">>;
+  stories: Array<Pick<StoryItem, "id" | "title" | "description"> & { tasks?: StoryTaskSummary[] }>;
 };
 
 type AddableItem = {
@@ -66,6 +75,7 @@ type AddableItem = {
 
 type LayoutStatus = "idle" | "saving" | "saved" | "error";
 type DocumentAction = "idle" | "printing" | "downloading";
+type ProductPrintBooleanOptionKey = Exclude<keyof ProductPrintOptionsState, "tocLevels">;
 
 type ContentPersistenceState = {
   saving: boolean;
@@ -87,13 +97,18 @@ function kindLabel(kind: ProductPrintItemState["kind"]) {
       return "Titulo";
     case "product_description":
       return "Descripcion";
+    case "task":
+      return "Tarea";
     default:
       return "Historia";
   }
 }
 
 function editableEntityLabel(item: ProductPrintItemState) {
-  return item.kind === "product_description" ? "producto" : "historia";
+  if (item.kind === "product_description") {
+    return "producto";
+  }
+  return item.kind === "task" ? "tarea" : "historia";
 }
 
 function stripMarkdown(value: string) {
@@ -134,6 +149,7 @@ function syncItemsWithOptions(
   const titleItem = items.find((item) => item.kind === "product_title");
   const descriptionItem = items.find((item) => item.kind === "product_description");
   const storyItems = options.stories ? items.filter((item) => item.kind === "story") : [];
+  const taskItems = options.tasks ? items.filter((item) => item.kind === "task") : [];
 
   if (options.title) {
     nextItems.push(titleItem ?? buildProductTitlePrintItem(product));
@@ -143,12 +159,13 @@ function syncItemsWithOptions(
     nextItems.push(descriptionItem ?? buildProductDescriptionPrintItem(product));
   }
 
-  return [...nextItems, ...storyItems];
+  return [...nextItems, ...storyItems, ...taskItems];
 }
 
 function buildAvailableItems(
   product: ProductItem,
   stories: ProductPrintSourceStory[],
+  tasks: ProductPrintSourceTask[],
   items: ProductPrintItemState[],
   options: ProductPrintOptionsState,
   query: string
@@ -191,12 +208,47 @@ function buildAvailableItems(
     }
   }
 
+  if (options.tasks) {
+    for (const task of tasks) {
+      const id = `task:${task.id}`;
+      if (existingIds.has(id)) {
+        continue;
+      }
+      candidates.push({
+        id,
+        kind: "task",
+        title: task.title,
+        sourceId: task.id,
+        description: [
+          task.storyTitle ? `Historia: ${task.storyTitle}` : "",
+          task.status ? `Estado: ${task.status}` : "",
+          summarizeMarkdown(task.description ?? "", 120)
+        ].filter(Boolean).join(" · ")
+      });
+    }
+  }
+
   if (!normalizedQuery) {
     return candidates;
   }
 
   return candidates.filter((candidate) =>
     normalizeSearchValue(`${candidate.title}\n${candidate.description}\n${candidate.kind}`).includes(normalizedQuery)
+  );
+}
+
+function buildTaskSourcesFromStories(
+  stories: Array<Pick<StoryItem, "id" | "title" | "description"> & { tasks?: StoryTaskSummary[] }>
+): ProductPrintSourceTask[] {
+  return stories.flatMap((story) =>
+    (story.tasks ?? []).map((task) => ({
+      id: task.id,
+      title: task.title?.trim() || "Tarea sin titulo",
+      description: task.description ?? null,
+      storyId: story.id,
+      storyTitle: story.title,
+      status: task.status ?? null
+    }))
   );
 }
 
@@ -403,9 +455,11 @@ function ProductPrintAddCard(props: {
   onAdd: (item: AddableItem) => void;
 }) {
   const { item, productId, descriptionMarkdown, onAdd } = props;
-  const storyHref = item.kind === "story" && item.sourceId
+  const itemHref = item.kind === "story" && item.sourceId
     ? productStoryDefinitionPath(productId, item.sourceId)
-    : "";
+    : item.kind === "task" && item.sourceId
+      ? productTaskDefinitionPath(productId, item.sourceId)
+      : "";
 
   return (
     <article className="product-print-add-item">
@@ -415,7 +469,7 @@ function ProductPrintAddCard(props: {
             <span className="pill product-print-kind-pill">{kindLabel(item.kind)}</span>
           </div>
           <div className="row-actions compact product-print-add-actions">
-            {item.kind === "story" && item.sourceId ? (
+            {(item.kind === "story" || item.kind === "task") && item.sourceId ? (
               <MarkdownInfoPopover
                 label={`Ver descripcion rapida de ${item.title}`}
                 title={item.title}
@@ -433,10 +487,10 @@ function ProductPrintAddCard(props: {
           </div>
         </div>
 
-        {storyHref ? (
+        {itemHref ? (
           <Link
             className="product-print-add-link"
-            to={storyHref}
+            to={itemHref}
             target="_blank"
             rel="noreferrer"
           >
@@ -603,6 +657,8 @@ function SortablePrintItemRow(props: {
                     ? { documentType: "PRODUCT_DESCRIPTION", entityId: productId }
                     : item.kind === "story" && item.sourceId
                       ? { documentType: "STORY_DESCRIPTION", entityId: item.sourceId }
+                      : item.kind === "task" && item.sourceId
+                        ? { documentType: "TASK_DESCRIPTION", entityId: item.sourceId }
                       : undefined
                 }
               />
@@ -668,12 +724,25 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
   const { options, close, drawerController, drawerId } = props;
   const store = useRootStore();
   const controller = React.useMemo(() => new ProductController(store), [store]);
+  const initialStorySources = React.useMemo<ProductPrintSourceStory[]>(
+    () => options.stories.map((story) => ({
+      id: story.id,
+      title: story.title,
+      description: story.description
+    })),
+    [options.stories]
+  );
+  const initialTaskSources = React.useMemo(
+    () => buildTaskSourcesFromStories(options.stories),
+    [options.stories]
+  );
   const initialLayout = React.useMemo(
-    () => hydrateProductPrintLayout(options.product, options.stories),
-    [options.product, options.stories]
+    () => hydrateProductPrintLayout(options.product, initialStorySources, initialTaskSources),
+    [initialStorySources, initialTaskSources, options.product]
   );
   const [productSource, setProductSource] = React.useState<ProductItem>(options.product);
-  const [storySources, setStorySources] = React.useState<ProductPrintSourceStory[]>(options.stories);
+  const [storySources, setStorySources] = React.useState<ProductPrintSourceStory[]>(initialStorySources);
+  const [taskSources, setTaskSources] = React.useState<ProductPrintSourceTask[]>(initialTaskSources);
   const [printOptions, setPrintOptions] = React.useState<ProductPrintOptionsState>(initialLayout.options);
   const [items, setItems] = React.useState<ProductPrintItemState[]>(initialLayout.items);
   const [expandedItemId, setExpandedItemId] = React.useState<string>(initialLayout.items[0]?.id ?? "");
@@ -710,8 +779,8 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
   }, [expandedItemId, items]);
 
   const availableItems = React.useMemo(
-    () => buildAvailableItems(productSource, storySources, items, printOptions, query),
-    [items, printOptions, productSource, query, storySources]
+    () => buildAvailableItems(productSource, storySources, taskSources, items, printOptions, query),
+    [items, printOptions, productSource, query, storySources, taskSources]
   );
 
   const layoutSnapshot = React.useMemo(
@@ -768,13 +837,24 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
 
   const hasContentSaveInFlight = Object.values(contentState).some((entry) => entry?.saving);
 
-  const handleToggleOption = (key: keyof ProductPrintOptionsState) => {
+  const handleToggleOption = (key: ProductPrintBooleanOptionKey) => {
     setDocumentError("");
     setLayoutError("");
     setPrintOptions((current) => {
       const next = { ...current, [key]: !current[key] };
       setItems((draft) => syncItemsWithOptions(draft, next, productSource));
       return next;
+    });
+  };
+
+  const handleToggleTocLevel = (level: ProductPrintOptionsState["tocLevels"][number]) => {
+    setDocumentError("");
+    setLayoutError("");
+    setPrintOptions((current) => {
+      const nextLevels = current.tocLevels.includes(level)
+        ? current.tocLevels.filter((entry) => entry !== level)
+        : [...current.tocLevels, level].sort((left, right) => left - right);
+      return { ...current, tocLevels: nextLevels };
     });
   };
 
@@ -788,6 +868,14 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
               description: entry.description
             }
           )
+        : entry.kind === "task"
+          ? buildTaskPrintItem(
+              taskSources.find((task) => task.id === (entry.sourceId ?? entry.id.replace(/^task:/, ""))) ?? {
+                id: entry.sourceId ?? entry.id.replace(/^task:/, ""),
+                title: entry.title,
+                description: entry.description
+              }
+            )
         : entry.kind === "product_title"
           ? buildProductTitlePrintItem(productSource)
           : buildProductDescriptionPrintItem(productSource);
@@ -879,9 +967,32 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
             ? { ...story, title: updatedStory.title, description: updatedStory.description }
             : story
         ));
+        setTaskSources((current) => current.map((task) =>
+          task.storyId === updatedStory.id
+            ? { ...task, storyTitle: updatedStory.title }
+            : task
+        ));
         setItems((current) => current.map((entry) =>
           entry.id === item.id
             ? { ...entry, markdown: nextMarkdown, sourceTitle: updatedStory.title }
+            : entry
+        ));
+      } else if (item.kind === "task" && item.sourceId) {
+        const updatedTask = await controller.updateTask(item.sourceId, {
+          description: nextMarkdown
+        });
+        setTaskSources((current) => current.map((task) =>
+          task.id === updatedTask.id
+            ? {
+                ...task,
+                title: updatedTask.title,
+                description: updatedTask.description
+              }
+            : task
+        ));
+        setItems((current) => current.map((entry) =>
+          entry.id === item.id
+            ? { ...entry, markdown: nextMarkdown, sourceTitle: updatedTask.title }
             : entry
         ));
       }
@@ -958,6 +1069,11 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
       return;
     }
 
+    if (printOptions.includeToc && printOptions.tocLevels.length === 0) {
+      setDocumentError("Selecciona al menos un nivel para la tabla de contenidos.");
+      return;
+    }
+
     setDocumentError("");
     setAction(mode);
 
@@ -965,12 +1081,16 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
       if (mode === "printing") {
         await printProductDocument({
           productName: productSource.name,
-          items
+          items,
+          includeToc: printOptions.includeToc,
+          tocLevels: printOptions.tocLevels
         });
       } else {
         await downloadProductDocument({
           productName: productSource.name,
-          items
+          items,
+          includeToc: printOptions.includeToc,
+          tocLevels: printOptions.tocLevels
         });
       }
     } catch (error) {
@@ -990,38 +1110,13 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
 
   return (
     <div className="product-print-drawer">
-      <section className="product-print-hero">
-        <div>
-          <p className="product-print-eyebrow">Documento vivo del producto</p>
-          <h4>Agrega historias, edita cada seccion en contexto y genera el PDF sin salir de esta vista.</h4>
-          <p className="muted product-print-hero-copy">
-            Primero eliges que entra en el documento. Luego ajustas titulo, jerarquia y cuerpo directamente en cada bloque. La composicion se recuerda para futuras impresiones.
-          </p>
-        </div>
-
-        <div className="product-print-hero-side">
-          <div className="product-print-status-cluster">
-            <span className={`product-print-status-pill is-${layoutStatus}`}>
-              {layoutStatus === "saving" ? <FiClock aria-hidden="true" /> : layoutStatus === "saved" ? <FiCheck aria-hidden="true" /> : layoutStatus === "error" ? <FiAlertTriangle aria-hidden="true" /> : <FiFileText aria-hidden="true" />}
-              {layoutStatusLabel}
-            </span>
-            {hasUnsavedContentChanges ? (
-              <span className="product-print-status-pill is-warning">
-                <FiAlertTriangle aria-hidden="true" />
-                Hay contenido sin guardar
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </section>
-
       <DrawerErrorBanner messages={[layoutError, documentError, contentError]} />
 
       <section className="product-print-add-panel" aria-label="Agregar elementos al documento">
         <div className="product-print-section-head">
           <div>
             <h5>1. Elegir secciones</h5>
-            <p className="muted">Busca historias y agrégalas al documento. Los elementos fijos del producto también aparecen aquí cuando estén disponibles.</p>
+            <p className="muted">Busca historias, tareas y elementos fijos del producto para agregarlos al documento.</p>
           </div>
           <span className="pill">{availableItems.length} disponibles</span>
         </div>
@@ -1043,8 +1138,10 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
                 <p className="muted">Prueba otro filtro o reactiva una opcion del documento para volver a ver elementos disponibles.</p>
               </div>
             ) : availableItems.map((entry) => {
-              const storyDescription = entry.kind === "story" && entry.sourceId
+              const sourceDescription = entry.kind === "story" && entry.sourceId
                 ? storySources.find((story) => story.id === entry.sourceId)?.description ?? ""
+                : entry.kind === "task" && entry.sourceId
+                  ? taskSources.find((task) => task.id === entry.sourceId)?.description ?? ""
                 : entry.description;
 
               return (
@@ -1052,7 +1149,7 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
                   key={entry.id}
                   item={entry}
                   productId={productSource.id}
-                  descriptionMarkdown={storyDescription}
+                  descriptionMarkdown={sourceDescription}
                   onAdd={handleAddItem}
                 />
               );
@@ -1070,6 +1167,16 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
           </div>
           <div className="product-print-toolbar">
             <span className="pill">{items.length} secciones</span>
+            <span className={`product-print-status-pill is-${layoutStatus}`}>
+              {layoutStatus === "saving" ? <FiClock aria-hidden="true" /> : layoutStatus === "saved" ? <FiCheck aria-hidden="true" /> : layoutStatus === "error" ? <FiAlertTriangle aria-hidden="true" /> : <FiFileText aria-hidden="true" />}
+              {layoutStatusLabel}
+            </span>
+            {hasUnsavedContentChanges ? (
+              <span className="product-print-status-pill is-warning">
+                <FiAlertTriangle aria-hidden="true" />
+                Hay contenido sin guardar
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -1090,6 +1197,49 @@ const ProductPrintDrawerBody = observer(function ProductPrintDrawerBody(props: {
             />
             <span>Descripcion</span>
           </label>
+          <label className={`product-print-option ${printOptions.stories ? "is-active" : ""}`.trim()}>
+            <input
+              type="checkbox"
+              checked={printOptions.stories}
+              onChange={() => handleToggleOption("stories")}
+            />
+            <span>Historias</span>
+          </label>
+          <label className={`product-print-option ${printOptions.tasks ? "is-active" : ""}`.trim()}>
+            <input
+              type="checkbox"
+              checked={printOptions.tasks}
+              onChange={() => handleToggleOption("tasks")}
+            />
+            <span>Tareas</span>
+          </label>
+        </div>
+
+        <div className="product-print-toc-panel">
+          <label className={`product-print-option ${printOptions.includeToc ? "is-active" : ""}`.trim()}>
+            <input
+              type="checkbox"
+              checked={printOptions.includeToc}
+              onChange={() => handleToggleOption("includeToc")}
+            />
+            <FiList aria-hidden="true" />
+            <span>Tabla de contenidos</span>
+          </label>
+          <fieldset className="product-print-toc-levels" disabled={!printOptions.includeToc}>
+            <legend>Niveles de encabezado</legend>
+            <div className="product-print-toc-level-grid">
+              {PRODUCT_PRINT_TOC_LEVELS.map((level) => (
+                <label key={level} className={printOptions.tocLevels.includes(level) ? "is-selected" : ""}>
+                  <input
+                    type="checkbox"
+                    checked={printOptions.tocLevels.includes(level)}
+                    onChange={() => handleToggleTocLevel(level)}
+                  />
+                  <span>{`H${level}`}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
         </div>
 
         {items.length === 0 ? (

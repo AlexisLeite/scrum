@@ -7,7 +7,6 @@ import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers
 import { productCollectionScope, storyCollectionScope, useRootStore } from "../../stores/root-store";
 import { SearchableSelect, buildSearchableSelectOptions } from "../../ui/SearchableSelect";
 import { MarkdownPreview } from "../../ui/drawers/product-workspace/MarkdownPreview";
-import { TaskCompletionDialog } from "../../ui/drawers/product-workspace/TaskCompletionDialog";
 import { TaskUpsertionDrawer } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import { markdownWithTitle } from "../../util/markdownWithTitle";
 import {
@@ -36,7 +35,6 @@ export const StoryTasksView = observer(function StoryTasksView() {
   const [formError, setFormError] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [updatingTaskId, setUpdatingTaskId] = React.useState("");
-  const [completionRequest, setCompletionRequest] = React.useState<{ taskId: string; title: string } | null>(null);
   const storyScopeKey = storyId ? storyCollectionScope(storyId) : null;
   const productScopeKey = productId ? productCollectionScope(productId) : null;
   const tasks = store.tasks.getItems(storyScopeKey) as TaskItem[];
@@ -188,10 +186,6 @@ export const StoryTasksView = observer(function StoryTasksView() {
                     value={task.status}
                     disabled={!canManageTasks || updatingTaskId === task.id}
                     onChange={(nextStatus) => {
-                      if (nextStatus === "Done" && task.status !== "Done" && task.actualHours == null) {
-                        setCompletionRequest({ taskId: task.id, title: task.title });
-                        return;
-                      }
                       void updateTaskStatus(task, nextStatus, task.actualHours ?? undefined);
                     }}
                     options={buildSearchableSelectOptions(statusOptions)}
@@ -225,18 +219,6 @@ export const StoryTasksView = observer(function StoryTasksView() {
           </tbody>
         </table>
       </section>
-      <TaskCompletionDialog
-        open={Boolean(completionRequest)}
-        taskTitle={completionRequest?.title ?? "esta tarea"}
-        onCancel={() => setCompletionRequest(null)}
-        onConfirm={(hours) => {
-          const task = tasks.find((entry) => entry.id === completionRequest?.taskId);
-          setCompletionRequest(null);
-          if (task) {
-            void updateTaskStatus(task, "Done", hours);
-          }
-        }}
-      />
     </div>
   );
 });

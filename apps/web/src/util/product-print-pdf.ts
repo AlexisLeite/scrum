@@ -1938,11 +1938,15 @@ async function loadPdfMake() {
 export function buildProductPrintDocument(args: {
   productName: string;
   items: ProductPrintDocumentItem[];
+  includeToc?: boolean;
+  tocLevels?: MarkdownPrintTocLevel[];
   now?: Date;
   mermaidSvgBySource?: ReadonlyMap<string, string>;
 }): TDocumentDefinitions {
   resetPrintBlockIds();
   const now = args.now ?? new Date();
+  const includeToc = args.includeToc ?? true;
+  const tocLevels = normalizeMarkdownPrintTocLevels(args.tocLevels);
   const sections = args.items.flatMap((item) => {
     const shiftedMarkdown = shiftMarkdownHeadings(buildSectionMarkdown(item), item.level);
     const tokens = marked.lexer(shiftedMarkdown, {
@@ -1951,7 +1955,8 @@ export function buildProductPrintDocument(args: {
     });
 
     return renderBlockTokens(tokens, {
-      pendingTocItem: true,
+      pendingTocItem: false,
+      tocHeadingLevels: includeToc ? new Set<number>(tocLevels) : undefined,
       mermaidSvgBySource: args.mermaidSvgBySource
     });
   });
@@ -1976,11 +1981,15 @@ export function buildProductPrintDocument(args: {
         margin: [0, 220, 0, 0],
         pageBreak: "after"
       },
-      {
-        text: " ",
-        pageBreak: "after"
-      },
-      buildTableOfContentsPage(),
+      ...(includeToc
+        ? [
+            {
+              text: " ",
+              pageBreak: "after"
+            },
+            buildTableOfContentsPage()
+          ]
+        : []),
       ...sections
     ],
     styles: PRINT_DOCUMENT_STYLES,
@@ -2087,6 +2096,8 @@ export function buildMarkdownPrintDocument(args: {
 export async function printProductDocument(args: {
   productName: string;
   items: ProductPrintDocumentItem[];
+  includeToc?: boolean;
+  tocLevels?: MarkdownPrintTocLevel[];
 }) {
   const pdfMake = await loadPdfMake();
   const mermaidSvgBySource = await renderPrintMermaidSvgs(args.items.map((item) => shiftMarkdownHeadings(buildSectionMarkdown(item), item.level)));
@@ -2118,6 +2129,8 @@ export async function printMarkdownDocument(args: {
 export async function downloadProductDocument(args: {
   productName: string;
   items: ProductPrintDocumentItem[];
+  includeToc?: boolean;
+  tocLevels?: MarkdownPrintTocLevel[];
 }) {
   const pdfMake = await loadPdfMake();
   const mermaidSvgBySource = await renderPrintMermaidSvgs(args.items.map((item) => shiftMarkdownHeadings(buildSectionMarkdown(item), item.level)));

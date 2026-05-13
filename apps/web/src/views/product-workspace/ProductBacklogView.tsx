@@ -5,7 +5,6 @@ import { ProductController } from "../../controllers";
 import { useProductAssignableUsers } from "../../hooks/useProductAssignableUsers";
 import { productCollectionScope, useRootStore } from "../../stores/root-store";
 import { SearchableSelect } from "../../ui/SearchableSelect";
-import { TaskCompletionDialog } from "../../ui/drawers/product-workspace/TaskCompletionDialog";
 import { StoryUpsertionDrawer } from "../../ui/drawers/product-workspace/StoryUpsertionDrawer";
 import { TaskUpsertionDrawer } from "../../ui/drawers/product-workspace/TaskUpsertionDrawer";
 import {
@@ -147,7 +146,6 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
   const [taskCreatedFrom, setTaskCreatedFrom] = React.useState("");
   const [taskCreatedTo, setTaskCreatedTo] = React.useState("");
   const [storyStatusActionId, setStoryStatusActionId] = React.useState("");
-  const [completionRequest, setCompletionRequest] = React.useState<{ taskId: string; title: string } | null>(null);
   const [movingTaskId, setMovingTaskId] = React.useState("");
   const productScopeKey = productId ? productCollectionScope(productId) : null;
 
@@ -222,14 +220,6 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
     taskStatusFilter !== "" ||
     taskCreatedFrom !== "" ||
     taskCreatedTo !== "";
-  const backlogTaskById = React.useMemo(
-    () =>
-      new Map(
-        stories.flatMap((story) => (story.tasks ?? []).map((task) => [task.id, task] as const))
-      ),
-    [stories]
-  );
-
   const visibleStories = React.useMemo<StoryWithSearchState[]>(() => {
     return stories
       .filter((story) => showClosedStories || !isStoryClosedStatus(story.status))
@@ -331,14 +321,6 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
 
   const requestBacklogTaskStatusChange = (task: StoryTaskSummary, nextStatus: string) => {
     if (!canEditTasks || nextStatus === task.status) {
-      return;
-    }
-
-    if (nextStatus === "Done" && task.actualHours == null) {
-      setCompletionRequest({
-        taskId: task.id,
-        title: task.title?.trim() || "esta tarea"
-      });
       return;
     }
 
@@ -683,18 +665,6 @@ export const ProductBacklogView = observer(function ProductBacklogView() {
           ) : null}
         </div>
       </section>
-      <TaskCompletionDialog
-        open={Boolean(completionRequest)}
-        taskTitle={completionRequest?.title ?? "esta tarea"}
-        onCancel={() => setCompletionRequest(null)}
-        onConfirm={(hours) => {
-          const task = completionRequest ? backlogTaskById.get(completionRequest.taskId) : undefined;
-          setCompletionRequest(null);
-          if (task) {
-            void updateBacklogTaskStatus(task, "Done", hours);
-          }
-        }}
-      />
     </div>
   );
 });

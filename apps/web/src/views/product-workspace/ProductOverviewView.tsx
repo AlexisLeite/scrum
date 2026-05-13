@@ -210,7 +210,8 @@ export const ProductOverviewView = observer(function ProductOverviewView() {
   const printableStories = stories.map((story) => ({
     id: story.id,
     title: story.title,
-    description: story.description
+    description: story.description,
+    tasks: story.tasks ?? []
   }));
 
   return (

@@ -1,7 +1,8 @@
 import type {
   ProductPrintLayoutDto,
   ProductPrintLayoutItemDto,
-  ProductPrintLayoutItemKind
+  ProductPrintLayoutItemKind,
+  ProductPrintTocLevel
 } from "@scrum/contracts";
 import type { ProductPrintDocumentItem } from "./product-print-pdf";
 
@@ -18,10 +19,21 @@ export type ProductPrintSourceStory = {
   description: string | null;
 };
 
+export type ProductPrintSourceTask = {
+  id: string;
+  title: string;
+  description: string | null;
+  storyId?: string | null;
+  storyTitle?: string | null;
+  status?: string | null;
+};
+
 export type ProductPrintItemState = ProductPrintDocumentItem & {
   kind: ProductPrintLayoutItemKind;
   sourceId?: string;
   sourceTitle: string;
+  sourceStoryId?: string;
+  sourceStoryTitle?: string;
 };
 
 export type ProductPrintOptionsState = ProductPrintLayoutDto["options"];
@@ -35,8 +47,13 @@ export type HydratedProductPrintLayout = {
 export const DEFAULT_PRODUCT_PRINT_OPTIONS: ProductPrintOptionsState = {
   title: true,
   description: true,
-  stories: true
+  stories: true,
+  tasks: true,
+  includeToc: true,
+  tocLevels: [1, 2, 3]
 };
+
+export const PRODUCT_PRINT_TOC_LEVELS: ProductPrintTocLevel[] = [1, 2, 3, 4, 5, 6];
 
 function clampLevel(level: number) {
   return Math.max(1, Math.min(6, Math.trunc(level) || 1));
@@ -48,7 +65,19 @@ function normalizeTitle(value: string | null | undefined, fallback: string) {
 }
 
 function isKind(value: unknown): value is ProductPrintLayoutItemKind {
-  return value === "product_title" || value === "product_description" || value === "story";
+  return value === "product_title" || value === "product_description" || value === "story" || value === "task";
+}
+
+function normalizeTocLevels(raw: unknown): ProductPrintTocLevel[] {
+  const values = Array.isArray(raw) ? raw : DEFAULT_PRODUCT_PRINT_OPTIONS.tocLevels;
+  const levels = new Set<ProductPrintTocLevel>();
+
+  for (const value of values) {
+    const level = clampLevel(typeof value === "number" ? value : Number(value)) as ProductPrintTocLevel;
+    levels.add(level);
+  }
+
+  return [...levels].sort((left, right) => left - right);
 }
 
 function normalizeLayoutItem(raw: unknown): ProductPrintLayoutItemDto | null {
@@ -100,7 +129,10 @@ export function normalizeProductPrintLayout(raw: unknown): ProductPrintLayoutDto
     options: {
       title: typeof rawOptions.title === "boolean" ? rawOptions.title : DEFAULT_PRODUCT_PRINT_OPTIONS.title,
       description: typeof rawOptions.description === "boolean" ? rawOptions.description : DEFAULT_PRODUCT_PRINT_OPTIONS.description,
-      stories: typeof rawOptions.stories === "boolean" ? rawOptions.stories : DEFAULT_PRODUCT_PRINT_OPTIONS.stories
+      stories: typeof rawOptions.stories === "boolean" ? rawOptions.stories : DEFAULT_PRODUCT_PRINT_OPTIONS.stories,
+      tasks: typeof rawOptions.tasks === "boolean" ? rawOptions.tasks : DEFAULT_PRODUCT_PRINT_OPTIONS.tasks,
+      includeToc: typeof rawOptions.includeToc === "boolean" ? rawOptions.includeToc : DEFAULT_PRODUCT_PRINT_OPTIONS.includeToc,
+      tocLevels: normalizeTocLevels(rawOptions.tocLevels)
     },
     sections
   };
@@ -149,6 +181,23 @@ export function buildStoryPrintItem(
   };
 }
 
+export function buildTaskPrintItem(
+  task: ProductPrintSourceTask,
+  overrides?: Partial<ProductPrintLayoutItemDto>
+): ProductPrintItemState {
+  return {
+    id: overrides?.id ?? `task:${task.id}`,
+    kind: "task",
+    sourceId: overrides?.sourceId ?? task.id,
+    title: normalizeTitle(overrides?.title, task.title),
+    markdown: task.description ?? "",
+    level: clampLevel(overrides?.level ?? 3),
+    sourceTitle: task.title,
+    sourceStoryId: task.storyId ?? undefined,
+    sourceStoryTitle: task.storyTitle ?? undefined
+  };
+}
+
 export function buildProductPrintLayoutSnapshot(
   options: ProductPrintOptionsState,
   items: ProductPrintItemState[]
@@ -158,7 +207,10 @@ export function buildProductPrintLayoutSnapshot(
     options: {
       title: Boolean(options.title),
       description: Boolean(options.description),
-      stories: Boolean(options.stories)
+      stories: Boolean(options.stories),
+      tasks: Boolean(options.tasks),
+      includeToc: Boolean(options.includeToc),
+      tocLevels: normalizeTocLevels(options.tocLevels)
     },
     sections: items.map((item) => ({
       id: item.id,
@@ -172,10 +224,12 @@ export function buildProductPrintLayoutSnapshot(
 
 export function hydrateProductPrintLayout(
   product: ProductPrintSourceProduct,
-  stories: ProductPrintSourceStory[]
+  stories: ProductPrintSourceStory[],
+  tasks: ProductPrintSourceTask[] = []
 ): HydratedProductPrintLayout {
   const persistedLayout = normalizeProductPrintLayout(product.printLayoutJson);
   const storiesById = new Map(stories.map((story) => [story.id, story]));
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
 
   if (!persistedLayout) {
     const items = [
@@ -211,14 +265,29 @@ export function hydrateProductPrintLayout(
     }
 
     const sourceId = section.sourceId ?? section.id.replace(/^story:/, "");
-    const story = storiesById.get(sourceId);
-    if (!story) {
+    if (section.kind === "story") {
+      const story = storiesById.get(sourceId);
+      if (!story) {
+        continue;
+      }
+
+      items.push(buildStoryPrintItem(story, {
+        ...section,
+        sourceId
+      }));
+      seenIds.add(section.id);
       continue;
     }
 
-    items.push(buildStoryPrintItem(story, {
+    const taskSourceId = section.sourceId ?? section.id.replace(/^task:/, "");
+    const task = tasksById.get(taskSourceId);
+    if (!task) {
+      continue;
+    }
+
+    items.push(buildTaskPrintItem(task, {
       ...section,
-      sourceId
+      sourceId: taskSourceId
     }));
     seenIds.add(section.id);
   }
@@ -231,5 +300,5 @@ export function hydrateProductPrintLayout(
 }
 
 export function supportsEditableMarkdown(item: ProductPrintItemState | null | undefined) {
-  return item?.kind === "product_description" || item?.kind === "story";
+  return item?.kind === "product_description" || item?.kind === "story" || item?.kind === "task";
 }

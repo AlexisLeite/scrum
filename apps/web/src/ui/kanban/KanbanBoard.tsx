@@ -17,7 +17,6 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { SearchableSelect, buildSearchableSelectOptions } from "../SearchableSelect";
-import { TaskCompletionDialog } from "../drawers/product-workspace/TaskCompletionDialog";
 import "./kanban.css";
 import { KanbanAssignee, KanbanColumn, KanbanTask } from "./types";
 
@@ -37,21 +36,6 @@ type DragPreviewState = {
   columnName: string;
   index: number;
 };
-
-type CompletionRequest =
-  | {
-    mode: "status";
-    task: KanbanTask;
-    nextStatus: string;
-  }
-  | {
-    mode: "move";
-    task: KanbanTask;
-    fromColumn: string;
-    targetColumnName: string;
-    visibleIndex: number;
-    snapshot: KanbanColumn[];
-  };
 
 type ColumnPreferences = {
   hiddenColumns: string[];
@@ -1043,7 +1027,6 @@ export function KanbanBoard({
   const [localColumns, setLocalColumns] = React.useState<KanbanColumn[]>(() => copyColumns(columns));
   const [activeDrag, setActiveDrag] = React.useState<ActiveDragState | null>(null);
   const [dragPreview, setDragPreview] = React.useState<DragPreviewState | null>(null);
-  const [completionRequest, setCompletionRequest] = React.useState<CompletionRequest | null>(null);
   const [expandedTaskIds, setExpandedTaskIds] = React.useState<Set<string>>(() => new Set());
   const [columnsMenuOpen, setColumnsMenuOpen] = React.useState(false);
   const [hiddenColumns, setHiddenColumns] = React.useState<string[]>([]);
@@ -1433,10 +1416,6 @@ export function KanbanBoard({
       if (nextStatus === task.status) {
         return;
       }
-      if (nextStatus === "Done" && task.status !== "Done" && actualHours === undefined) {
-        setCompletionRequest({ mode: "status", task, nextStatus });
-        return;
-      }
       if (onMoveTask) {
         const targetColumn = localColumns.find((column) => column.name === nextStatus);
         await onMoveTask(task.id, nextStatus, targetColumn?.tasks.length ?? 0, actualHours);
@@ -1547,20 +1526,6 @@ export function KanbanBoard({
     const nextColumns = moveTaskInColumns(snapshot, taskId, sourceColumn, targetColumn, targetIndex);
 
     const movedTask = findTask(snapshot, taskId) ?? activeDrag.task;
-
-    if (targetColumn === "Done" && movedTask.status !== "Done") {
-      setLocalColumns(nextColumns);
-      setCompletionRequest({
-        mode: "move",
-        task: movedTask,
-        fromColumn: sourceColumn,
-        targetColumnName: targetColumn,
-        visibleIndex: targetIndex,
-        snapshot
-      });
-      clearDrag();
-      return;
-    }
 
     setLocalColumns(nextColumns);
     clearDrag();
@@ -1742,46 +1707,6 @@ export function KanbanBoard({
         </DndContext>
       </div>
 
-      <TaskCompletionDialog
-        open={completionRequest !== null}
-        taskTitle={completionRequest?.task.title ?? "esta tarea"}
-        initialHours={
-          completionRequest?.task.actualHours != null
-            ? String(completionRequest.task.actualHours)
-            : completionRequest?.task.estimatedHours != null
-              ? String(completionRequest.task.estimatedHours)
-              : ""
-        }
-        onCancel={() => {
-          if (completionRequest?.mode === "move") {
-            setLocalColumns(completionRequest.snapshot);
-          }
-          setCompletionRequest(null);
-        }}
-        dismissible={completionRequest?.mode !== "move"}
-        showCancel={completionRequest?.mode !== "move"}
-        onConfirm={(hours) => {
-          const request = completionRequest;
-          setCompletionRequest(null);
-          if (!request) {
-            return;
-          }
-          if (request.mode === "status") {
-            void handleStatusSelect(request.task, request.nextStatus, hours);
-            return;
-          }
-          const nextColumns = moveTaskInColumns(
-            request.snapshot,
-            request.task.id,
-            request.fromColumn,
-            request.targetColumnName,
-            request.visibleIndex,
-            hours
-          );
-          setLocalColumns(nextColumns);
-          void persistMove(request.task, request.fromColumn, request.targetColumnName, request.visibleIndex, hours);
-        }}
-      />
     </>
   );
 }

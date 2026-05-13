@@ -179,7 +179,7 @@ export async function openDrawerFromRouteDescriptor(
 
       store.drawers.add(new ProductPrintDrawer({
         product,
-        stories: stories as Array<{ id: string; title: string; description: string | null }>
+        stories: stories as StoryItem[]
       }));
       return;
     }

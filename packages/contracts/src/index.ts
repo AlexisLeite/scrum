@@ -562,7 +562,8 @@ export interface TeamDto {
   updatedAt: string;
 }
 
-export type ProductPrintLayoutItemKind = "product_title" | "product_description" | "story";
+export type ProductPrintLayoutItemKind = "product_title" | "product_description" | "story" | "task";
+export type ProductPrintTocLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface ProductPrintLayoutItemDto {
   id: string;
@@ -578,6 +579,9 @@ export interface ProductPrintLayoutDto {
     title: boolean;
     description: boolean;
     stories: boolean;
+    tasks: boolean;
+    includeToc: boolean;
+    tocLevels: ProductPrintTocLevel[];
   };
   sections: ProductPrintLayoutItemDto[];
 }
